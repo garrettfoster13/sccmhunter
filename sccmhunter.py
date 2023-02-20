@@ -336,25 +336,30 @@ class sccmhunter:
         
     def sid_resolver(self, sids):
         servers = []
-        for sid in sids:
-            search_filter ="(objectSid={})".format(sid)
-            self.ldap_session.extend.standard.paged_search(self.search_base, search_filter, attributes="*",paged_size=500, generator=False)
-            for entry in self.ldap_session.entries:
-                json_entry = json.loads(entry.entry_to_json())
-                attributes = json_entry['attributes'].keys()
-                if (entry['sAMAccounttype']) == 268435456:                      
-                    for member in entry['member']:
-                        search_filter = "(distinguishedName={})".format(member)
-                        self.ldap_session.extend.standard.paged_search(self.search_base, search_filter, attributes="*",paged_size=500, generator=False)
-                        for entry in self.ldap_session.entries:
-                            json_entry = json.loads(entry.entry_to_json())
-                            attributes = json_entry['attributes'].keys()
-                            sid = entry['objectSid']
-                            self.sid_resolver(sid)
-                if (entry['sAMAccountType']) == 805306369:                          
-                    print("[+] Found computer {} with Full Control ACE".format(entry['sAMAccountName']))               
-                    dnsname = entry['dNSHostName']
-                    servers.append(str(dnsname))
+        try:
+            for sid in sids:
+                search_filter ="(objectSid={})".format(sid)
+                self.ldap_session.extend.standard.paged_search(self.search_base, search_filter, attributes="*",paged_size=500, generator=False)
+                for entry in self.ldap_session.entries:
+                    json_entry = json.loads(entry.entry_to_json())
+                    attributes = json_entry['attributes'].keys()
+                    if (entry['sAMAccounttype']) == 268435456 and (entry['member']):                     
+                        for member in entry['member']:
+                            search_filter = "(distinguishedName={})".format(member)
+                            self.ldap_session.extend.standard.paged_search(self.search_base, search_filter, attributes="*",paged_size=500, generator=False)
+                            for entry in self.ldap_session.entries:
+                                json_entry = json.loads(entry.entry_to_json())
+                                attributes = json_entry['attributes'].keys()
+                                sid = entry['objectSid']
+                                self.sid_resolver(sid)
+                    if (entry['sAMAccountType']) == 805306369:                          
+                        print("[+] Found computer {} with Full Control ACE".format(entry['sAMAccountName']))          
+                        dnsname = entry['dNSHostName']
+                        servers.append(str(dnsname))
+                    else:
+                        continue
+        except ldap3.core.exceptions.LDAPKeyError as e:
+            pass
         self.http_hunter(servers)
         
     def http_hunter(self, servers):
@@ -363,8 +368,8 @@ class sccmhunter:
             url=("http://{}/ccm_system_windowsauth".format(server))
             url2=("http://{}/ccm_system/request".format(server))
             try:
-                x = requests.get(url)
-                x2 = requests.get(url)
+                x = requests.get(url, timeout=5)
+                x2 = requests.get(url2,timeout=5)
                 if x.status_code == 401:
                     print("[+] SCCM HTTP Endpoint Found!")
                     print("[+] {}".format(url))
@@ -373,8 +378,11 @@ class sccmhunter:
                     print("[+] SCCM HTTP Endpoint Found!")
                     print("[+] {}".format(url2))
                     validated.append(url2)
-            except requests.ConnectionError as e:
-                print ("[-] {} doesn't appear to be a SCCM server.".format(server))
+                if x.status_code or x2.status_code == 404:
+                    print("[-] {} returned 404.".format(server))
+
+            except requests.exceptions.Timeout:
+                print ("[-] Request for {} timed out.".format(server))
                 pass
         self.printlog(validated)
 
@@ -413,9 +421,6 @@ def main():
         search_base = get_dn(args.d)
     finder=sccmhunter(ldap_server, ldap_session, search_base)
     results = finder.fetch_sccm()
-    if results:
-        print(f'[+] Results saved to {os.getcwd()}/sccmhunter.log.')
-
 
 
 
