@@ -26,7 +26,7 @@ def arg_parse():
     parser.add_argument('-p', action='store', help='Password')
     parser.add_argument('-d', action='store', help='Domain Name')
     parser.add_argument('-dc-ip', action='store', help='IP address or FQDN of domain controller')
-    parser.add_argument('-t', help='Target domain to search.', required=False,)
+    parser.add_argument('-t', help='Target trusted domain to search.', required=False,)
     parser.add_argument('-ldaps', action='store_true', help='Use LDAPS instead of LDAP')
     parser.add_argument('-k', '--kerberos', action='store_true', help='Use Kerberos authentication. Grabs credentials from ccache file (KRB5CCNAME) based on target parameters. If valid credentials cannot be found, it will use the ones specified in the command line')
     parser.add_argument('-no-pass', action='store_true', help='Don\'t ask for password. (Useful for -k')
@@ -281,17 +281,16 @@ class sccmhunter:
         servers = []
         print(f'[*] Searching for SCCM servers...')
         try:
-            controls = ldap3.protocol.microsoft.security_descriptor_control(sdflags=0x07)
-            self.ldap_session.extend.standard.paged_search(self.search_base, self.search_filter, attributes=self.attributes, controls=controls,paged_size=500, generator=False)  
+            self.ldap_session.extend.standard.paged_search(self.search_base, self.search_filter, attributes=self.attributes,paged_size=500, generator=False)  
         except ldap3.core.exceptions.LDAPAttributeError as e:
             print()
             print (f'Error: {str(e)}')
             exit()
         if self.ldap_session.entries:
+            print(f"[+] Found {len(self.ldap_session.entries)} site servers.")
             for entry in self.ldap_session.entries:
-                print(f"[+] Found {len(self.ldap_session.entries)} site servers.")
-                json_entry = json.loads(entry.entry_to_json())
-                attributes = json_entry['attributes'].keys()
+                # json_entry = json.loads(entry.entry_to_json())
+                # attributes = json_entry['attributes'].keys()
                 hostname =  entry['dNSHostname']
                 servers.append(hostname)
             self.http_hunter(servers)
@@ -304,26 +303,32 @@ class sccmhunter:
         validated = []                   
         for server in servers:
             url=(f"http://{server}/ccm_system_windowsauth")
-            url2=(f"http://{server}/ccm_system/request")
+            url2=(f"http://{server}/ccm_system/")
             try:
-                x = requests.get(url)
-                x2 = requests.get(url)
+                x = requests.get(url, timeout=5)
+                x2 = requests.get(url2,timeout=5)
                 if x.status_code == 401:
                     print("[+] SCCM HTTP Endpoint Found!")
-                    print("[+] {}".format(url))
+                    print(f"[+] {url}")
                     validated.append(url)
                 if x2.status_code == 401:
                     print("[+] SCCM HTTP Endpoint Found!")
-                    print("[+] {}".format(url2))
+                    print(f"[+] {url2}")
                     validated.append(url2)
+            except requests.exceptions.Timeout:
+                print(f"[-] {server} connection timed out.")
             except requests.ConnectionError as e:
                 print (f"[-] {server} doesn't appear to be a SCCM server.")
                 pass
-        self.printlog(validated)
-
+        if validated:
+            self.printlog(validated)
+        else:
+            print("[-] No HTTP endpoints found :(")
+ 
 
     def printlog(self, validated):
         filename = (f'sccmhunter.log')
+        print(f'[+] Results saved to {os.getcwd()}/{filename}')
         for valid in validated:
             with open(filename, 'a') as f:
                 f.write("{}\n".format(valid))
@@ -357,8 +362,7 @@ def main():
         search_base = get_dn(args.d)
     finder=sccmhunter(ldap_server, ldap_session, search_base)
     results = finder.fetch_sccm()
-    if results:
-        print(f'[+] Results saved to {os.getcwd()}/sccmhunter.log.')
+
 
 
 
