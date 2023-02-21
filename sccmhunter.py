@@ -19,10 +19,10 @@ import requests
 
 def arg_parse():
     parser = argparse.ArgumentParser(add_help=True, description=
-    '''Tool to enumerate a target environment for SCCM Servers.
+    '''Tool to enumerate a target environment for SCCM HTTP endpoints.
     ''')
 
-    parser.add_argument('-u', metavar='sername',action='store', help='Username')
+    parser.add_argument('-u',action='store', help='Username')
     parser.add_argument('-p', action='store', help='Password')
     parser.add_argument('-d', action='store', help='Domain Name')
     parser.add_argument('-dc-ip', action='store', help='IP address or FQDN of domain controller')
@@ -267,37 +267,18 @@ def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='
 
     return True
 
-class daclparse:
-    
-    def __init__(self):
-        self.security_descriptor = SR_SECURITY_DESCRIPTOR()
-        self.dnshostname = ""
-        self.objectsid = ""
-        self.sAMAccountName = ""
-        self.description = ""
-        self.memberOf = ""
-        self.members = ""
-
-    @property
-    def owner_sid(self):
-        return self.security_descriptor['OwnerSid']
-        print(self.owner_sid)
-
-    @property
-    def dacl(self):
-        return self.security_descriptor["Dacl"]
-
 
 class sccmhunter:
     
     def __init__(self, ldap_server, ldap_session, search_base):
         self.ldap_server = ldap_server
         self.ldap_session = ldap_session
-        self.attributes = "nTSecurityDescriptor"
-        self.search_filter = "(cn=System Management)"
+        self.attributes = "dNSHostName"
+        self.search_filter = "(objectclass=mssmsmanagementpoint)"
         self.search_base=search_base
 
     def fetch_sccm(self):
+        servers = []
         print(f'[*] Searching for SCCM servers...')
         try:
             controls = ldap3.protocol.microsoft.security_descriptor_control(sdflags=0x07)
@@ -308,68 +289,25 @@ class sccmhunter:
             exit()
         if self.ldap_session.entries:
             for entry in self.ldap_session.entries:
-                print("[+] Found System Managment Container. Parsing DACL.")
+                print(f"[+] Found {len(self.ldap_session.entries)} site servers.")
                 json_entry = json.loads(entry.entry_to_json())
                 attributes = json_entry['attributes'].keys()
-                dacl = daclparse()
-                for attr in attributes:
-                    secdesc = (entry[attr].value)
-                    dacl.security_descriptor.fromString(secdesc)
-                self.ace_parser(dacl)
-                return True
+                hostname =  entry['dNSHostname']
+                servers.append(hostname)
+            self.http_hunter(servers)
+            return True
         else:
             print("[-] No SCCM Servers found.")
             return False
-
-        
-    def ace_parser(self, descriptor):
-        sids = []
-        for ace in descriptor.dacl.aces:
-            if ace["TypeName"] == "ACCESS_ALLOWED_ACE":
-                ace = ace["Ace"]
-                sid = ace["Sid"].formatCanonical()
-                mask = ace["Mask"]
-                fullcontrol = 0xf01ff
-                if mask.hasPriv(fullcontrol):
-                    sids.append(sid)
-        self.sid_resolver(sids)
-        
-    def sid_resolver(self, sids):
-        servers = []
-        try:
-            for sid in sids:
-                search_filter ="(objectSid={})".format(sid)
-                self.ldap_session.extend.standard.paged_search(self.search_base, search_filter, attributes="*",paged_size=500, generator=False)
-                for entry in self.ldap_session.entries:
-                    json_entry = json.loads(entry.entry_to_json())
-                    attributes = json_entry['attributes'].keys()
-                    if (entry['sAMAccounttype']) == 268435456 and (entry['member']):                     
-                        for member in entry['member']:
-                            search_filter = "(distinguishedName={})".format(member)
-                            self.ldap_session.extend.standard.paged_search(self.search_base, search_filter, attributes="*",paged_size=500, generator=False)
-                            for entry in self.ldap_session.entries:
-                                json_entry = json.loads(entry.entry_to_json())
-                                attributes = json_entry['attributes'].keys()
-                                sid = entry['objectSid']
-                                self.sid_resolver(sid)
-                    if (entry['sAMAccountType']) == 805306369:                          
-                        print("[+] Found computer {} with Full Control ACE".format(entry['sAMAccountName']))          
-                        dnsname = entry['dNSHostName']
-                        servers.append(str(dnsname))
-                    else:
-                        continue
-        except ldap3.core.exceptions.LDAPKeyError as e:
-            pass
-        self.http_hunter(servers)
         
     def http_hunter(self, servers):
         validated = []                   
         for server in servers:
-            url=("http://{}/ccm_system_windowsauth".format(server))
-            url2=("http://{}/ccm_system/request".format(server))
+            url=(f"http://{server}/ccm_system_windowsauth")
+            url2=(f"http://{server}/ccm_system/request")
             try:
-                x = requests.get(url, timeout=5)
-                x2 = requests.get(url2,timeout=5)
+                x = requests.get(url)
+                x2 = requests.get(url)
                 if x.status_code == 401:
                     print("[+] SCCM HTTP Endpoint Found!")
                     print("[+] {}".format(url))
@@ -378,13 +316,11 @@ class sccmhunter:
                     print("[+] SCCM HTTP Endpoint Found!")
                     print("[+] {}".format(url2))
                     validated.append(url2)
-                if x.status_code or x2.status_code == 404:
-                    print("[-] {} returned 404.".format(server))
-
-            except requests.exceptions.Timeout:
-                print ("[-] Request for {} timed out.".format(server))
+            except requests.ConnectionError as e:
+                print (f"[-] {server} doesn't appear to be a SCCM server.")
                 pass
         self.printlog(validated)
+
 
     def printlog(self, validated):
         filename = (f'sccmhunter.log')
@@ -421,6 +357,9 @@ def main():
         search_base = get_dn(args.d)
     finder=sccmhunter(ldap_server, ldap_session, search_base)
     results = finder.fetch_sccm()
+    if results:
+        print(f'[+] Results saved to {os.getcwd()}/sccmhunter.log.')
+
 
 
 
