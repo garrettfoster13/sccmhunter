@@ -292,6 +292,7 @@ class sccmhunter:
                 # json_entry = json.loads(entry.entry_to_json())
                 # attributes = json_entry['attributes'].keys()
                 hostname =  entry['dNSHostname']
+                print(f"[+] {hostaname})
                 servers.append(hostname)
             self.http_hunter(servers)
             return True
