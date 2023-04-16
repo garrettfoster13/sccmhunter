@@ -19,18 +19,18 @@ class SHOW:
         csv_dir = f'{self.logs_dir}/csvs'
         if self.users or self.all:
             logger.info("[+] Showing USERS Table")
-            df = pd.read_csv(f"{csv_dir}/users.csv")
+            df = pd.read_csv(f"{csv_dir}/users.csv").fillna("None")
             logger.info(tabulate(df, headers = 'keys', tablefmt = 'grid'))
         if self.groups or self.all:
             logger.info("[+] Showing GROUPS Table")
-            df = pd.read_csv(f"{csv_dir}/groups.csv")
+            df = pd.read_csv(f"{csv_dir}/groups.csv").fillna("None")
             logger.info(tabulate(df, headers = 'keys', tablefmt = 'grid'))
         if self.computers or self.all:
             logger.info("[+] Showing COMPUTERS Table")
-            df = pd.read_csv(f"{csv_dir}/computers.csv")
+            df = pd.read_csv(f"{csv_dir}/computers.csv").fillna("None")
             logger.info(tabulate(df, headers = 'keys', tablefmt = 'grid'))
         if self.smb or self.all:
             logger.info("[+] SMB Results Table")
-            df = pd.read_csv(f"{csv_dir}/smbhunter.csv")
+            df = pd.read_csv(f"{csv_dir}/smbhunter.csv").fillna("None")
             logger.info(tabulate(df, headers = 'keys', tablefmt = 'grid'))    
         

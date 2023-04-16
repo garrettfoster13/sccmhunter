@@ -2,19 +2,15 @@ from impacket.smbconnection import SMBConnection
 from impacket.spnego import SPNEGO_NegTokenInit, TypesMech
 from binascii import unhexlify
 from ldap3 import ANONYMOUS
-#from lib.logger import logger
+from lib.logger import logger
 import ldap3
 import ssl
 import os
 
 
-COMPUTER_ATTRIBUTES = ['cn', 'sAMAccountName', 'dNSHostName', 'memberOf', 'description']
-USER_ATTRIBUTES = ['cn','sAMAccountName', 'memberOf','servicePrincipalName', 'description']
-GROUP_ATTRIBUTES = ['cn', 'name', 'sAMAccountName', 'member', 'memberOf', 'description']
-USER_DICT = {"cn": "", "sAMAccountName": "blah", "memberOf": "blah", "servicePrincipalName": "None", "description": "None"}
-COMPUTER_DICT = {"cn": "", "sAMAccountName": "", "dNSHostName": "", "memberOf": "", "description": ""}
+USER_DICT = {"cn": "", "sAMAccountName": "", "memberOf": "", "servicePrincipalName": "", "description": ""}
+COMPUTER_DICT = {"cn": "", "sAMAccountName": "None", "dNSHostName": "", "memberOf": "", "description": ""}
 GROUP_DICT = {"cn": "", "name": "", "sAMAccountName": "", "member": "", "memberOf": "", "description": ""}
-
 
 
 def get_dn(domain):

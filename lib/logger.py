@@ -15,8 +15,6 @@ OBJ_EXTRA_FMT = {
 logger = logging.getLogger(__name__)
 logger.propagate = False
 
-
-
 def prep_logs():
     home = os.path.expanduser('~')
     save_dir = f'{(home)}/.sccmhunter'
@@ -57,7 +55,8 @@ def init_logger(debug):
 def printlog(servers, logs_dir, filename):
     logfile = f'{logs_dir}/{filename}'
     logger.info(f'[+] Results saved to {logfile}')
-    for server in servers:
-        with open(logfile, 'a') as f:
-            f.write("{}\n".format(server))
-            f.close
+    with open(logfile, 'w') as f:
+        for server in servers:
+            if server is not None:
+                f.write("{}\n".format(server))
+                f.close

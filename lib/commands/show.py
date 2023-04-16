@@ -4,7 +4,7 @@ from lib.logger import init_logger
 
 app = typer.Typer()
 COMMAND_NAME = 'show'
-HELP = 'Show table results'
+HELP = 'Show recon table results.'
 
 @app.callback(no_args_is_help=True, invoke_without_command=True)
 

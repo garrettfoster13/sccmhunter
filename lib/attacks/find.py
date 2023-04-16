@@ -34,7 +34,7 @@ class SCCMHUNTER:
     
     def __init__(self, username=None, password=None, domain=None, target_dom=None, 
                  dc_ip=None,ldaps=False, kerberos=False, no_pass=False, hashes=None, 
-                 aes=None, debug=False, logs_dir = None, hide_banner=False):
+                 aes=None, debug=False, logs_dir = None):
         self.username = username
         self.password= password
         self.domain = domain
@@ -57,12 +57,10 @@ class SCCMHUNTER:
         self.groups = []
         self.computers = []
         self.logs_dir = logs_dir
-        self.hide_banner = hide_banner
+        self.controls = ldap3.protocol.microsoft.security_descriptor_control(sdflags=0x07)
 
 
     def run(self):
-        if not self.hide_banner:
-            show_banner()
 
         lmhash = ""
         nthash = ""
@@ -98,17 +96,17 @@ class SCCMHUNTER:
 
         logger.debug(f'[*] Querying ACL of System Management Container')
         try:
-            controls = ldap3.protocol.microsoft.security_descriptor_control(sdflags=0x07)
             self.ldap_session.extend.standard.paged_search(self.search_base, 
                                                            search_filter="(cn=System Management)", 
                                                            attributes="nTSecurityDescriptor", 
-                                                           controls=controls,
+                                                           controls=self.controls,
                                                            paged_size=500, 
                                                            generator=False)  
         except ldap3.core.exceptions.LDAPAttributeError as e:
             print()
             logger.info(f'Error: {str(e)}')
             exit()
+
 
         if self.ldap_session.entries:
             for entry in self.ldap_session.entries:
@@ -121,9 +119,9 @@ class SCCMHUNTER:
                     dacl.security_descriptor.fromString(secdesc)
             self.ace_parser(dacl)
         else:
-            logger.info("[-] No SCCM Servers found.")
-        
-        logger.info(f'[+] Found {len(self.samname)} computers with Full Control ACE')
+            logger.info("[-] Did not find System Management Container")
+        if len(self.samname) > 0:
+            logger.info(f'[+] Found {len(self.samname)} computers with Full Control ACE')
 
         # Done with ACL now check what's been published to the container if it exists. CAS, primary servers
         # and secondary servers will appear here.
@@ -133,16 +131,13 @@ class SCCMHUNTER:
         container_owners = []
         try:
             controls = ldap3.protocol.microsoft.security_descriptor_control(sdflags=0x07)
-            self.ldap_session.extend.standard.paged_search(self.search_base, 
-                                                           self.search_filter, 
-                                                           attributes=self.attributes,
-                                                           controls=controls, 
-                                                           paged_size=500, 
-                                                           generator=False)  
-        except ldap3.core.exceptions.LDAPAttributeError as e:
-            print()
-            logger.info(f'Error: {str(e)}')
+            self.ldap_session.extend.standard.paged_search(self.search_base, self.search_filter, attributes=self.attributes, 
+                                                           controls=controls, paged_size=500, generator=False)  
+        except ldap3.core.exceptions.LDAPObjectClassError as e:
+            logger.info(f'[-] Management Point Attribute not found')
+            logger.info(f'[-] SCCM doesn\'t appear to be published in this domain.')
             exit()
+
         if self.ldap_session.entries:
             logger.info(f"[+] Found {len(self.ldap_session.entries)} site servers in LDAP.")
             for entry in self.ldap_session.entries:
@@ -313,11 +308,10 @@ class SCCMHUNTER:
         logs = ["users.csv", "computers.csv", "groups.csv"]
         try:
             for log in logs:
-                df = pd.read_csv(f"{self.logs_dir}/csvs/{log}")
+                df = pd.read_csv(f"{self.logs_dir}/csvs/{log}").fillna("None")
                 if df.any:
                     logger.info("[*] Showing {} table.".format(log.split(".")[0].upper()))
                 logger.debug(tabulate(df, headers = 'keys', tablefmt = 'grid'))
         except:
             logger.info(f"[-] {log} file not found.")
-
 

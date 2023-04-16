@@ -1,7 +1,7 @@
 # fix debug output, not seeing enough info "or any info"
 
 from lib.ldap import init_ldap_session
-from lib.logger import console, logger, init_logger
+from lib.logger import logger, printlog
 from lib.attacks.find import SCCMHUNTER
 from impacket.smbconnection import SMBConnection
 import ntpath
@@ -51,7 +51,6 @@ class SMB:
                                     kerberos=self.kerberos, no_pass=self.no_pass, hashes=self.hashes, 
                                     aes=self.aes, debug=self.debug, logs_dir=self.logs_dir)
             sccmhunter.run()
-
             self.run()
 
     def read_logs(self):
@@ -61,10 +60,8 @@ class SMB:
                 targets.append(line.strip())
         return targets
 
-
     def smb_hunter(self, servers):
         pxe_boot_servers = []
- 
         for i in servers:
             try:
                 timeout = 10
@@ -88,7 +85,8 @@ class SMB:
                 for share in conn.listShares():
                     remark = share['shi1_remark'][:-1]
                     name = share['shi1_netname'][:-1]
-                    if name == "SMS_DP$" and "SMS Site in remark":
+                    #default remarks reveal role
+                    if name == "SMS_DP$" and "SMS Site" in remark:
                         siteserv=False
                         dp = True
                         site_code = (remark.split(" ")[-3])
@@ -97,7 +95,9 @@ class SMB:
                         dp = True
                         site_code = (remark.split(" ")[-2])
                     if name =="REMINST":
-                        pxe_boot_servers.append(server)
+                        check = conn.listPath(shareName="REMINST", path="SMSTemp//*")
+                        if "STATUS_OBJECT_NAME_NOT_FOUND" not in check:
+                            pxe_boot_servers.append(server)
 
                 self.test_array.append({'Hostname': f'{server}', 
                                         'Signing Status': f'{signing}', 
@@ -107,47 +107,47 @@ class SMB:
             except Exception as e:
                 logger.info(f"[-] {e}")
         
-        # spider and save the paths of variables files if discovered
-        # option to save if user wants
-        self.smb_spider(conn, pxe_boot_servers) #make this optional
-        
-        # both of these can be imported from a library since it's being used similarly for other attacks
-        self.save_csv(self.test_array)
-        self.print_table()
-
+        # spider and save the paths of variables files if discovered with optional save
+        if pxe_boot_servers:
+            self.smb_spider(conn, pxe_boot_servers)
+        # both of these can be imported from a library since it's being used similarly for other modules
+        if self.test_array:
+            self.save_csv(self.test_array)
+            self.print_table()
 
     def smb_spider(self, conn, targets):
         vars_files = []
         downloaded = []
-        save = self.save
         for target in targets:
             try:
                 logger.info(f'[*] Searching {target} for PXEBoot variables files.')
-                #add check for SMSTemp directory
-                #need error handling for this if the file path doesn't exist
                 for shared_file in conn.listPath(shareName="REMINST", path="SMSTemp//*"):
                     if shared_file.get_longname().endswith('.var'):
                         # store full path for easy reporting
                         full_path = (f"\\\\{target}\\REMINST\\SMSTemp\\{shared_file.get_longname()}")
                         vars_files.append(full_path)
-                        file_name = shared_file.get_longname()
-                        logger.info(f"[+] Found {full_path}")
-                        fh = open(ntpath.basename(file_name), 'wb')
-                        path = f"SMSTemp//{file_name}"
-                        if save: 
+                        logger.debug(f"[+] Found {full_path}")
+                        if self.save:
+                            file_name = shared_file.get_longname()
+                            fh = open(ntpath.basename(file_name), 'wb')
+                            path = f"SMSTemp//{file_name}"
                             try:
                                 conn.getFile(shareName="REMINST",pathName = path, callback=fh.write)
                                 downloaded.append(file_name)
-                                conn.logoff()
-                            except:
+                            except Exception as e:
+                                print(e)
                                 print("shit broke")
             except Exception as e:
                 print(e)
+        conn.logoff()
+        
         if len(downloaded) > 0:
             logger.info("[+] Variables files downloaded!")
-        else:
-            logger.info("[-] No Variables files found.")
-        self.printlog(vars_files)
+            for i in (downloaded):
+                os.replace(f'{os.getcwd()}/{i}', f'{self.logs_dir}/loot/{i}')
+        if vars_files:
+            filename = "smbhunter.log"
+            printlog(vars_files, self.logs_dir, filename)
 
         
     def save_csv(self, array):
@@ -172,3 +172,4 @@ class SMB:
             with open(filename, 'a') as f:
                 f.write("{}\n".format(server))
                 f.close
+

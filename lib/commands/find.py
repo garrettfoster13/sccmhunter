@@ -4,7 +4,7 @@ from lib.logger import init_logger
 
 app = typer.Typer()
 COMMAND_NAME = 'find'
-HELP = 'Enumerate LDAP for SCCM Servers'
+HELP = 'Enumerate LDAP for SCCM assets.'
 
 @app.callback(no_args_is_help=True, invoke_without_command=True)
 
@@ -20,11 +20,11 @@ def main(
     hashes          : str   = typer.Option(None, "-hashes",metavar="LMHASH:NTHASH", help="LM and NT hashes, format is LMHASH:NTHASH"),
     aes             : str   = typer.Option(None, '-aes', metavar="HEX KEY", help='AES key to use for Kerberos Authentication (128 or 256 bits)'), 
     debug           : bool  = typer.Option(False, '-debug',help='Enable Verbose Logging'),
-    hide_banner      : bool  = typer.Option(False, '-hide', help='Hide banner.')):
+):
 
 
 
     logs_dir = init_logger(debug)
     sccmhunter = SCCMHUNTER(username=username, password=password, domain=domain, target_dom=target_dom, dc_ip=dc_ip,ldaps=ldaps,
-                            kerberos=kerberos, no_pass=no_pass, hashes=hashes, aes=aes, debug=debug, logs_dir=logs_dir, hide_banner=hide_banner)
+                            kerberos=kerberos, no_pass=no_pass, hashes=hashes, aes=aes, debug=debug, logs_dir=logs_dir)
     sccmhunter.run()

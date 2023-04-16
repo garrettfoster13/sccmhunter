@@ -84,7 +84,7 @@ class HTTP:
             target_fqdn = f'{target_name}.{self.domain}'
             try:
                 logger.info(f"[*] Atempting to grab policy from {target}")
-                SCCMWTF=SCCMTools(target_name, target_fqdn, target, self.computer_name, self.computer_pass)
+                SCCMWTF=SCCMTools(target_name, target_fqdn, target, self.computer_name, self.computer_pass, self.logs_dir)
                 SCCMWTF.sccmwtf_run()
             except Exception as e:
                 print(e)

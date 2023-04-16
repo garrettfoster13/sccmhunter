@@ -1,6 +1,6 @@
 import typer
 from lib.commands import find, mssql, smb, http, show
-
+from lib.scripts.banner import show_banner
 
 
 
@@ -46,4 +46,5 @@ app.add_typer(
 
 
 if __name__ == '__main__':
+    show_banner()
     app(prog_name='sccmhunter')
