@@ -8,10 +8,6 @@ import ssl
 import os
 
 
-USER_DICT = {"cn": "", "sAMAccountName": "", "memberOf": "", "servicePrincipalName": "", "description": ""}
-COMPUTER_DICT = {"cn": "", "sAMAccountName": "None", "dNSHostName": "", "memberOf": "", "description": ""}
-GROUP_DICT = {"cn": "", "name": "", "sAMAccountName": "", "member": "", "memberOf": "", "description": ""}
-
 
 def get_dn(domain):
     components = domain.split('.')

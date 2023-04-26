@@ -4,7 +4,7 @@ from lib.logger import init_logger
 
 app = typer.Typer()
 COMMAND_NAME = 'smb'
-HELP = 'Profile and Enumerate SMB shares of discovered SSCM servers.'
+HELP = 'Profile and Enumerate SMB shares of discovered SCCM servers.'
 
 @app.callback(no_args_is_help=True, invoke_without_command=True)
 

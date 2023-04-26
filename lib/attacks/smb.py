@@ -10,6 +10,7 @@ import csv
 import pandas as pd
 from tabulate import tabulate
 from lib.scripts.banner import show_banner
+import socket
 
 
 
@@ -27,7 +28,6 @@ class SMB:
         self.ldaps = ldaps
         self.kerberos = kerberos
         self.no_pass = no_pass
-        self.hashes=hashes
         self.aes = aes
         self.save = save
         self.logs_dir = logs_dir
@@ -35,7 +35,11 @@ class SMB:
         self.ldap_session = None
         self.search_base = None
         self.test_array = []
-
+        self.hashes=hashes
+        self.lmhash = ""
+        self.nthash = ""
+        if self.hashes:
+            self.lmhash, self.nthash = self.hashes.split(':')
 
  
     def run(self):
@@ -69,13 +73,18 @@ class SMB:
                 # might need some DNS resolution here for site servers
                 conn = SMBConnection(server, server, None, timeout=timeout)
                 # need to setup kerberos authentication here too...
-                conn.login(user=self.username, password=self.password, domain=self.domain)
+                if self.kerberos:
+                    #kerberosLogin(username, password, domain, lmhash, nthash, options.aesKey, options.dc_ip )
+                    conn.kerberosLogin(user=self.username, password=self.password, domain=self.domain, kdcHost=self.dc_ip)
+                else:
+                    conn.login(user=self.username, password=self.password, domain=self.domain, lmhash=self.lmhash, nthash=self.nthash)
                 logger.debug(f"[+] Connected to smb://{server}:445")
 
                 signing = conn.isSigningRequired()
                 site_code = ''
                 siteserv = False
                 dp = False
+                wsus = False
 
                 if not signing:
                     logger.debug(f"[+] SMB signing not required on {server}")
@@ -98,12 +107,18 @@ class SMB:
                         check = conn.listPath(shareName="REMINST", path="SMSTemp//*")
                         if "STATUS_OBJECT_NAME_NOT_FOUND" not in check:
                             pxe_boot_servers.append(server)
+                    if name == "WsusContent":
+                        wsus = True
+
+                mssql = self.mssql_check(server)
 
                 self.test_array.append({'Hostname': f'{server}', 
-                                        'Signing Status': f'{signing}', 
                                         'Site Code': f'{site_code}',
+                                        'Signing Status': f'{signing}', 
                                         'Site Server' : f'{siteserv}', 
-                                        'Distribution Point': f'{dp}'})
+                                        'Distribution Point': f'{dp}',
+                                        'WSUS': f'{wsus}',
+                                        'MSSQL': f'{mssql}'})
             except Exception as e:
                 logger.info(f"[-] {e}")
         
@@ -118,9 +133,15 @@ class SMB:
     def smb_spider(self, conn, targets):
         vars_files = []
         downloaded = []
+        timeout = 10
         for target in targets:
             try:
                 logger.info(f'[*] Searching {target} for PXEBoot variables files.')
+                conn = SMBConnection(target, target, None, timeout=timeout)
+                if self.kerberos:
+                    conn.kerberosLogin(user=self.username, password=self.password, domain=self.domain, kdcHost=self.dc_ip)
+                else:
+                    conn.login(user=self.username, password=self.password, domain=self.domain, lmhash=self.lmhash, nthash=self.nthash)
                 for shared_file in conn.listPath(shareName="REMINST", path="SMSTemp//*"):
                     if shared_file.get_longname().endswith('.var'):
                         # store full path for easy reporting
@@ -148,10 +169,20 @@ class SMB:
         if vars_files:
             filename = "smbhunter.log"
             printlog(vars_files, self.logs_dir, filename)
-
+        
+    def mssql_check(self, server):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(5)
+        try:
+            sock.connect((f'{server}', 1433))
+            if sock:
+                return True
+        except Exception as e:
+            logger.info(f"[-] {e}")
+        return False
         
     def save_csv(self, array):
-        fields = ["Hostname", "Signing Status", "Site Code","Site Server", "Distribution Point"]
+        fields = ["Hostname", "Site Code", "Signing Status","Site Server", "Distribution Point", "WSUS", "MSSQL"]
         with open(f'{self.logs_dir}/csvs/smbhunter.csv', 'w', newline='') as f:
             writer = csv.DictWriter(f, fieldnames=fields)
             writer.writeheader()

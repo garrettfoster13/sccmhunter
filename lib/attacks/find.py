@@ -1,7 +1,7 @@
 #improvement ideas:
 #make the list of site servers a set
 
-from lib.ldap import init_ldap_session, get_dn, USER_DICT, COMPUTER_DICT, GROUP_DICT
+from lib.ldap import init_ldap_session, get_dn
 import ldap3
 import json
 import os
@@ -117,7 +117,7 @@ class SCCMHUNTER:
                 for attr in attributes:
                     secdesc = (entry[attr].value)
                     dacl.security_descriptor.fromString(secdesc)
-            self.ace_parser(dacl)
+            #self.ace_parser(dacl)
         else:
             logger.info("[-] Did not find System Management Container")
         if len(self.samname) > 0:
@@ -160,7 +160,7 @@ class SCCMHUNTER:
         for owner in resolved_owners:
             logger.debug(f"[+] Found container owner: {owner}")
             if owner not in self.servers:
-                self.servers.append(owner)
+                self.servers.append(server)
 
         for server in container_servers:
             if server not in self.servers:
@@ -170,7 +170,7 @@ class SCCMHUNTER:
         _users = []
         _computers = []
         _groups = []
-        yeet = '(samaccountname=*sccm*)'
+        yeet = '(|(samaccountname=*sccm*)(samaccountname=*mecm*)(description=*sccm*)(description=*mecm*))'
         logger.info("[*] Searching LDAP for anything containing the strings 'SCCM'or 'MECM'")
         try:
             self.ldap_session.extend.standard.paged_search(self.search_base, 
@@ -182,8 +182,11 @@ class SCCMHUNTER:
             print()
             logger.info(f'Error: {str(e)}')
         if self.ldap_session.entries:
-            logger.info(f"[+] Found {len(self.ldap_session.entries)} principals that contain the string 'SCCM'.")
+            logger.debug(f"[+] Found {len(self.ldap_session.entries)} principals that contain the string 'SCCM' or 'MECM'.")
             for entry in self.ldap_session.entries:
+                USER_DICT = {"cn": "", "sAMAccountName": "", "memberOf": "", "servicePrincipalName": "", "description": ""}
+                COMPUTER_DICT = {"cn": "", "sAMAccountName": "", "dNSHostName": "", "memberOf": "", "description": ""}
+                GROUP_DICT = {"cn": "", "name": "", "sAMAccountName": "", "member": "", "memberOf": "", "description": ""}
                 #if a user
                 if (entry['sAMAccountType']) == 805306368:
                     for k, v in USER_DICT.items():
@@ -196,13 +199,15 @@ class SCCMHUNTER:
                     _users.append(copy.deepcopy(USER_DICT))
                 # if a computer
                 if (entry['sAMAccountType']) == 805306369:
+                    #COMPUTER_DICT = {"cn": "", "sAMAccountName": "None", "dNSHostName": "", "memberOf": "", "description": ""}
                     for k, v in COMPUTER_DICT.items():
                         if k in entry:
                             COMPUTER_DICT[k] = str(entry[k].value)
                         #might as well add it to the results list for SMB scanning
-                        if k =='dNSHostName':
-                            if v and v not in self.servers:
-                                self.servers.append(v)
+                        dnshostname = entry["dNSHostName"]
+                        if dnshostname and dnshostname not in self.servers:
+                            self.servers.append(dnshostname)
+                        #return
                     _computers.append(copy.deepcopy(COMPUTER_DICT))
                 #if a group
                 if (entry['sAMAccountType']) == 268435456:
