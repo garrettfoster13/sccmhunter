@@ -21,9 +21,10 @@ def prep_logs():
     logs_dir = f'{save_dir}/logs'
     loot_dir = f'{logs_dir}/loot'
     csv_dir = f'{logs_dir}/csvs'
+    db_dir = f'{logs_dir}/db'
     if not os.path.isdir(save_dir):
         logger.info("[!] First time use detected.")
-        logger.info(f"[!] SCCMHunter logs will be saved to {save_dir}")
+        logger.info(f"[!] SCCMHunter data will be saved to {save_dir}")
         os.mkdir(save_dir)
     if not os.path.isdir(logs_dir):
         os.mkdir(logs_dir)
@@ -31,6 +32,10 @@ def prep_logs():
         os.mkdir(loot_dir)
     if not os.path.isdir(csv_dir):
         os.mkdir(csv_dir)
+    if not os.path.isdir(db_dir):
+        os.mkdir(db_dir)
+        with open(f'{db_dir}/sccmhunter.db', 'w') as fp:
+            pass
     return logs_dir
 
 

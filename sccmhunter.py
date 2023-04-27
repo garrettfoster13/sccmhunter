@@ -1,5 +1,5 @@
 import typer
-from lib.commands import find, mssql, smb, http, show
+from lib.commands import admin, find, mssql, smb, http, show, admin
 from lib.scripts.banner import show_banner
 
 
@@ -44,6 +44,11 @@ app.add_typer(
     help=show.HELP
 )
 
+app.add_typer(
+    admin.app,
+    name=admin.COMMAND_NAME,
+    help=admin.HELP
+)
 
 if __name__ == '__main__':
     show_banner()
