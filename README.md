@@ -4,14 +4,18 @@
 
 # SCCMHunter
 
-SCCMHunter is a post-ex tool to identify, profile, and attack SCCM related assets in an Active Directory domain. Known vulnerabilities, like abusing client enrollment (@_xpn_) or abusing MSSQL relaying for site server takeover (@_mayyhem) are built-in.
+SCCMHunter is a post-ex tool to identify, profile, and attack SCCM related assets in an Active Directory domain. The basic function of the tool is to query LDAP with the find module for potential SCCM related assets through ACL recon of objects generated when extending the AD schema during deployment and by simply querying for the strings "SCCM" or "MECM". This list of targets is then profiled with the SMB module by checking the remarks for default shares required by assets configured with certain SCCM roles, if the MSSQL service is running, and if SMB signing is enforced on the endpoint. All of this helps paint a picture for potential attack paths in the environment. Once profiling is complete, the consultant can target abusing client enrollment with the HTTP (@\_xpn\_) module accounts or use the MSSQL (@_mayyhem)  module to grab the necessary syntax for complete site server takeover. If a site server takeover is successful, the admin and pivot modules are available for further information gathering and abuse.
+
+The code is very much in alpha and while it works well in my lab there's a ton of spaghetti and "it finally worked" code.
+
+Check out the wiki for more detailed usage.
 
 ## Installation
-'''
+```
 git clone https://github.com/garrettfoster13/sccmhunter.git
 cd sccmhunter
 pip3 install .
-'''
+```
 
 ## Basic Usage
 
