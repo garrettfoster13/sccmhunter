@@ -19,4 +19,5 @@ pip3 install .
 
 ## Basic Usage
 
-![menu](https://user-images.githubusercontent.com/82191679/235783472-2c06a8c6-bc23-4f07-97c2-4e358d947d7d.png)
+
+![menu](https://user-images.githubusercontent.com/82191679/236306787-3c59c45a-2f13-4a01-9ac0-2f99c92a27bc.png)
