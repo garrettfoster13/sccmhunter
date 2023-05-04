@@ -73,7 +73,7 @@ class HTTP:
             if self.validate_add(self.computer_name):
                 logger.info(f'[+] {self.computer_name} created with password: {self.computer_pass}')
             else:
-                logger.info(f' [-] Could not validate successful creation.')
+                logger.info(f'[-] Could not validate successful creation.')
         
         if not (self.computer_name or self.computer_pass):
             logger.info("[-] Missing machine account credentials, check your arguments and try again.")

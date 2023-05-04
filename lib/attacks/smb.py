@@ -125,7 +125,6 @@ class SMB:
         # spider and save the paths of variables files if discovered with optional save
         if pxe_boot_servers:
             self.smb_spider(conn, pxe_boot_servers)
-        # both of these can be imported from a library since it's being used similarly for other modules
         if self.test_array:
             self.save_csv(self.test_array)
             self.print_table()
@@ -191,7 +190,7 @@ class SMB:
         
     
     def print_table(self):
-        df = pd.read_csv(f"{self.logs_dir}/csvs/smbhunter.csv")
+        df = pd.read_csv(f"{self.logs_dir}/csvs/smbhunter.csv").fillna("None")
         logger.info(tabulate(df, headers = 'keys', tablefmt = 'grid'))
         logger.info(f'SMB results saved to {self.logs_dir}/smbhunter.csv')
 

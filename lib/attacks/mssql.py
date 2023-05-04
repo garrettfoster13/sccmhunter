@@ -5,6 +5,13 @@ import ldap3
 from getpass import getpass
 
 
+"""
+Credit to Chris Thompson (@_mayyhem)
+https://posts.specterops.io/sccm-site-takeover-via-automatic-client-push-installation-f567ec80d5b1
+https://github.com/Mayyhem/SharpSCCM
+"""
+
+
 class MSSQL:
 
     def __init__(self, username=None, password=None, domain=None, target_dom=None, 

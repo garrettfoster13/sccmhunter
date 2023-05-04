@@ -1,5 +1,5 @@
 import typer
-from lib.commands import admin, find, mssql, smb, http, show, admin
+from lib.commands import admin, find, mssql, smb, http, show, admin, cmpivot
 from lib.scripts.banner import show_banner
 
 
@@ -37,7 +37,6 @@ app.add_typer(
     help=smb.HELP
 )
 
-#print CSVs all pretty
 app.add_typer(
     show.app,
     name=show.COMMAND_NAME,
@@ -48,6 +47,12 @@ app.add_typer(
     admin.app,
     name=admin.COMMAND_NAME,
     help=admin.HELP
+)
+
+app.add_typer(
+    cmpivot.app,
+    name=cmpivot.COMMAND_NAME,
+    help=cmpivot.HELP
 )
 
 if __name__ == '__main__':

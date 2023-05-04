@@ -76,7 +76,7 @@ class DATABASE:
             self.conn.execute('''CREATE TABLE Collections(CollectionID,CollectionType,IsBuiltIn,LimitToCollectionName,MemberClassName,
             MemberCount,Name)''') 
         except Exception as e:
-            print(e)
+            logger.info(e)
         finally:
             return True
 
@@ -266,10 +266,12 @@ class CMD(cmd2.Cmd):
             type = option[0]
             value = " ".join(option[1:])
 
-            if type.lower() in ["device"]:
+
+            #get devices
+            if type.lower() == "device":
                 tb = dp.read_sql(f'select * from Devices where Name = \'{value}\' COLLATE NOCASE', conn)
                 if tb.empty:
-                    print(f'[-] Device {value} not found.')
+                    logger.info(f'[-] Device {value} not found.')
                     return
                 logger.info(f'''------------------------------------------
 Active: {tb['Active'].to_string(index=False, header=False)}
@@ -289,8 +291,10 @@ SMSInstalledSites: {tb['SMSInstalledSites'].to_string(index=False, header=False)
 SMSUniqueIdentifier: {tb['SMSUniqueIdentifier'].to_string(index=False, header=False)}
 ------------------------------------------''')
                 return
-        
-            if type.lower() in ["user"]:
+
+
+            #get users
+            if type.lower() == "user":
                 tb = dp.read_sql(f'select * from Users where UserName = \'{value}\' COLLATE NOCASE', conn)
                 if tb.empty:
                     logger.info(f'[-] User {value} not found.')
@@ -309,6 +313,8 @@ UserName: {tb['UserName'].to_string(index=False, header=False)}
 UserPrincipalName: {tb['UserPrincipalName'].to_string(index=False, header=False)}
 ------------------------------------------''')
                 return
+            
+            #find where target user is assigned as a primary user
             if type.lower() in ["puser"]:
                 tb = dp.read_sql(f'select * from PUsers where UniqueUserName like \'%{value}\' COLLATE NOCASE', conn)
                 if tb.empty:
@@ -317,6 +323,8 @@ UserPrincipalName: {tb['UserPrincipalName'].to_string(index=False, header=False)
                 logger.info((tabulate(tb, showindex=False, headers=tb.columns, tablefmt='grid')))
 
                 return
+            
+            #find where target user has loast logged in
             if type.lower() in ["lastlogon"]:
                 tb = dp.read_sql(f'select * from Devices where LastLogonUserName = \'{value}\' COLLATE NOCASE', conn)
                 if tb.empty:
@@ -328,13 +336,16 @@ UserPrincipalName: {tb['UserPrincipalName'].to_string(index=False, header=False)
                 logger.info((tabulate(tb, showindex=False, headers=tb.columns, tablefmt='grid')))
                 return
 
-            if type.lower() in ["application"]:
-                tb = dp.read_sql(f'select * from Applications where LocalizedDisplayName = \'{value}\' COLLATE NOCASE', conn)
-                if tb.empty:
-                    logger.info(f'[-] {value} application not found.')
-                    return
-                for index, row in tb.iterrows():
-                    logger.info(f'''---------------------------------------
+
+            #get applications
+            if type.lower() == "application": 
+                if value != "*":
+                    tb = dp.read_sql(f'select * from Applications where CI_ID = \'{value}\' COLLATE NOCASE', conn)
+                    if tb.empty:
+                        logger.info(f'[-] {value} application not found.')
+                        return
+                    for index, row in tb.iterrows():
+                        logger.info(f'''---------------------------------------
 CI_ID: {row["CI_ID"]}
 CI_UniqueID: {row['CI_UniqueID']}
 ExecutionContext: {row['ExecutionContext']}
@@ -345,14 +356,24 @@ NumberOfDevicesWithApp: {row['NumberOfDevicesWithApp']}
 NumberOfUsersWithApp: {row['NumberOfUsersWithApp']}
 SourceSite: {row['SourceSite']}
 ------------------------------------------''')
-#                 return
-
-            if type.lower() in ["deployment"]:
-                tb = dp.read_sql(f'select * from Deployments where ApplicationName = \'{value}\' COLLATE NOCASE', conn)
-                if tb.empty:
-                    logger.info(f'[-] {value} deployment not found.')
                     return
-                logger.info(f'''--------------------------------------
+                if value == "*":
+                    tb = dp.read_sql(f'select * from Applications', conn)
+                    del tb['CI_UniqueID']
+                    del tb['ExecutionContext']
+                    del tb['NumberOfDevicesWithApp']
+                    del tb['NumberOfUsersWithApp']
+                    logger.info((tabulate(tb, showindex=False, headers=tb.columns, tablefmt='grid')))
+
+
+            #get deployment
+            if type.lower() == "deployment":
+                if value != "*":
+                    tb = dp.read_sql(f'select * from Deployments where AssignmentName = \'{value}\' COLLATE NOCASE', conn)
+                    if tb.empty:
+                        logger.info(f'[-] {value} deployment not found.')
+                        return
+                    logger.info(f'''--------------------------------------
 ApplicationName: {tb['ApplicationName'].to_string(index=False, header=False)}
 AssignedCI_UniqueID: {tb['AssignedCI_UniqueID'].to_string(index=False, header=False)}
 AssignedCIs: {tb['AssignedCIs'].to_string(index=False, header=False).replace("[", ""). replace("]", "")}
@@ -363,14 +384,20 @@ NotifyUser: {tb['NotifyUser'].to_string(index=False, header=False)}
 SourceSite: {tb['SourceSite'].to_string(index=False, header=False)}
 TargetCollectionID: {tb['TargetCollectionID'].to_string(index=False, header=False)}
 ------------------------------------------''')
-                return
-            
-            if type.lower() in ["collection"]:
-                tb = dp.read_sql(f'select * from Collections where Name = \'{value}\' COLLATE NOCASE', conn)
-                if tb.empty:
-                    logger.info(f'[-] {value} deployment not found.')
                     return
-                logger.info(f'''--------------------------------------
+                if value == "*":
+                    tb = dp.read_sql(f'select * from Deployments', conn)
+                    del tb['AssignedCI_UniqueID']
+                    logger.info((tabulate(tb, showindex=False, headers=tb.columns, tablefmt='grid')))
+            
+            #get collections
+            if type.lower() == "collection":
+                if value != "*":
+                    tb = dp.read_sql(f'select * from Collections where Name = \'{value}\' COLLATE NOCASE', conn)
+                    if tb.empty:
+                        logger.info(f'[-] {value} deployment not found.')
+                        return
+                    logger.info(f'''--------------------------------------
 CollectionID: {tb['CollectionID'].to_string(index=False, header=False)}
 CollectionType: {tb['CollectionType'].to_string(index=False, header=False)}
 IsBuiltIn: {tb['IsBuiltIn'].to_string(index=False, header=False)}
@@ -379,31 +406,34 @@ MemberClassName: {tb['MemberClassName'].to_string(index=False, header=False)}
 MemberCount: {tb['MemberCount'].to_string(index=False, header=False)}
 Name: {tb['Name'].to_string(index=False, header=False)}
 ------------------------------------------''')
-                return
+                    return
+                if value == "*":
+                    tb = dp.read_sql(f'select * from Collections', conn)
+                    del tb['CollectionType']
+                    del tb['IsBuiltIn']
+                    del tb['MemberClassName']
+                    del tb['LimitToCollectionName']
+                    logger.info((tabulate(tb, showindex=False, headers=tb.columns, tablefmt='grid')))
                 
-
         # probably need some more error handling here
         except KeyboardInterrupt:
             return
-        return
-        # except Exception as e:
-        #     print(e)
+
+        except Exception as e:
+            print(e)
 
     
     def do_help(self, arg):
-        print('''Query Commands - Query a target principal from the respective table.
+        logger.info('''Query Commands - Query a target principal from the respective table.
 --------
-get user [username]
-get device [machinename]
-get puser [username]
-get application [appname]
-get collection [collectionname]
-get deployment [deploymentid]
-get lastlogon [username]
+get user [username]                                 Get information about a specific user.
+get device [machinename]                            Get information about a specific device.
+get puser [username]                                Show where target user is a primary user. (If configured.)
+get application [*] or [CI_ID]                      Show all applications or detailed information about a single application.                             
+get collection [*] or [Name]                        Show all collections or detailed information about a single collection.
+get deployment [*] or [AssignmentName]              Show all deployments or detailed information about a single deployment.
+get lastlogon [username]                            Show where target user last logged in.
 
-Manual Commands - Manually query the database.
---------
-manual [sql query] (not yet implemented)
 
 --------
 quit - exit shell
