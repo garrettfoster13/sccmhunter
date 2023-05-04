@@ -4,7 +4,7 @@ from lib.logger import init_logger
 
 app = typer.Typer()
 COMMAND_NAME = 'pivot'
-HELP = 'Run CMPivot commands on target devices through the AdminService API. Site Server Administrator rights required.'
+HELP = 'Run CMPivot commands on target devices through the AdminService API.'
 
 @app.callback(no_args_is_help=True, invoke_without_command=True)
 
