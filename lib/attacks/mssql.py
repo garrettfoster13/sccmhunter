@@ -72,7 +72,7 @@ class MSSQL:
 
         try:
             self.ldap_session.extend.standard.paged_search(self.search_base, 
-                                                           search_filter="(samaccountname=lowpriv)", 
+                                                           search_filter=f"(samaccountname={self.target_user})", 
                                                            attributes="objectsid",
                                                            paged_size=1, 
                                                            generator=False)  
