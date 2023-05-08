@@ -160,7 +160,7 @@ class SCCMHUNTER:
         for owner in resolved_owners:
             logger.debug(f"[+] Found container owner: {owner}")
             if owner not in self.servers:
-                self.servers.append(server)
+                self.servers.append(owner)
 
         for server in container_servers:
             if server not in self.servers:
