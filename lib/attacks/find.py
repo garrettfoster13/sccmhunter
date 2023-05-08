@@ -188,38 +188,43 @@ class SCCMHUNTER:
                 COMPUTER_DICT = {"cn": "", "sAMAccountName": "", "dNSHostName": "", "memberOf": "", "description": ""}
                 GROUP_DICT = {"cn": "", "name": "", "sAMAccountName": "", "member": "", "memberOf": "", "description": ""}
                 #if a user
-                if (entry['sAMAccountType']) == 805306368:
-                    for k, v in USER_DICT.items():
-                        if k in entry:
-                            USER_DICT[k] = str(entry[k].value)
-                    for k, v in USER_DICT.items():
-                        if k =='servicePrincipalName':
-                            j = v.replace("['", "").replace("', '", "\n").replace("']", "")
-                            USER_DICT[k] = j
-                    _users.append(copy.deepcopy(USER_DICT))
-                # if a computer
-                if (entry['sAMAccountType']) == 805306369:
-                    #COMPUTER_DICT = {"cn": "", "sAMAccountName": "None", "dNSHostName": "", "memberOf": "", "description": ""}
-                    for k, v in COMPUTER_DICT.items():
-                        if k in entry:
-                            COMPUTER_DICT[k] = str(entry[k].value)
-                        #might as well add it to the results list for SMB scanning
-                        dnshostname = entry["dNSHostName"]
-                        if dnshostname and dnshostname not in self.servers:
-                            self.servers.append(dnshostname)
-                        #return
-                    _computers.append(copy.deepcopy(COMPUTER_DICT))
-                #if a group
-                if (entry['sAMAccountType']) == 268435456:
-                    for k, v in GROUP_DICT.items():
-                        if k in entry:
-                            GROUP_DICT[k] = str(entry[k].value)
-                    for k, v in GROUP_DICT.items():
-                        if k =='member':
-                            #i should learn regex
-                            j = v.replace("', '", "\n").replace("['", "").replace("']", "")
-                            GROUP_DICT[k] = j
-                    _groups.append(copy.deepcopy(GROUP_DICT))
+                try:
+                    if (entry['sAMAccountType']) == 805306368:
+                        for k, v in USER_DICT.items():
+                            if k in entry:
+                                USER_DICT[k] = str(entry[k].value)
+                        for k, v in USER_DICT.items():
+                            if k =='servicePrincipalName':
+                                j = v.replace("['", "").replace("', '", "\n").replace("']", "")
+                                USER_DICT[k] = j
+                        _users.append(copy.deepcopy(USER_DICT))
+                    # if a computer
+                    if (entry['sAMAccountType']) == 805306369:
+                        #COMPUTER_DICT = {"cn": "", "sAMAccountName": "None", "dNSHostName": "", "memberOf": "", "description": ""}
+                            for k, v in COMPUTER_DICT.items():
+                                if k in entry:
+                                    COMPUTER_DICT[k] = str(entry[k].value)
+                                #might as well add it to the results list for SMB scanning
+                                dnshostname = entry["dNSHostName"]
+                                if dnshostname and dnshostname not in self.servers:
+                                    self.servers.append(dnshostname)
+                                #return
+                            _computers.append(copy.deepcopy(COMPUTER_DICT))
+                    #if a group
+                    if (entry['sAMAccountType']) == 268435456:
+                        for k, v in GROUP_DICT.items():
+                            if k in entry:
+                                GROUP_DICT[k] = str(entry[k].value)
+                        for k, v in GROUP_DICT.items():
+                            if k =='member':
+                                #i should learn regex
+                                j = v.replace("', '", "\n").replace("['", "").replace("']", "")
+                                GROUP_DICT[k] = j
+                        _groups.append(copy.deepcopy(GROUP_DICT))
+                except ldap3.core.exceptions.LDAPAttributeError as e:
+                    logger.debug(f"[-] {e}")
+                except ldap3.core.exceptions.LDAPKeyError as e:
+                    logger.debug(f"[-] {e}")
         else:
             logger.info("[-] No SCCM Servers found.")
 
