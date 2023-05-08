@@ -30,7 +30,8 @@ This tool was developed and tested in a lab environment. Your mileage may vary o
 ```
 git clone https://github.com/garrettfoster13/sccmhunter.git
 cd sccmhunter
-pip3 install .
+pip3 install -r requirements.txt
+python3 sccmhunter.py
 ```
 
 ## Help
