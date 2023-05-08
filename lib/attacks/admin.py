@@ -255,11 +255,13 @@ class DATABASE:
 class CMD(cmd2.Cmd):
     prompt = '>> '
 
-    def __init__(self):
+    def __init__(self, logs_dir=None):
         super().__init__(allow_cli_args=False)
+        self.logs_dir = logs_dir
+
 
     def do_get(self, arg):
-        _dbname = f"/root/.sccmhunter/logs/db/sccmhunter.db"
+        _dbname = f"{self.logs_dir}/db/sccmhunter.db"
         conn = sqlite3.connect(_dbname, check_same_thread=False)
         try:
             option = arg.split(' ')
@@ -457,15 +459,15 @@ class ADMINSERVICE:
 
     def run(self):
         if os.path.getsize(f"{self.logs_dir}/db/sccmhunter.db") > 1:
-            self.cli()
+            self.cli(self.logs_dir)
         else:
             build_db = DATABASE(self.username, self.password, self.url, self.logs_dir)
             db_ready = build_db.run()
             if db_ready:
-                self.cli()
+                self.cli(self.logs_dir)
 
-    def cli(self):
-            cli = CMD()
+    def cli(self, logs_dir):
+            cli = CMD(logs_dir=logs_dir)
             cli.cmdloop()
 
 
