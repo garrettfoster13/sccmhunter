@@ -117,7 +117,7 @@ class SCCMHUNTER:
                 for attr in attributes:
                     secdesc = (entry[attr].value)
                     dacl.security_descriptor.fromString(secdesc)
-            #self.ace_parser(dacl)
+            self.ace_parser(dacl)
         else:
             logger.info("[-] Did not find System Management Container")
         if len(self.samname) > 0:
