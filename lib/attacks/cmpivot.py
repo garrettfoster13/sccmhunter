@@ -67,7 +67,7 @@ class CMD(cmd2.Cmd):
             logger.info("Something went wrong")
         else: 
             json = r.json()
-            opid = (json['value']['OperatproceionId'])
+            opid = (json['value']['OperationId'])
             logger.info(f"Got OperationId {opid}. Sleeping 10 seconds to wait for host to call home.")
             time.sleep(10)
             self.get_results(deviceid=arg, opid=opid)
