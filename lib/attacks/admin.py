@@ -445,12 +445,11 @@ quit - exit shell
 
 class ADMINSERVICE:
 
-    def __init__(self, username=None, password=None, ip=None, hashes=None, 
+    def __init__(self, username=None, password=None, ip=None, 
                  debug=False, logs_dir = None):
         self.username = username
         self.password = password
         self.ip = ip
-        self.hashes = hashes
         self.debug = debug
         self.logs_dir = logs_dir #not sure this is needed  
         self.conn = None
