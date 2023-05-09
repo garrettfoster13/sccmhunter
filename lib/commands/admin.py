@@ -10,9 +10,8 @@ HELP = 'Collect and store data from AdminService API.'
 
 def main(
     username        : str   = typer.Option(None, "-u",  help="Username"),
-    password        : str   = typer.Option(None, '-p',  help="Password"),
+    password        : str   = typer.Option(None, '-p',  help="Password or NTLM hash. (LM:NT)"),
     ip              : str   = typer.Option(None, '-ip',  help = "IP address or hostname of site server"),
-    hashes          : str   = typer.Option(None, "-hashes",metavar="LMHASH:NTHASH", help="LM and NT hashes, format is LMHASH:NTHASH"),
     debug           : bool  = typer.Option(False, '-debug',help='Enable Verbose Logging'),
 ):
 
