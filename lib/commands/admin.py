@@ -18,5 +18,5 @@ def main(
 
 
     logs_dir = init_logger(debug)
-    adminhunter = ADMINSERVICE(username=username, password=password, ip=ip, hashes=hashes, debug=debug, logs_dir=logs_dir)
+    adminhunter = ADMINSERVICE(username=username, password=password, ip=ip, debug=debug, logs_dir=logs_dir)
     adminhunter.run()
