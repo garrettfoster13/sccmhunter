@@ -3,6 +3,7 @@
 
 from lib.ldap import init_ldap_session, get_dn
 import ldap3
+import ldap3.utils.conv import escape_filter_chars
 import json
 import os
 import csv
@@ -256,6 +257,7 @@ class SCCMHUNTER:
                 # could probably make this better
                 if (entry['sAMAccounttype']) == 268435456:                      
                     for member in entry['member']:
+			member = escape_filter_chars(member)
                         search_filter = f"(distinguishedName={member})"
                         self.ldap_session.extend.standard.paged_search(self.search_base, 
                                                                        search_filter, 
