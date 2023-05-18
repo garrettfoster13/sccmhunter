@@ -3,7 +3,7 @@
 
 from lib.ldap import init_ldap_session, get_dn
 import ldap3
-import ldap3.utils.conv import escape_filter_chars
+from ldap3.utils.conv import escape_filter_chars
 import json
 import os
 import csv
