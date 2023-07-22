@@ -116,10 +116,6 @@ class MSSQL:
             return False
         
         self.mssql_abuse(self.querysid)
-        '''
-        need to get the netbios name of the domain
-        ldapsearch -LLL -x -H ldap://10.10.100.76 -D 'bullshit\\administrator' -w 'P@ssw0rd' -b 'CN=Configuration,DC=blah,DC=blah' "(&(objectclass=crossRef)(ncname=DC=blah,DC=blah))" nETBIOSName
-        '''
         
     def mssql_abuse(self,hex_sid):
         hex_sid = hex_sid
