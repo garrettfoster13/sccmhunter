@@ -7,6 +7,7 @@ from impacket.smbconnection import SMBConnection
 import ntpath
 import os
 import csv
+from getpass import getpass
 import pandas as pd
 from tabulate import tabulate
 from lib.scripts.banner import show_banner
