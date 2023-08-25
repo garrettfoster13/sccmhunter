@@ -44,6 +44,10 @@ class SMB:
  
     def run(self):
         logfile = f"{self.logs_dir}/sccmhunter.log"
+        if self.hashes:
+            lmhash, nthash = self.hashes.split(':')
+        if not (self.password or self.hashes or self.aes or self.no_pass):
+                self.password = getpass("Password:")
         if os.path.exists(logfile):
             logger.info("[+] Found targets from logfile.")
             targets = self.read_logs()
