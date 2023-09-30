@@ -28,6 +28,7 @@ class SHELL(cmd2.Cmd):
         #initialize plugins
         self.pivot = CMPIVOT(username=username, password=password, target = target, logs_dir = logs_dir)
         self.script = SMSSCRIPTS(username=username, password=password, target = target, logs_dir = logs_dir,)
+        self.backdoor = BACKDOOR(username=username, password=password, target = target, logs_dir = logs_dir)
         
         #initialize cmd
         super().__init__(allow_cli_args=False)
@@ -142,12 +143,12 @@ get lastlogon [username]                Show where target user last logged in.""
         if check.lower() == "y":
             option = arg.split(' ')
             scriptpath = option[0]
-            backdoor = BACKDOOR(username=self.username, 
-                                password=self.password,
-                                target = self.target,
-                                logs_dir = self.logs_dir,
-                                backdoor_script=scriptpath)
-            backdoor.run(option="backdoor")
+            # backdoor = BACKDOOR(username=self.username, 
+            #                     password=self.password,
+            #                     target = self.target,
+            #                     logs_dir = self.logs_dir,
+            #                     backdoor_script=scriptpath)
+            self.backdoor.run(option="backdoor", scriptpath=scriptpath)
 
         else:
             return
@@ -156,24 +157,23 @@ get lastlogon [username]                Show where target user last logged in.""
         """Restore original CMPivot Script"""
         logger.info("Tasked SCCM to restore the original CMPivot script.")
         option = arg.split(' ')
-        backdoor = BACKDOOR(username=self.username, 
-                            password=self.password,
-                            target = self.target,
-                            logs_dir = self.logs_dir,
-                            backdoor_script=None)
-        backdoor.run(option="restore")
+        # backdoor = BACKDOOR(username=self.username, 
+        #                     password=self.password,
+        #                     target = self.target,
+        #                     logs_dir = self.logs_dir,
+        #                     backdoor_script=None)
+        self.backdoor.run(option="restore", scriptpath=None)
 
     @cmd2.with_category(PE)
     def do_backup(self, arg):
         """Backup original CMPivot Script"""
         logger.info("Tasked SCCM to backup the CMPivot script.")
         option = arg.split(' ')
-        backdoor = BACKDOOR(username=self.username, 
-                            password=self.password,
-                            target = self.target,
-                            logs_dir = self.logs_dir,
-                            backdoor_script=None)
-        backdoor.run(option="backup")
+        # backdoor = BACKDOOR(username=self.username, 
+        #                     password=self.password,
+        #                     target = self.target,
+        #                     logs_dir = self.logs_dir)
+        self.backdoor.run(option="backup", scriptpath=None)
 
 # ############
 # CMPivot Section
