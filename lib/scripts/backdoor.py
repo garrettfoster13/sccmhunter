@@ -13,12 +13,12 @@ from lib.logger import logger
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
 class BACKDOOR:
-    def __init__(self, username, password, target, logs_dir, backdoor_script):
+    def __init__(self, username, password, target, logs_dir):
         self.username = username
         self.password = password
         self.target = target
         self.logs_dir = logs_dir
-        self.backdoor_script = backdoor_script
+        self.backdoor_script = ""
         self.headers = {'Content-Type': 'application/json; odata=verbose'}
 
     def transform_string(self, input_string):
@@ -26,7 +26,8 @@ class BACKDOOR:
             return input_string[-2:] + input_string[2:-2] + input_string[:2]
         return input_string
 
-    def run(self, option):
+    def run(self, option, scriptpath):
+        self.backdoor_script = scriptpath
         if option == "backup":
             self.backup_cmpivot()
         else:

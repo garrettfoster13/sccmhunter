@@ -43,8 +43,6 @@ Do-Delete
         try:
             with open(f"{self.script}", "r", encoding='utf-8') as f:
                 file_content = f.read()
-                if self.roast:
-                    file_content += self.appended
                 file_content += cleanup
                 bom = codecs.BOM_UTF16_LE
                 byte_array = bom + file_content.encode('utf-16-le')
@@ -111,7 +109,6 @@ Do-Delete
         except Exception as e:
              logger.info(e)
 
-        
     def approve_script(self):
         body = {"Approver":"",
                 "ApprovalState": "3",
@@ -135,8 +132,7 @@ Do-Delete
                 logger.info(e)
 
     def run_script(self):
-        body = {"ScriptGuid": f"{self.guid}"
-                }
+        body = {"ScriptGuid": f"{self.guid}"}
         
         url = f"https://{self.target}/AdminService/v1.0/Device({self.device})/AdminService.RunScript"
         
@@ -176,6 +172,7 @@ Do-Delete
 
 
     def cat(self, file, device):
+        #filecontent cmpivot module doesn't work so here's the bandaid
         script = '''
 function do-cat{
     $contents = (Get-Content -Path %s) -replace 111,222
@@ -192,7 +189,6 @@ Do-Delete
         script_body = base64.b64encode(byte_array).decode('utf-8')
         self.add_script(script_body)
         self.device = device
-
 
     def printlog(self, result):
         filename = (f'{self.logs_dir}/console.log')
