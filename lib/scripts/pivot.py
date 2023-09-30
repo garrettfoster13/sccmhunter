@@ -11,7 +11,7 @@ from datetime import datetime
 
 class CMPIVOT:
 
-    def __init__(self, username, password, target, device, logs_dir):
+    def __init__(self, username, password, target, logs_dir):
         self.username = username
         self.password = password
         self.target = target
@@ -138,8 +138,6 @@ class CMPIVOT:
     def registry_key(self):
         return
 
-    
-    
 
     def do_request(self, body):
         endpoint = f"https://{self.target}/AdminService/v1.0/Device({self.device})/AdminService.RunCMPivot"

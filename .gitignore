@@ -3,3 +3,4 @@
 dist/
 .ruff_cache/
 resources/dotnet/*.dll
+__pycache__
