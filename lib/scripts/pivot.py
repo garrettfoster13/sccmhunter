@@ -15,14 +15,16 @@ class CMPIVOT:
         self.username = username
         self.password = password
         self.target = target
-        self.device = device
+
         self.logs_dir = logs_dir
         self.headers = {'Content-Type': 'application/json; odata=verbose'}
         self.opid = ""
         self.body = ""
+        self.device = ""
     
-    def administrators(self):
+    def administrators(self, device):
         body = {"InputQuery":"Administrators"}
+        self.device = device
         self.do_request(body)
     
     def computer_system(self):
@@ -34,30 +36,35 @@ class CMPIVOT:
     def desktop(self):
         return
     
-    def user(self):
+    def user(self, device):
+        self.device=device
         body = {"InputQuery":"User"}
         self.do_request(body)
     
-    def os(self):
+    def os(self, device):
+        self.device = device
         body = {"InputQuery":"OS"}
         self.do_request(body)
 
-    def file(self, arg):
+    def file(self, arg, device):
         query = {"InputQuery": ""}
         path = "File('" + arg + "') | distinct FileName, Mode, LastWriteTime, Size, Device" 
         query["InputQuery"] = path
+        self.device = device
         self.do_request(query)
         return
     
     # this function doesn't work no matter how hard I try
-    def file_content(self, arg):
-        query = {"InputQuery": ""}
-        path = "FileContent('" + arg + "')"
-        query["InputQuery"] = path
-        self.do_request(query)
-        return
+    # used a script instead open a PR please!!
+    # def file_content(self, arg):
+    #     query = {"InputQuery": ""}
+    #     path = "FileContent('" + arg + "')"
+    #     query["InputQuery"] = path
+    #     self.do_request(query)
+    #     return
     
-    def file_share(self):
+    def file_share(self, device):
+        self.device = device
         body = {"InputQuery":"FileShare"}
         self.do_request(body)
         return
@@ -67,47 +74,56 @@ class CMPIVOT:
         self.do_request(body)
         return
     
-    def installed_software(self):
+    def installed_software(self, device):
+        self.device=device
         body = {"InputQuery":"InstalledSoftware | distinct ProductName, Publisher, ProductVersion"}
         self.do_request(body)
         return
     
-    def ipconfig(self):
+    def ipconfig(self, device):
+        self.device = device
         body = {"InputQuery":"IPConfig"}
         self.do_request(body)
         return
     
-    def logical_disk(self):
+    def logical_disk(self, device):
+        self.device = device
         body = {"InputQuery":"LogicalDisk | distinct Device, Description, Caption, DeviceID"}
         self.do_request(body)
         return
     
-    def process(self):
+    def process(self, device):
         body = {"InputQuery":"Process"}
+        self.device = device
         self.do_request(body)
         return
         
-    def services(self):
+    def services(self, device):
+        self.device = device
         body = {"InputQuery":"Services | distinct Device, Name, PathName, ProcessId, ServiceType, Started"}
         self.do_request(body)
         return
     
-    def system_console_user(self):
+    def system_console_user(self, device):
         body = {"InputQuery":"SystemConsoleUser"}
+        self.device = device
         self.do_request(body)
         return
 
-    def environment(self):
+    def environment(self, device):
+        self.device = device
         body = {"InputQuery":"Environment"}
         self.do_request(body)
         return
         
-    def osinfo(self):
+    def osinfo(self, device):
+        self.device = device
         body = {"InputQuery":"OS | distinct Caption, Version, OSArchitecture, Device"}
         self.do_request(body)
         return
 
-    def disk(self):
+    def disk(self, device):
+        self.device = device
         body = {"InputQuery":"Disk"}
         self.do_request(body)
         return
