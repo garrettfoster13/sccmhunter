@@ -18,8 +18,16 @@ import sqlite3
 # #add debugging
 
 class SHELL(cmd2.Cmd):
+    SA = "Situational Awareness"
+    PE = "PostEx Commands"
+    DB = "Database Commands"
+    IN = "Interface"
+    hide = ["alias", "help", "macro", "run_pyscript", "set", "shortcuts", "edit", "history", "quit", "run_script", "shell", "_relative_run_script", "eof"]
 
     def __init__(self, username, password, target, logs_dir):
+        #initialize plugins
+        self.pivot = CMPIVOT(username=username, password=password, target = target, device = "", logs_dir =logs_dir)
+
         super().__init__(allow_cli_args=False)
         self.username = username
         self.password = password
@@ -31,56 +39,7 @@ class SHELL(cmd2.Cmd):
         self.cwd = "C:\\"
         self.prompt = f"({self.device}) {self.cwd} >> "
         self.hostname = ""
-
-
-
-    def do_help(self, line):
-        print("""
-interact (device code)                              Target Device Code to Query
-
---POCs--
-kerberoast (target)                                 Kerberoast target user.
-nanodump                                            Extract credentials from LSASS with Nanodump
-script (/path/to/script)                            Run provided PowerShell script on target.
-              
-
---Situational Awareness--           
-administrators                                      Query local administrators on target
-cat                                                 Return file contents of specified file in the path.
-cd                                                  Change current working directory.
-console_users                                       Show total time any users has logged on to the target.
-disk                                                Show disk information on the target.
-environment                                         Show configured environment variables on target.
-ipconfig                                            Run ipconfig on target
-list_disk                                           Show drives mounted to the target system.
-ls                                                  List files in current working directory.
-osinfo                                              Show OS info of target system.
-ps                                                  List running processes on target.
-services                                            List running services on target.
-sessions                                            Show users with an active session on the target system.
-shares                                              List file shares hosted on target.
-software                                            Show installed software on the target system.
-              
---Database Commands--
-get user [username]                                 Get information about a specific user.
-get device [machinename]                            Get information about a specific device.
-get puser [username]                                Show where target user is a primary user. (If configured.)
-get application [*] or [CI_ID]                      Show all applications or detailed information about a single application.                             
-get collection [*] or [Name]                        Show all collections or detailed information about a single collection.
-get deployment [*] or [AssignmentName]              Show all deployments or detailed information about a single deployment.
-get lastlogon [username]                            Show where target user last logged in.
-
---Post Ex--
-backdoor                                            Backdoor CMPivot Script
-backup                                              Backup original CMPivot Script
-restore                                             Restore original CMPivot Script
-
-
-
-exit                                                Exit the console.
-! (command)                                         Local shell command.
-              
-    """)
+        self.hidden_commands = [command for command in self.hide]
 
 # ############
 # cmd2 Settings
@@ -94,17 +53,23 @@ exit                                                Exit the console.
         _dbname = f"{self.logs_dir}/db/sccmhunter.db"
         conn = sqlite3.connect(_dbname, check_same_thread=False)
 
+    @cmd2.with_category(IN)
     def do_interact(self, arg):
+        """Target Device Code to Query              interact (device code)"""
         option = arg.split(' ')
         self.device = option[0]
 
     def emptyline(self):
         pass
 
+    @cmd2.with_category(IN)
     def do_exit(self, arg):
+        """Exit the console."""
         return True 
     
+    @cmd2.with_category(SA)
     def do_cd(self, arg):
+        """Change current working directory."""
         #path needs to end with \ or all file system queries will fail
         if not arg.endswith("\\"): 
             arg = arg + "\\"
@@ -116,7 +81,17 @@ exit                                                Exit the console.
 # Database Section
 # ############
 
+    @cmd2.with_category(DB)
     def do_get(self, arg):
+        """
+Usage
+get user [username]                     Get information about a specific user.
+get device [machinename]                Get information about a specific device.
+get puser [username]                    Show where target is a primary user.
+get application [*] or [CI_ID]          Show all or single app.
+get collection [*] or [Name]            Show all or single collection.
+get deployment [*] or [AssignmentName]  Show all or single deployment.
+get lastlogon [username]                Show where target user last logged in."""
         if os.path.getsize(f"{self.logs_dir}/db/sccmhunter.db") > 1:
             db = QUERYDB(self.logs_dir)
             db.do_get(arg=arg)
@@ -135,29 +110,9 @@ exit                                                Exit the console.
 # All modules will call and execute script from the lib.scripts directory
 # ############
 
-    # Kerberoast a single user
-    def do_kerberoast(self, arg):
-        option = arg.split(' ')
-        roastable = option[0]
-        roastem = SMSSCRIPTS(username=self.username, 
-                             password=self.password,
-                            target = self.target,
-                            device = self.device,
-                            logs_dir = self.logs_dir,
-                            optional="kerberoast", 
-                            optional_target=roastable)
-        roastem.kerberoast()
-
-    def do_nanodump(self, arg):
-        dumpem = SMSSCRIPTS(username=self.username,
-                    password=self.password,
-                    target = self.target,
-                    device = self.device,
-                    logs_dir = self.logs_dir,
-                    optional="nanodump")
-        dumpem.run()
-        
+    @cmd2.with_category(SA)    
     def do_cat(self, arg):
+        """Read file contents.                      cat (filename)"""
         option = arg.split(' ')
         filename = option[0]
         logger.info(f"Tasked SCCM to show {arg}")
@@ -169,7 +124,9 @@ exit                                                Exit the console.
                         logs_dir = self.logs_dir,)
         type.cat(fullpath)
     
+    @cmd2.with_category(PE)
     def do_script(self, arg):
+        """Run script on target                     script (/path/to/script) """
         option = arg.split(' ')
         scriptpath = option[0]
         script = SMSSCRIPTS(username=self.username, 
@@ -181,14 +138,14 @@ exit                                                Exit the console.
                             optional_target=scriptpath)
         script.run()
 
-
-
 # ############
 # CMPivot Backdoor Section
 # Backdoor existing CMPivot script with your own
 # ############
-
+    @cmd2.with_category(PE)
     def do_backdoor(self, arg):
+        # """backdoor (/path/to/script)       Backdoor CMPivot Script"""
+        """Backdoor CMPivot Script                  backdoor (/path/to/script) """
         logger.info("Tasked SCCM to backdoor CMPivot with provided script")
         check = input("IMPORTANT: Did you backup the script first? There is no going back without it. Y/N?")
         if check.lower() == "y":
@@ -203,8 +160,9 @@ exit                                                Exit the console.
 
         else:
             return
-
+    @cmd2.with_category(PE)
     def do_restore(self, arg):
+        """Restore original CMPivot Script"""
         logger.info("Tasked SCCM to restore the original CMPivot script.")
         option = arg.split(' ')
         backdoor = BACKDOOR(username=self.username, 
@@ -214,14 +172,16 @@ exit                                                Exit the console.
                             backdoor_script=None)
         backdoor.run(option="restore")
 
+    @cmd2.with_category(PE)
     def do_backup(self, arg):
+        """Backup original CMPivot Script"""
         logger.info("Tasked SCCM to backup the CMPivot script.")
         option = arg.split(' ')
         backdoor = BACKDOOR(username=self.username, 
                             password=self.password,
                             target = self.target,
                             logs_dir = self.logs_dir,
-                            backdoor_script="")
+                            backdoor_script=None)
         backdoor.run(option="backup")
 
 # ############
@@ -230,123 +190,84 @@ exit                                                Exit the console.
 # ############
 
     
-
+    @cmd2.with_category(SA)
     def do_administrators(self, arg):
+        """Query local administrators on target"""
         logger.info("Tasked SCCM to run Administrators.")
-        pivot = CMPIVOT(username=self.username,
-                        password=self.password,
-                        target = self.target,
-                        device = self.device,
-                        logs_dir = self.logs_dir)
-        pivot.administrators()
+        self.pivot.administrators(device=self.device)
     
+    @cmd2.with_category(SA)
     def do_ipconfig(self, arg):
+        """Run ipconfig on target"""
         logger.info("Tasked SCCM to run IPCONFIG.")
-        pivot = CMPIVOT(username=self.username,
-                        password=self.password,
-                        target = self.target,
-                        device = self.device,
-                        logs_dir = self.logs_dir)
-        pivot.ipconfig()
+        self.pivot.ipconfig(device=self.device)
 
+    @cmd2.with_category(SA)
     def do_shares(self, arg):
+        """List file shares hosted on target."""
         logger.info("Tasked SCCM to list file shares.")
-        pivot = CMPIVOT(username=self.username,
-                        password=self.password,
-                        target = self.target,
-                        device = self.device,
-                        logs_dir = self.logs_dir)
-        pivot.file_share()
+        self.pivot.file_share(device=self.device)
 
+    @cmd2.with_category(SA)
     def do_services(self, arg):
+        """List running services on target."""
         logger.info("Tasked SCCM to list services.")
-        pivot = CMPIVOT(username=self.username,
-                        password=self.password,
-                        target = self.target,
-                        device = self.device,
-                        logs_dir = self.logs_dir)
-        pivot.services()
+        self.pivot.services(device=self.device)
     
+    @cmd2.with_category(SA)
     def do_ps(self, arg):
+        """List running processes on target."""
         logger.info("Tasked SCCM to list processes.")
-        pivot = CMPIVOT(username=self.username,
-                        password=self.password,
-                        target = self.target,
-                        device = self.device,
-                        logs_dir = self.logs_dir)
-        pivot.process()
+        self.pivot.process(device=self.device)
 
+    @cmd2.with_category(SA)
     def do_console_users(self, arg):
+        """Show total time any users has logged on to the target."""
         logger.info("Tasked SCCM to show all users that have signed in.")
-        pivot = CMPIVOT(username=self.username,
-                        password=self.password,
-                        target = self.target,
-                        device = self.device,
-                        logs_dir = self.logs_dir)
-        pivot.system_console_user()
+        self.pivot.system_console_user(device=self.device)
 
+    @cmd2.with_category(SA)
     def do_ls(self, arg):
+        """List files in current working directory."""
         logger.info(f"Tasked SCCM to list files in {self.cwd}.")
-        pivot = CMPIVOT(username=self.username,
-                        password=self.password,
-                        target = self.target,
-                        device = self.device,
-                        logs_dir = self.logs_dir)
-        pivot.file(self.cwd + "*")
+        path = self.cwd + "*"
+        self.pivot.file(arg=path, device=self.device)
 
+    @cmd2.with_category(SA)
     def do_list_disk(self, arg):
+        """Show drives mounted to the target system."""
         logger.info(f"Tasked SCCM to show mounted drives on {self.device}.")
-        pivot = CMPIVOT(username=self.username,
-                        password=self.password,
-                        target = self.target,
-                        device = self.device,
-                        logs_dir = self.logs_dir)
-        pivot.logical_disk()
+        self.pivot.logical_disk(device=self.device)
 
+    @cmd2.with_category(SA)
     def do_software(self, arg):
+        """Show installed software on the target system."""
         logger.info(f"Tasked SCCM to list software installed {self.device}.")
-        pivot = CMPIVOT(username=self.username,
-                        password=self.password,
-                        target = self.target,
-                        device = self.device,
-                        logs_dir = self.logs_dir)
-        pivot.installed_software()   
+        self.pivot.installed_software(device=self.device)   
 
+    @cmd2.with_category(SA)
     def do_sessions(self, arg):
+        """Show users with an active session on the target system."""
         logger.info(f"Tasked SCCM to show users currently signed in to {self.device}.")
-        pivot = CMPIVOT(username=self.username,
-                        password=self.password,
-                        target = self.target,
-                        device = self.device,
-                        logs_dir = self.logs_dir)
-        pivot.user()   
+        self.pivot.user(device=self.device)   
 
+    @cmd2.with_category(SA)
     def do_osinfo(self, arg):
+        """Show OS info of target system."""
         logger.info(f"Tasked SCCM to show system info of {self.device}.")
-        pivot = CMPIVOT(username=self.username,
-                        password=self.password,
-                        target = self.target,
-                        device = self.device,
-                        logs_dir = self.logs_dir)
-        pivot.osinfo()
+        self.pivot.osinfo(device=self.device)
 
+    @cmd2.with_category(SA)
     def do_environment(self, arg):
+        """Show configured environment variables on target."""
         logger.info(f"Tasked SCCM to show Environment variables of {self.device}.")
-        pivot = CMPIVOT(username=self.username,
-                password=self.password,
-                target = self.target,
-                device = self.device,
-                logs_dir = self.logs_dir)
-        pivot.environment()
+        self.pivot.environment(device=self.device)
 
+    @cmd2.with_category(SA)
     def do_disk(self, arg):
+        """Show disk information on the target."""
         logger.info(f"Tasked SCCM to show disk information of {self.device}.")
-        pivot = CMPIVOT(username=self.username,
-                password=self.password,
-                target = self.target,
-                device = self.device,
-                logs_dir = self.logs_dir)
-        pivot.disk()
+        self.pivot.disk(device=self.device)
 
 class CONSOLE:
     def __init__(self, username=None, password=None, ip=None, debug=False, logs_dir=None):
