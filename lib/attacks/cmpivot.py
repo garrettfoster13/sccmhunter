@@ -18,17 +18,20 @@ import sqlite3
 # #add debugging
 
 class SHELL(cmd2.Cmd):
-    SA = "Situational Awareness"
+    SA = "Situational Awareness Commands"
     PE = "PostEx Commands"
     DB = "Database Commands"
-    IN = "Interface"
-    hide = ["alias", "help", "macro", "run_pyscript", "set", "shortcuts", "edit", "history", "quit", "run_script", "shell", "_relative_run_script", "eof"]
+    IN = "Interface Commands"
+    hidden = ["alias", "help", "macro", "run_pyscript", "set", "shortcuts", "edit", "history", "quit", "run_script", "shell", "_relative_run_script", "eof"]
 
     def __init__(self, username, password, target, logs_dir):
         #initialize plugins
-        self.pivot = CMPIVOT(username=username, password=password, target = target, device = "", logs_dir =logs_dir)
-
+        self.pivot = CMPIVOT(username=username, password=password, target = target, logs_dir = logs_dir)
+        self.script = SMSSCRIPTS(username=username, password=password, target = target, logs_dir = logs_dir,)
+        
+        #initialize cmd
         super().__init__(allow_cli_args=False)
+        self.hidden_commands = self.hidden
         self.username = username
         self.password = password
         self.target = target
@@ -39,11 +42,13 @@ class SHELL(cmd2.Cmd):
         self.cwd = "C:\\"
         self.prompt = f"({self.device}) {self.cwd} >> "
         self.hostname = ""
-        self.hidden_commands = [command for command in self.hide]
 
 # ############
 # cmd2 Settings
 # ############
+
+    def emptyline(self):
+        pass
 
     def postcmd(self, stop, arg):
         self.prompt = f"({self.device}) ({self.cwd}) >> "
@@ -58,9 +63,6 @@ class SHELL(cmd2.Cmd):
         """Target Device Code to Query              interact (device code)"""
         option = arg.split(' ')
         self.device = option[0]
-
-    def emptyline(self):
-        pass
 
     @cmd2.with_category(IN)
     def do_exit(self, arg):
@@ -88,8 +90,8 @@ Usage
 get user [username]                     Get information about a specific user.
 get device [machinename]                Get information about a specific device.
 get puser [username]                    Show where target is a primary user.
-get application [*] or [CI_ID]          Show all or single app.
-get collection [*] or [Name]            Show all or single collection.
+get application [*] or [ID]          Show all or single app.
+get collection [*] or [ID]            Show all or single collection.
 get deployment [*] or [AssignmentName]  Show all or single deployment.
 get lastlogon [username]                Show where target user last logged in."""
         if os.path.getsize(f"{self.logs_dir}/db/sccmhunter.db") > 1:
@@ -117,31 +119,20 @@ get lastlogon [username]                Show where target user last logged in.""
         filename = option[0]
         logger.info(f"Tasked SCCM to show {arg}")
         fullpath = self.cwd + filename
-        type = SMSSCRIPTS(username=self.username,
-                        password=self.password,
-                        target = self.target,
-                        device = self.device,
-                        logs_dir = self.logs_dir,)
-        type.cat(fullpath)
+        self.script.cat(fullpath, device=self.device)
     
     @cmd2.with_category(PE)
     def do_script(self, arg):
         """Run script on target                     script (/path/to/script) """
         option = arg.split(' ')
         scriptpath = option[0]
-        script = SMSSCRIPTS(username=self.username, 
-                            password=self.password,
-                            target = self.target,
-                            device = self.device,
-                            logs_dir = self.logs_dir,
-                            optional="custom", 
-                            optional_target=scriptpath)
-        script.run()
+        self.script.run(device=self.device, optional_target=scriptpath)
 
 # ############
 # CMPivot Backdoor Section
 # Backdoor existing CMPivot script with your own
 # ############
+    
     @cmd2.with_category(PE)
     def do_backdoor(self, arg):
         # """backdoor (/path/to/script)       Backdoor CMPivot Script"""
@@ -189,7 +180,6 @@ get lastlogon [username]                Show where target user last logged in.""
 # All modules will call built-in CMPivot queries
 # ############
 
-    
     @cmd2.with_category(SA)
     def do_administrators(self, arg):
         """Query local administrators on target"""

@@ -393,7 +393,7 @@ TargetCollectionID: {tb['TargetCollectionID'].to_string(index=False, header=Fals
             #get collections
             if type.lower() == "collection":
                 if value != "*":
-                    tb = dp.read_sql(f'select * from Collections where Name = \'{value}\' COLLATE NOCASE', conn)
+                    tb = dp.read_sql(f'select * from Collections where CollectionID = \'{value}\' COLLATE NOCASE', conn)
                     if tb.empty:
                         logger.info(f'[-] {value} deployment not found.')
                         return
