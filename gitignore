@@ -1,0 +1,5 @@
+*.pyc
+.pytest_cache/
+dist/
+.ruff_cache/
+resources/dotnet/*.dll
