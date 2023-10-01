@@ -1,6 +1,7 @@
 import cmd2
 import pandas as dp
 import requests
+import traceback
 from requests_ntlm import HttpNtlmAuth
 from urllib3.exceptions import InsecureRequestWarning
 from tabulate import tabulate
@@ -9,6 +10,7 @@ from lib.logger import logger
 from lib.scripts.runscript import SMSSCRIPTS
 from lib.scripts.backdoor import BACKDOOR
 from lib.scripts.pivot import CMPIVOT
+
 from lib.attacks.admin import QUERYDB, DATABASE
 
 import os
@@ -38,11 +40,12 @@ class SHELL(cmd2.Cmd):
         self.target = target
         self.logs_dir = logs_dir
         self.headers = {'Content-Type': 'application/json; odata=verbose'} # add useragent? currently shows python useragent in logs
-        self.intro = logger.info('[!] Press help for extra shell commands')
-        self.device = ""
+        self.intro = logger.info('[!] Enter help for extra shell commands')
         self.cwd = "C:\\"
+        self.device = ""
         self.prompt = f"({self.device}) {self.cwd} >> "
         self.hostname = ""
+
 
 # ############
 # cmd2 Settings
@@ -55,9 +58,9 @@ class SHELL(cmd2.Cmd):
         self.prompt = f"({self.device}) ({self.cwd}) >> "
         return stop
     
-    def check_device(self, device_id):
-        _dbname = f"{self.logs_dir}/db/sccmhunter.db"
-        conn = sqlite3.connect(_dbname, check_same_thread=False)
+    # def check_device(self, device_id):
+    #     _dbname = f"{self.logs_dir}/db/sccmhunter.db"
+    #     conn = sqlite3.connect(_dbname, check_same_thread=False)
 
     @cmd2.with_category(IN)
     def do_interact(self, arg):
@@ -136,18 +139,12 @@ get lastlogon [username]                Show where target user last logged in.""
     
     @cmd2.with_category(PE)
     def do_backdoor(self, arg):
-        # """backdoor (/path/to/script)       Backdoor CMPivot Script"""
         """Backdoor CMPivot Script                  backdoor (/path/to/script) """
         logger.info("Tasked SCCM to backdoor CMPivot with provided script")
         check = input("IMPORTANT: Did you backup the script first? There is no going back without it. Y/N?")
         if check.lower() == "y":
             option = arg.split(' ')
             scriptpath = option[0]
-            # backdoor = BACKDOOR(username=self.username, 
-            #                     password=self.password,
-            #                     target = self.target,
-            #                     logs_dir = self.logs_dir,
-            #                     backdoor_script=scriptpath)
             self.backdoor.run(option="backdoor", scriptpath=scriptpath)
 
         else:
@@ -157,11 +154,6 @@ get lastlogon [username]                Show where target user last logged in.""
         """Restore original CMPivot Script"""
         logger.info("Tasked SCCM to restore the original CMPivot script.")
         option = arg.split(' ')
-        # backdoor = BACKDOOR(username=self.username, 
-        #                     password=self.password,
-        #                     target = self.target,
-        #                     logs_dir = self.logs_dir,
-        #                     backdoor_script=None)
         self.backdoor.run(option="restore", scriptpath=None)
 
     @cmd2.with_category(PE)
@@ -169,10 +161,6 @@ get lastlogon [username]                Show where target user last logged in.""
         """Backup original CMPivot Script"""
         logger.info("Tasked SCCM to backup the CMPivot script.")
         option = arg.split(' ')
-        # backdoor = BACKDOOR(username=self.username, 
-        #                     password=self.password,
-        #                     target = self.target,
-        #                     logs_dir = self.logs_dir)
         self.backdoor.run(option="backup", scriptpath=None)
 
 # ############

@@ -15,12 +15,12 @@ class CMPIVOT:
         self.username = username
         self.password = password
         self.target = target
-
         self.logs_dir = logs_dir
         self.headers = {'Content-Type': 'application/json; odata=verbose'}
         self.opid = ""
         self.body = ""
         self.device = ""
+        self.endpoint = ""
     
     def administrators(self, device):
         body = {"InputQuery":"Administrators"}
@@ -127,8 +127,6 @@ class CMPIVOT:
         body = {"InputQuery":"Disk"}
         self.do_request(body)
         return
-
-
     ### Not implemented yet
 
         
@@ -138,27 +136,42 @@ class CMPIVOT:
     def registry_key(self):
         return
 
-
     def do_request(self, body):
-        endpoint = f"https://{self.target}/AdminService/v1.0/Device({self.device})/AdminService.RunCMPivot"
-        r = requests.post(
-                            f"{endpoint}",
-                            auth=HttpNtlmAuth(self.username, self.password),
-                            json=body,
-                            verify=False, 
-                            headers=self.headers)
-        if not r.status_code == 200:
-            logger.info(r.text)
-        else: 
-            js0n = r.json()
-            self.opid = (js0n['value']['OperationId'])
-            logger.info(f"Got OperationId {self.opid}. Sleeping 10 seconds to wait for host to call home.")
-            time.sleep(10)
-            self.get_results()
+        if self.device[0].isdigit():
+            self.endpoint = "Device"
+        if self.device[0].isalpha():
+            self.endpoint = "Collections"
+            self.device = f"'{self.device}'"
+        endpoint = f"https://{self.target}/AdminService/v1.0/{self.endpoint}({self.device})/AdminService.RunCMPivot"
+        try:
+            r = requests.post(
+                                f"{endpoint}",
+                                auth=HttpNtlmAuth(self.username, self.password),
+                                json=body,
+                                verify=False, 
+                                headers=self.headers)
+            if r.status_code == 200:
+                js0n = r.json()
+                if self.endpoint == "Collections":
+                    self.opid=(js0n['OperationId'])
+                    logger.debug("Querying Collections")
+                elif self.endpoint == "Device":
+                    logger.debug("Querying Devices")
+                    self.opid = (js0n['value']['OperationId'])
+                logger.info(f"Got OperationId {self.opid}. Sleeping 10 seconds to wait for host to call home.")
+                time.sleep(10)
+                self.get_results()                    
+            else:
+                logger.info("Something went wrong.")
+                logger.info(r.status_code)
+                logger.info(r.text) 
+        except Exception as e:
+            logger.info(f"An error occurred: {e}")
+
     
 
     def get_results(self):
-        endpoint = f"https://{self.target}/AdminService/v1.0/Device({self.device})/AdminService.CMPivotResult(OperationId={self.opid})"
+        endpoint = f"https://{self.target}/AdminService/v1.0/{self.endpoint}({self.device})/AdminService.CMPivotResult(OperationId={self.opid})"
         while True:
             try:
                 r = requests.request("GET",
@@ -169,16 +182,22 @@ class CMPIVOT:
                     logger.info("No results yet, sleeping 10 seconds.")
                     time.sleep(10)
                     continue
-                data = json.loads(r.text)
-                tb = dp.DataFrame(data['value']['Result'])
-                result = tabulate(tb, showindex=False, headers=tb.columns, tablefmt='grid')
-                logger.info(result)
-                self.printlog(result)
+                data = r.json()
+                if isinstance(data['value'], list):
+                    for entry in data['value']:
+                        tb = dp.DataFrame(entry['Result'])
+                        result = tabulate(tb, showindex=False, headers=tb.columns, tablefmt='grid')
+                        logger.info(result)
+                        self.printlog(result)
+                else:
+                    tb = dp.DataFrame(data['value']['Result'])
+                    result = tabulate(tb, showindex=False, headers=tb.columns, tablefmt='grid')
+                    logger.info(result)
+                    self.printlog(result)
                 return
             except Exception as e:
                 logger.info(e)
                 return
-
 
     def jprint(self, data):
         try:
