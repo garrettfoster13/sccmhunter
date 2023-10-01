@@ -258,7 +258,6 @@ class QUERYDB(cmd2.Cmd):
     def __init__(self, logs_dir=None):
         super().__init__(allow_cli_args=False)
         self.logs_dir = logs_dir
-        self.intro = logger.info('[!] Press help for extra shell commands')
         self.dbpath = f"{logs_dir}/db/sccmhunter.db"
 
 
@@ -321,7 +320,7 @@ UserPrincipalName: {tb['UserPrincipalName'].to_string(index=False, header=False)
             if type.lower() in ["puser"]:
                 tb = dp.read_sql(f'select * from PUsers where UniqueUserName like \'%{value}\' COLLATE NOCASE', conn)
                 if tb.empty:
-                    logger.info(f'[-] User {value} not found.')
+                    logger.info(f'[-] Could not find devices where {value} is the primary user.')
                     return
                 logger.info((tabulate(tb, showindex=False, headers=tb.columns, tablefmt='grid')))
 
@@ -331,7 +330,7 @@ UserPrincipalName: {tb['UserPrincipalName'].to_string(index=False, header=False)
             if type.lower() in ["lastlogon"]:
                 tb = dp.read_sql(f'select FullDomainName,LastLogonUserDomain,LastLogonUserName,Name,ResourceID,ResourceNames from Devices where LastLogonUserName = \'{value}\' COLLATE NOCASE', conn)
                 if tb.empty:
-                    logger.info(f'[-] User {value} not found.')
+                    logger.info(f'[-] Could not find devices where {value} last logged on.')
                     return
                 logger.info((tabulate(tb, showindex=False, headers=tb.columns, tablefmt='grid')))
                 return
