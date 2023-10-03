@@ -5,8 +5,6 @@ from tabulate import tabulate
 import requests
 from requests_ntlm import HttpNtlmAuth
 from urllib3.exceptions import InsecureRequestWarning
-import warnings
-import contextlib
 import json
 import os
 import cmd2
@@ -251,10 +249,8 @@ class DATABASE:
 
         self.conn.commit()
 
-
 class QUERYDB(cmd2.Cmd):
     prompt = '>> '
-
     def __init__(self, logs_dir=None):
         super().__init__(allow_cli_args=False)
         self.logs_dir = logs_dir
