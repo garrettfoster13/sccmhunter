@@ -10,6 +10,7 @@ from lib.logger import logger
 from lib.scripts.runscript import SMSSCRIPTS
 from lib.scripts.backdoor import BACKDOOR
 from lib.scripts.pivot import CMPIVOT
+from lib.scripts.add_admin import ADD_ADMIN
 
 from lib.attacks.admin import QUERYDB, DATABASE
 
@@ -18,7 +19,6 @@ import sqlite3
 
 
 # #add debugging
-
 class SHELL(cmd2.Cmd):
     SA = "Situational Awareness Commands"
     PE = "PostEx Commands"
@@ -31,6 +31,7 @@ class SHELL(cmd2.Cmd):
         self.pivot = CMPIVOT(username=username, password=password, target = target, logs_dir = logs_dir)
         self.script = SMSSCRIPTS(username=username, password=password, target = target, logs_dir = logs_dir,)
         self.backdoor = BACKDOOR(username=username, password=password, target = target, logs_dir = logs_dir)
+        self.admin = ADD_ADMIN(username=username, password=password,target_ip=target, logs_dir=logs_dir)
         
         #initialize cmd
         super().__init__(allow_cli_args=False)
@@ -139,7 +140,7 @@ get lastlogon [username]                Show where target user last logged in.""
     
     @cmd2.with_category(PE)
     def do_backdoor(self, arg):
-        """Backdoor CMPivot Script                  backdoor (/path/to/script) """
+        """Backdoor CMPivot Script                  backdoor (/path/to/script)"""
         logger.info("Tasked SCCM to backdoor CMPivot with provided script")
         check = input("IMPORTANT: Did you backup the script first? There is no going back without it. Y/N?")
         if check.lower() == "y":
@@ -247,6 +248,20 @@ get lastlogon [username]                Show where target user last logged in.""
         logger.info(f"Tasked SCCM to show disk information of {self.device}.")
         self.pivot.disk(device=self.device)
 
+# ############
+# Add Admin Section
+# ############
+
+    @cmd2.with_category(PE)
+    def do_admin(self, arg):
+        """Add SCCM Admin                  admin (user) (sid)"""
+        option = arg.split(' ')
+        targetuser = option[0]
+        targetsid = option[1]
+        logger.info(f"Tasked SCCM to add {targetuser}a an administrative user.")
+        self.admin.run(targetuser=targetuser, targetsid=targetsid)
+    
+
 class CONSOLE:
     def __init__(self, username=None, password=None, ip=None, debug=False, logs_dir=None):
         self.username = username
@@ -264,8 +279,10 @@ class CONSOLE:
                                 verify=False)
             if r.status_code == 200:
                 self.cli()
-            if r.status_code == 401:
+            elif r.status_code == 401:
                 logger.info("Got error code 401: Access Denied. Check your credentials.")
+            else:
+                logger.info(r.text)
         except Exception as e:
             logger.info("An unknown error occurred, use -debug to print the response")
             logger.info(e)
