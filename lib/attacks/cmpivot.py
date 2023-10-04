@@ -83,7 +83,6 @@ class SHELL(cmd2.Cmd):
         option = arg.split(' ')
         self.cwd = option[0]
 
-
 # ############
 # Database Section
 # ############
@@ -110,7 +109,6 @@ get lastlogon [username]                Show where target user last logged in.""
                 db_ready = build_db.run()
             else:
                 return
-
 
 # ############
 # PowerShell Script Section
@@ -150,6 +148,7 @@ get lastlogon [username]                Show where target user last logged in.""
 
         else:
             return
+    
     @cmd2.with_category(PE)
     def do_restore(self, arg):
         """Restore original CMPivot Script"""
@@ -253,13 +252,22 @@ get lastlogon [username]                Show where target user last logged in.""
 # ############
 
     @cmd2.with_category(PE)
-    def do_admin(self, arg):
-        """Add SCCM Admin                  admin (user) (sid)"""
+    def do_add_admin(self, arg):
+        """Add SCCM Admin                  add_admin (user) (sid)"""
         option = arg.split(' ')
         targetuser = option[0]
         targetsid = option[1]
-        logger.info(f"Tasked SCCM to add {targetuser}a an administrative user.")
-        self.admin.run(targetuser=targetuser, targetsid=targetsid)
+        logger.info(f"Tasked SCCM to add {targetuser} as an administrative user.")
+        self.admin.add(targetuser=targetuser, targetsid=targetsid)
+    
+    @cmd2.with_category(PE)
+    def do_delete_admin(self, arg):
+        """Remove SCCM Admin                  delete_admin (user)"""
+        option =  arg.split(' ')
+        targetuser = option[0]
+        logger.info(f"Tasked SCCM to remove {targetuser} as an administrative user.")
+        self.admin.delete(targetuser=targetuser)
+
     
 
 class CONSOLE:

