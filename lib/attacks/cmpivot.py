@@ -26,10 +26,10 @@ class SHELL(cmd2.Cmd):
     IN = "Interface Commands"
     hidden = ["alias", "help", "macro", "run_pyscript", "set", "shortcuts", "edit", "history", "quit", "run_script", "shell", "_relative_run_script", "eof"]
 
-    def __init__(self, username, password, target, logs_dir):
+    def __init__(self, username, password, target, logs_dir, auser, apassword):
         #initialize plugins
         self.pivot = CMPIVOT(username=username, password=password, target = target, logs_dir = logs_dir)
-        self.script = SMSSCRIPTS(username=username, password=password, target = target, logs_dir = logs_dir,)
+        self.script = SMSSCRIPTS(username=username, password=password, target = target, logs_dir = logs_dir, auser=auser, apassword=apassword)
         self.backdoor = BACKDOOR(username=username, password=password, target = target, logs_dir = logs_dir)
         self.admin = ADD_ADMIN(username=username, password=password,target_ip=target, logs_dir=logs_dir)
         
@@ -46,6 +46,8 @@ class SHELL(cmd2.Cmd):
         self.device = ""
         self.prompt = f"({self.device}) {self.cwd} >> "
         self.hostname = ""
+        self.approve_user = auser
+        self.approve_password = apassword
 
 
 # ############
@@ -94,8 +96,8 @@ Usage
 get user [username]                     Get information about a specific user.
 get device [machinename]                Get information about a specific device.
 get puser [username]                    Show where target is a primary user.
-get application [*] or [ID]          Show all or single app.
-get collection [*] or [ID]            Show all or single collection.
+get application [*] or [ID]             Show all or single app.
+get collection [*] or [ID]              Show all or single collection.
 get deployment [*] or [AssignmentName]  Show all or single deployment.
 get lastlogon [username]                Show where target user last logged in."""
         if os.path.getsize(f"{self.logs_dir}/db/sccmhunter.db") > 1:
@@ -253,7 +255,7 @@ get lastlogon [username]                Show where target user last logged in.""
 
     @cmd2.with_category(PE)
     def do_add_admin(self, arg):
-        """Add SCCM Admin                  add_admin (user) (sid)"""
+        """Add SCCM Admin                           add_admin (user) (sid)"""
         option = arg.split(' ')
         targetuser = option[0]
         targetsid = option[1]
@@ -262,7 +264,7 @@ get lastlogon [username]                Show where target user last logged in.""
     
     @cmd2.with_category(PE)
     def do_delete_admin(self, arg):
-        """Remove SCCM Admin                  delete_admin (user)"""
+        """Remove SCCM Admin                        delete_admin (user)"""
         option =  arg.split(' ')
         targetuser = option[0]
         logger.info(f"Tasked SCCM to remove {targetuser} as an administrative user.")
@@ -271,12 +273,14 @@ get lastlogon [username]                Show where target user last logged in.""
     
 
 class CONSOLE:
-    def __init__(self, username=None, password=None, ip=None, debug=False, logs_dir=None):
+    def __init__(self, username=None, password=None, ip=None, debug=False, logs_dir=None, auser=None, apassword=None):
         self.username = username
         self.password = password
         self.url = ip
         self.debug = debug
         self.logs_dir = logs_dir
+        self.approve_user = auser
+        self.approve_password = apassword
     
     def run(self):
         try:
@@ -296,7 +300,7 @@ class CONSOLE:
             logger.info(e)
 
     def cli(self):
-        cli = SHELL(self.username, self.password, self.url, self.logs_dir)
+        cli = SHELL(self.username, self.password, self.url, self.logs_dir, self.approve_user, self.approve_password)
         cli.cmdloop()
 
 if __name__ == '__main__':

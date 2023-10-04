@@ -40,10 +40,7 @@ class ADD_ADMIN:
                             }],
             "DisplayName":f"{self.targetuser}"
             }
-        #delete url
-        #url = f"https://{self.target_ip}/AdminService/wmi/SMS_Admin(16777221)"
-
-        #add url
+        
         url = f"https://{self.target_ip}/AdminService/wmi/SMS_Admin/"
 
         try:
@@ -65,15 +62,18 @@ class ADD_ADMIN:
         self.targetuser = targetuser
         try:
             adminid = self.get_adminid()
-            url = f"https://{self.target_ip}/AdminService/wmi/SMS_Admin({adminid})"
-            r = requests.delete(f"{url}",
-                    auth=HttpNtlmAuth(self.username, self.password),
-                    verify=False,headers=self.headers)
-            if r.status_code == 204:
-                 logger.info(f"[+] Successfully removed {self.targetuser} as an admin.")
+            if adminid:
+                url = f"https://{self.target_ip}/AdminService/wmi/SMS_Admin({adminid})"
+                r = requests.delete(f"{url}",
+                        auth=HttpNtlmAuth(self.username, self.password),
+                        verify=False,headers=self.headers)
+                if r.status_code == 204:
+                    logger.info(f"[+] Successfully removed {self.targetuser} as an admin.")
+                else:
+                    logger.info("[-] Something went wrong:")
+                    logger.info(r.text)
             else:
-                 logger.info("[-] Something went wrong:")
-                 logger.info(r.text)
+                 return
         except Exception as e:
                 print(e)
 
@@ -85,10 +85,13 @@ class ADD_ADMIN:
                                 auth=HttpNtlmAuth(self.username, self.password),
                                 verify=False,headers=self.headers)
             if r.status_code == 200:
-                result = r.json()
-                adminid = result['value'][0]['AdminID']
-                logger.debug(f"[+] Got AdminID: {adminid}")
-                return adminid
+                data = r.json()
+                if IndexError:
+                    logger.info(f"[*] Could not find {self.targetuser} configured as an SCCM admin.")
+                else:
+                    adminid = data['value'][0]['AdminID']
+                    logger.debug(f"[+] Got AdminID: {adminid}")
+                    return adminid
             else:
                 logger.info("[*] Something went wrong")
                 logger.info(r.text)
@@ -96,8 +99,7 @@ class ADD_ADMIN:
         except Exception as e:
                 print(e)
         
-         
-
+        
          # adminid = value[adminid]
          #lookup sccm admin with provided args
 

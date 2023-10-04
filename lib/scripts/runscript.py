@@ -15,11 +15,13 @@ from datetime import datetime
 
 class SMSSCRIPTS:
 
-    def __init__(self, username, password, target, logs_dir):
+    def __init__(self, username, password, target, logs_dir, auser, apassword):
         self.username = username
         self.password = password
         self.target = target
         self.logs_dir = logs_dir
+        self.appprove_user = auser
+        self.approve_password = apassword
         self.headers = {'Content-Type': 'application/json; odata=verbose'}
         self.cwd = os.getcwd()
         self.appended = ""
@@ -118,8 +120,15 @@ Do-Delete
         url = f"https://{self.target}/AdminService/wmi/SMS_Scripts/{self.guid}/AdminService.UpdateApprovalState"
 
         try:
+            if self.appprove_user:
+                 logger.debug("[*] Using alternate credentials to approve script.")
+                 username = self.appprove_user
+                 password = self.approve_password
+            else:
+                 username= self.username
+                 password = self.password
             r = requests.post(f"{url}",
-                                auth=HttpNtlmAuth(self.username, self.password),
+                                auth=HttpNtlmAuth(username, password),
                                 verify=False,headers=self.headers, json=body)
             #print(r.status_code, r.text)
             if r.status_code == 201:
@@ -127,6 +136,7 @@ Do-Delete
                 self.run_script()
             if r.status_code == 500:
                  logger.info(f"[-] Hierarchy settings do not allow author's to approve their own scripts. All custom script execution will fail.")
+                 logger.info("[*] Try using alternate approval credentials.")
             #jlogger.info(results)
         except Exception as e:
                 logger.info(e)
@@ -144,7 +154,7 @@ Do-Delete
             logger.info(f"[+] Script with guid {self.guid} executed.")
             json_result = r.json()
             self.opid = (json_result['value'])
-            logger.info(f"[+] Got OperationID: {self.opid}")
+            logger.debug(f"[+] Got OperationID: {self.opid}")
             result = self.get_results()
             if result:
                 self.delete_script()
