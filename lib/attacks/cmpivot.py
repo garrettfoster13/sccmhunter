@@ -30,7 +30,7 @@ class SHELL(cmd2.Cmd):
         #initialize plugins
         self.pivot = CMPIVOT(username=username, password=password, target = target, logs_dir = logs_dir)
         self.script = SMSSCRIPTS(username=username, password=password, target = target, logs_dir = logs_dir, auser=auser, apassword=apassword)
-        self.backdoor = BACKDOOR(username=username, password=password, target = target, logs_dir = logs_dir)
+        self.backdoor = BACKDOOR(username=username, password=password, target = target, logs_dir = logs_dir, auser=auser, apassword=apassword)
         self.admin = ADD_ADMIN(username=username, password=password,target_ip=target, logs_dir=logs_dir)
         
         #initialize cmd

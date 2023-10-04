@@ -20,7 +20,7 @@ class SMSSCRIPTS:
         self.password = password
         self.target = target
         self.logs_dir = logs_dir
-        self.appprove_user = auser
+        self.approve_user = auser
         self.approve_password = apassword
         self.headers = {'Content-Type': 'application/json; odata=verbose'}
         self.cwd = os.getcwd()
@@ -120,9 +120,9 @@ Do-Delete
         url = f"https://{self.target}/AdminService/wmi/SMS_Scripts/{self.guid}/AdminService.UpdateApprovalState"
 
         try:
-            if self.appprove_user:
+            if self.approve_user:
                  logger.debug("[*] Using alternate credentials to approve script.")
-                 username = self.appprove_user
+                 username = self.approve_user
                  password = self.approve_password
             else:
                  username= self.username
@@ -137,6 +137,8 @@ Do-Delete
             if r.status_code == 500:
                  logger.info(f"[-] Hierarchy settings do not allow author's to approve their own scripts. All custom script execution will fail.")
                  logger.info("[*] Try using alternate approval credentials.")
+                 self.delete_script()
+
             #jlogger.info(results)
         except Exception as e:
                 logger.info(e)
