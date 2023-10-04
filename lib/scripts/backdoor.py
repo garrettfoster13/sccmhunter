@@ -52,6 +52,7 @@ class BACKDOOR:
         if os.path.exists(f"{self.logs_dir}/cmpivot_backup.ps1"):
             logger.info("[*] Backup file already exists.")
             return
+        #write the backup
         with open(f"{self.logs_dir}/cmpivot_backup.ps1", "w") as f:
             script = decoded_string.strip("\n")
             f.write(script)
@@ -84,10 +85,12 @@ Do-Delete
                         script_body = base64.b64encode(byte_array).decode('utf-8')
                 else:
                     logger.info("[-] CMPivot backup script not found.")
-                    logger.info("[*] Backdoor will not work until a backup is performed.")
+                    logger.info("[!] Backdoor will not work until a backup is performed.")
                     return
 
             if option == "restore":
+                #restore the backoored script to original backup
+                #something going on with the file hashing though it's not matching the old version but works fine
                 if os.path.exists(f"{self.logs_dir}/cmpivot_backup.ps1"):
                     with open(f"{self.logs_dir}/cmpivot_backup.ps1", "r") as f:
                         file_content = f.read()
@@ -118,7 +121,6 @@ Do-Delete
             
         except Exception as e:
             logger.info(e)
-
 
     def approve_cmpivot(self):
         try:

@@ -1,0 +1,4 @@
+update backdoor approval to accept optional "approver creds"
+update all the console logging gotta be a better way to store it
+check typer docs for optional args that are strings
+add checks for commands to have a value to interact with
