@@ -11,11 +11,8 @@ from lib.scripts.runscript import SMSSCRIPTS
 from lib.scripts.backdoor import BACKDOOR
 from lib.scripts.pivot import CMPIVOT
 from lib.scripts.add_admin import ADD_ADMIN
-
-from lib.attacks.admin import QUERYDB, DATABASE
-
+from lib.attacks.admin import DATABASE
 import os
-import sqlite3
 
 
 # #add debugging
@@ -32,6 +29,7 @@ class SHELL(cmd2.Cmd):
         self.script = SMSSCRIPTS(username=username, password=password, target = target, logs_dir = logs_dir, auser=auser, apassword=apassword)
         self.backdoor = BACKDOOR(username=username, password=password, target = target, logs_dir = logs_dir, auser=auser, apassword=apassword)
         self.admin = ADD_ADMIN(username=username, password=password,target_ip=target, logs_dir=logs_dir)
+        self.db = DATABASE(username=username, password=password,url=target, logs_dir=logs_dir)
         
         #initialize cmd
         super().__init__(allow_cli_args=False)
@@ -60,14 +58,10 @@ class SHELL(cmd2.Cmd):
     def postcmd(self, stop, arg):
         self.prompt = f"({self.device}) ({self.cwd}) >> "
         return stop
-    
-    # def check_device(self, device_id):
-    #     _dbname = f"{self.logs_dir}/db/sccmhunter.db"
-    #     conn = sqlite3.connect(_dbname, check_same_thread=False)
 
     @cmd2.with_category(IN)
     def do_interact(self, arg):
-        """Target Device Code to Query              interact (device code)"""
+        """Target Device/Collectio to Query         interact (device code)"""
         option = arg.split(' ')
         self.device = option[0]
 
@@ -90,27 +84,30 @@ class SHELL(cmd2.Cmd):
 # ############
 
     @cmd2.with_category(DB)
-    def do_get(self, arg):
-        """
-Usage
-get user [username]                     Get information about a specific user.
-get device [machinename]                Get information about a specific device.
-get puser [username]                    Show where target is a primary user.
-get application [*] or [ID]             Show all or single app.
-get collection [*] or [ID]              Show all or single collection.
-get deployment [*] or [AssignmentName]  Show all or single deployment.
-get lastlogon [username]                Show where target user last logged in."""
-        if os.path.getsize(f"{self.logs_dir}/db/sccmhunter.db") > 1:
-            db = QUERYDB(self.logs_dir)
-            db.do_get(arg=arg)
-        else:
-            logger.info("[-] Database file not found. Would you like to collect Database data?")
-            answer = input("Y/N: ")
-            if answer.lower() == "y":
-                build_db = DATABASE(self.username, self.password, f"https://{self.target}/AdminService/wmi", self.logs_dir)
-                db_ready = build_db.run()
-            else:
-                return
+    def do_get_device(self, arg):
+        """Query specific device information"""
+        self.db.devices(arg)
+    
+    @cmd2.with_category(DB)
+    def do_get_user(self, arg):
+        """Query specific user information"""
+        self.db.users(arg)
+
+    @cmd2.with_category(DB)
+    def do_get_collection(self, arg):
+        """Query for al l(*) or single (id) collection(s)"""
+        option = arg.split(' ')
+        collection_id = option[0]
+        self.db.collections(collection_id)
+    
+    @cmd2.with_category(DB)
+    def do_get_puser(self, arg):
+        """Query for devices the target is a primary user"""
+        self.db.pusers(arg)
+
+
+    
+    
 
 # ############
 # PowerShell Script Section
