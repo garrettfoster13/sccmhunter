@@ -28,7 +28,7 @@ class DATABASE():
         return True
     
     def validate_tables(self):
-        table_names = ["Devices", "Users", "PUsers", "Collections"]
+        table_names = ["Devices", "Users", "PUsers", "Collections", "lastlogon"]
         try:
             for table_name in table_names:
                 validated = self.conn.execute(f'''select name FROM sqlite_master WHERE type=\'table\' and name =\'{table_name}\'
@@ -51,7 +51,10 @@ class DATABASE():
             ResourceId, SID, UniqueUserName, UserAccountControl, UserName, UserPrincipalName)''')
             self.conn.execute('''CREATE TABLE PUsers(IsActive,RelationshipResourceID,ResourceID,ResourceName,UniqueUserName)''')
             self.conn.execute('''CREATE TABLE Collections(CollectionID,CollectionType,IsBuiltIn,LimitToCollectionName,MemberClassName,
-            MemberCount,Name)''') 
+            MemberCount,Name)''')
+            self.conn.execute('''CREATE TABLE lastlogon(Active, Client, DistinguishedName, FullDomainName, IPAddresses,LastLogonUserDomain,
+            LastLogonUserName, Name, OperatingSystemNameandVersion,
+            PrimaryGroupID, ResourceId, ResourceNames, SID, SMSInstalledSites, SMSUniqueIdentifier)''') 
         except Exception as e:
             logger.info(e)
         finally:
@@ -292,52 +295,59 @@ UserPrincipalName: {tb['UserPrincipalName'].to_string(index=False, header=False)
     ------------------------------------------''')
 
 
-    # def get_lastlogon(self, username):
-    #     logger.info("[*] Collecting devices...")
-    #     cursor = self.conn.cursor()
-    #     endpoint = f'''/SMS_R_System?filter=LastLogonUsername eq {username}'''
-    #     try:
-    #         r = requests.request("GET",
-    #                             f"{self.url}{endpoint}",
-    #                             auth=HttpNtlmAuth(self.username, self.password),
-    #                             verify=False)
-    #         results = r.json()
+    def get_lastlogon(self, username):
+        logger.info("[*] Collecting devices...")
+        cursor = self.conn.cursor()
+        endpoint = f'''{self.url}/SMS_R_System?$filter=LastLogonUsername eq '{username}' '''
+        self.conn.execute('DROP TABLE IF EXISTS lastlogon;')
+        self.conn.execute('''CREATE TABLE lastlogon(Active, Client, DistinguishedName, FullDomainName, IPAddresses,LastLogonUserDomain,
+            LastLogonUserName, Name, OperatingSystemNameandVersion,
+            PrimaryGroupID, ResourceId, ResourceNames, SID, SMSInstalledSites, SMSUniqueIdentifier)''') 
+        try:
+            r = requests.request("GET",
+                                f"{endpoint}",
+                                auth=HttpNtlmAuth(self.username, self.password),
+                                verify=False)
+            results = r.json()
 
-    #         for i in results["value"]:
-    #             Active = str(i["Active"])
-    #             Client = str(i["Client"])
-    #             DistinguishedName = str(i["DistinguishedName"])
-    #             FullDomainName = str(i["FullDomainName"])
-    #             IPAddresses = str(i["IPAddresses"]).replace("['", "").replace("']", "").replace("', '", " ")
-    #             LastLogonUserDomain = str(i["LastLogonUserDomain"])
-    #             LastLogonUserName = str(i["LastLogonUserName"])
-    #             Name = str(i["Name"])
-    #             OperatingSystemNameandVersion = str(i["OperatingSystemNameandVersion"])
-    #             PrimaryGroupID = str(i["PrimaryGroupID"])
-    #             ResourceId = str(i["ResourceId"])
-    #             ResourceNames = str(i["ResourceNames"]).replace("['", "").replace("']", "")
-    #             Sid = str(i["SID"])
-    #             SMSInstalledSites = str(i["SMSInstalledSites"]).replace("['", "").replace("']", "")
-    #             SMSUniqueIdentifier = str(i["SMSUniqueIdentifier"])
+            for i in results["value"]:
+                Active = str(i["Active"])
+                Client = str(i["Client"])
+                DistinguishedName = str(i["DistinguishedName"])
+                FullDomainName = str(i["FullDomainName"])
+                IPAddresses = str(i["IPAddresses"]).replace("['", "").replace("']", "").replace("', '", " ")
+                LastLogonUserDomain = str(i["LastLogonUserDomain"])
+                LastLogonUserName = str(i["LastLogonUserName"])
+                Name = str(i["Name"])
+                OperatingSystemNameandVersion = str(i["OperatingSystemNameandVersion"])
+                PrimaryGroupID = str(i["PrimaryGroupID"])
+                ResourceId = str(i["ResourceId"])
+                ResourceNames = str(i["ResourceNames"]).replace("['", "").replace("']", "").replace("', '", " ")
+                Sid = str(i["SID"])
+                SMSInstalledSites = str(i["SMSInstalledSites"]).replace("['", "").replace("']", "")
+                SMSUniqueIdentifier = str(i["SMSUniqueIdentifier"])
+                
+                cursor.execute('''insert into lastlogon (Active, Client, DistinguishedName, FullDomainName, IPAddresses,  
+                LastLogonUserDomain, LastLogonUserName, Name, OperatingSystemNameandVersion, 
+                PrimaryGroupID, ResourceId, ResourceNames, SID, SMSInstalledSites, SMSUniqueIdentifier) 
+                values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (Active,Client,DistinguishedName,FullDomainName,
+                                                            IPAddresses,LastLogonUserDomain,LastLogonUserName,
+                                                            Name,OperatingSystemNameandVersion,PrimaryGroupID,
+                                                            ResourceId,ResourceNames,Sid,SMSInstalledSites,
+                                                            SMSUniqueIdentifier))
+            self.conn.commit()
+        except Exception as e:
+            logger.info(e)
 
 
-    # def last_logon(self):
-        
-
-
-
-    #             cursor.execute('''insert into Devices (Active, Client, DistinguishedName, FullDomainName, IPAddresses,  
-    #             LastLogonUserDomain, LastLogonUserName, Name, OperatingSystemNameandVersion, 
-    #             PrimaryGroupID, ResourceId, ResourceNames, SID, SMSInstalledSites, SMSUniqueIdentifier) 
-    #             values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (Active,Client,DistinguishedName,FullDomainName,
-    #                                                         IPAddresses,LastLogonUserDomain,LastLogonUserName,
-    #                                                         Name,OperatingSystemNameandVersion,PrimaryGroupID,
-    #                                                         ResourceId,ResourceNames,Sid,SMSInstalledSites,
-    #                                                         SMSUniqueIdentifier))
-    #         self.conn.commit()
-    #     except Exception as e:
-    #         logger.info(e)
-
+    def last_logon(self, username):
+        self.get_lastlogon(username)
+        tb = dp.read_sql(f'select FullDomainName,LastLogonUserDomain,LastLogonUserName,Name,ResourceID,ResourceNames from lastlogon where LastLogonUserName = \'{username}\' COLLATE NOCASE', self.conn)
+        if tb.empty:
+            logger.info(f"[-] Could not find devices where {username} recently logged in.")
+            return
+        logger.info((tabulate(tb, showindex=False, headers=tb.columns, tablefmt='grid')))
+        return
 
     
 

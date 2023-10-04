@@ -105,6 +105,10 @@ class SHELL(cmd2.Cmd):
         """Query for devices the target is a primary user"""
         self.db.pusers(arg)
 
+    @cmd2.with_category(DB)
+    def do_get_lastlogon(self, arg):
+        """Query for devices the target recently signed in"""
+        self.db.last_logon(arg)
 
     
     
