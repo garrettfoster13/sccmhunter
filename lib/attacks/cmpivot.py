@@ -38,7 +38,7 @@ class SHELL(cmd2.Cmd):
         self.password = password
         self.target = target
         self.logs_dir = logs_dir
-        self.headers = {'Content-Type': 'application/json; odata=verbose'} # add useragent? currently shows python useragent in logs
+        self.headers = {'Content-Type': 'application/json; odata=verbose'} # modify useragent? currently shows python useragent in logs
         self.intro = logger.info('[!] Enter help for extra shell commands')
         self.cwd = "C:\\"
         self.device = ""
@@ -61,7 +61,7 @@ class SHELL(cmd2.Cmd):
 
     @cmd2.with_category(IN)
     def do_interact(self, arg):
-        """Target Device/Collectio to Query         interact (device code)"""
+        """Target Device/Collection to Query         interact (device code)"""
         option = arg.split(' ')
         self.device = option[0]
 
@@ -95,7 +95,7 @@ class SHELL(cmd2.Cmd):
 
     @cmd2.with_category(DB)
     def do_get_collection(self, arg):
-        """Query for al l(*) or single (id) collection(s)"""
+        """Query for all (*) or single (id) collection(s)"""
         option = arg.split(' ')
         collection_id = option[0]
         self.db.collections(collection_id)

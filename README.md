@@ -4,7 +4,7 @@
 
 # SCCMHunter
 
-SCCMHunter is a post-ex tool built to streamline identifying, profiling, and attacking SCCM related assets in an Active Directory domain. The basic function of the tool is to query LDAP with the find module for potential SCCM related assets. This is achieved through ACL recon of objects created during the deployment process when extending the AD schema, as well as by performing queries for the keywords "SCCM" or "MECM". This list of targets is then profiled with the SMB module by checking the remarks for default shares required by assets configured with certain SCCM roles. Additionally, the module checks if the MSSQL service is running and if SMB signing is enforced on the endpoint. All of this helps paint a picture for potential attack paths in the environment. Once profiling is complete, the operator can target abusing client enrollment with the HTTP (@\_xpn\_) module accounts or use the MSSQL (@_mayyhem)  module to grab the necessary syntax for complete site server takeover. If a site server takeover is successful, the admin and pivot modules are available for further information gathering and abuse.
+SCCMHunter is a post-ex tool built to streamline identifying, profiling, and attacking SCCM related assets in an Active Directory domain. The basic function of the tool is to query LDAP with the find module for potential SCCM related assets. This is achieved through ACL recon of objects created during the deployment process when extending the AD schema, as well as by performing queries for the keywords "SCCM" or "MECM". This list of targets is then profiled with the SMB module by checking the remarks for default shares required by assets configured with certain SCCM roles. Additionally, the module checks if the MSSQL service is running and if SMB signing is enforced on the endpoint. All of this helps paint a picture for potential attack paths in the environment. Once profiling is complete, the operator can target abusing client enrollment with the HTTP (@\_xpn\_) module accounts or use the MSSQL (@_mayyhem)  module to grab the necessary syntax for complete site server takeover. If a site server takeover is successful, the admin module is  available for post exploitation.
 
 This tool was developed and tested in a lab environment. Your mileage may vary on performance. If you run into any problems please don't hesitate to open an issue.
 
@@ -20,7 +20,6 @@ This tool was developed and tested in a lab environment. Your mileage may vary o
   - [Http](#http)
   - [Mssql](#mssql)
   - [Admin](#admin)
-  - [Pivot](#pivot)
   - [Show](#show)
 - [References](#references)
 
@@ -82,13 +81,6 @@ Here are examples of the initial run of recovering data and querying where the t
 
 ![image](https://user-images.githubusercontent.com/82191679/236323016-ae5e8c54-8927-465a-9f01-70c9bc840154.png)
 
-## Pivot
-
-The Pivot module is a post site server takeover module intended to use the [CMPivot](https://learn.microsoft.com/en-us/mem/configmgr/core/servers/manage/cmpivot) tool remotely by leveraging the AdminService API. It is currently in a proof of concept state and is missing many useful commands that are still being built and tested. Some examples of how the CMPivot tool is useful is it allows the operator to enumerate a target device or collection and run commands to identify local administrators, running processes, or network configuration.
-
-Here is an example of using the pivot module to query the local administrators group of a machine through the AdminService API:
-
-![image](https://user-images.githubusercontent.com/82191679/236324389-3b9c2bd9-3350-4da8-b79a-65c10b275145.png)
 
 ## Show
 

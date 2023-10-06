@@ -104,7 +104,7 @@ SMSUniqueIdentifier: {tb['SMSUniqueIdentifier'].to_string(index=False, header=Fa
                                 verify=False)
             results = r.json()
             for i in results["value"]:
-                if i['Name'].lower() == devicename:
+                if i['Name'].lower() == devicename.lower():
                     logger.info("[+] Device found.")
                     Active = str(i["Active"])
                     Client = str(i["Client"])
@@ -175,7 +175,7 @@ UserPrincipalName: {tb['UserPrincipalName'].to_string(index=False, header=False)
             results = r.json()
 
             for i in results["value"]:
-                if i['UserName'].lower() == username:
+                if i['UserName'].lower() == username.lower():
                     logger.info("[+] User found.")
                     DistinguishedName = str(i["DistinguishedName"])
                     FullDomainName = str(i["FullDomainName"])
@@ -262,7 +262,6 @@ UserPrincipalName: {tb['UserPrincipalName'].to_string(index=False, header=False)
 
 
     def collections(self, collection_id):
-            print(collection_id)
             if collection_id ==  "*":
                 tb = dp.read_sql(f'select CollectionID,MemberCount,Name from Collections', self.conn)
                 if tb.empty:
@@ -272,7 +271,6 @@ UserPrincipalName: {tb['UserPrincipalName'].to_string(index=False, header=False)
                         tb = dp.read_sql(f'select CollectionID,MemberCount,Name from Collections', self.conn)
                     else:
                         return
-                print(tb)
                 logger.info((tabulate(tb, showindex=False, headers=tb.columns, tablefmt='grid')))
                 return
             else:
