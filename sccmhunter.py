@@ -1,5 +1,5 @@
 import typer
-from lib.commands import find, mssql, smb, http, show, cmpivot
+from lib.commands import find, mssql, smb, http, show, admin
 from lib.scripts.banner import show_banner
 
 
@@ -43,16 +43,10 @@ app.add_typer(
     help=show.HELP
 )
 
-# app.add_typer(
-#     admin.app,
-#     name=admin.COMMAND_NAME,
-#     help=admin.HELP
-# )
-
 app.add_typer(
-    cmpivot.app,
-    name=cmpivot.COMMAND_NAME,
-    help=cmpivot.HELP
+    admin.app,
+    name=admin.COMMAND_NAME,
+    help=admin.HELP
 )
 
 if __name__ == '__main__':

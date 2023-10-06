@@ -3,8 +3,8 @@ from lib.attacks.cmpivot import CONSOLE
 from lib.logger import init_logger
 
 app = typer.Typer()
-COMMAND_NAME = 'pivot'
-HELP = 'Run CMPivot commands on target devices through the AdminService API.'
+COMMAND_NAME = 'admin'
+HELP = 'Run administrative commands through the AdminService API.'
 
 @app.callback(no_args_is_help=True, invoke_without_command=True)
 
