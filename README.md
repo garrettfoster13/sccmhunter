@@ -35,7 +35,8 @@ python3 sccmhunter.py
 
 ## Help
 
-![menu](https://user-images.githubusercontent.com/82191679/236306787-3c59c45a-2f13-4a01-9ac0-2f99c92a27bc.png)
+![v0002help](https://github.com/garrettfoster13/sccmhunter/assets/82191679/79a091f2-8d1d-4f1b-9ab0-b9635d8756f6)
+
 
 # Modules
 
@@ -75,11 +76,11 @@ Here's an example of the results following running the mssql module:
 
 ## Admin
 
-The Admin module is a post site server takeover module intended to query the AdminService API and store recovered data in a local SQLite database. Current information that is stored includes: users, devices, collections, deployments, applications, UserDeviceAffinity. This data can later be queried for useful information such as identifying devices a target user recently logged in or was assigned as a primary user. Note: This module worked in a lab environment. Your mileage may vary depending on the size of the environment it's used in.
+The Admin module is a post site server takeover module intended to run post exploitation commands through the AdminService API. The module stores recovered users, devices, collections and device relationship data in a local SQLite database. Additional commands available include situation awareness commands to enumerate information on endpoints as well as performing arbitrary script execution on devices. All of my testing was performed in a controlled lab environment so your mileage may vary. If you run into any issues please open and issue and provide as much information as possible to explain the issue.
 
-Here are examples of the initial run of recovering data and querying where the target DA user recently signed in.
+Here is an example of running the ipconfig situational awareness command.
 
-![image](https://user-images.githubusercontent.com/82191679/236323016-ae5e8c54-8927-465a-9f01-70c9bc840154.png)
+<img width="1397" alt="Welcome" src="https://github.com/garrettfoster13/sccmhunter/assets/82191679/0285eaa3-d233-4d50-b6f1-b94f1c9cd541">
 
 
 ## Show
