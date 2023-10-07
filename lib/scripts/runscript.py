@@ -27,6 +27,7 @@ class SMSSCRIPTS:
         self.appended = ""
         self.opid = ""
         self.guid = ""
+        self.device = ""
 
     def run(self, device, optional_target=None):
         if optional_target:
@@ -199,8 +200,9 @@ Do-Delete
         bom = codecs.BOM_UTF16_LE
         byte_array = bom + script.encode('utf-16-le')
         script_body = base64.b64encode(byte_array).decode('utf-8')
-        self.add_script(script_body)
         self.device = device
+        self.add_script(script_body)
+        
 
     def printlog(self, result):
         filename = (f'{self.logs_dir}/console.log')
