@@ -43,7 +43,7 @@ class HTTP:
     def run(self):
         logfile = f"{os.path.expanduser('~')}/.sccmhunter/logs/sccmhunter.log"
         if os.path.exists(logfile):
-            logger.info("Found targets from logfile.")
+            logger.info("[*] Found targets from logfile.")
             targets = self.read_logs(logfile)
             self.targets = self.http_hunter(targets)
             self.autopwn()

