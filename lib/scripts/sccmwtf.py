@@ -72,7 +72,8 @@ class Tools:
             writer = csv.DictWriter(f, fieldnames=fields, escapechar='\\')
             writer.writeheader()
             writer.writerows(input)
-      Tools.print_table(logs_dir=logs_dir)  
+      logger.info(f"[+] NAA credentials saved to {file}")
+      #Tools.print_table(logs_dir=logs_dir)  
 
 
 class CryptoTools:
@@ -284,6 +285,10 @@ class SCCMTools():
           os.remove("certificate.pem")
           os.remove("key.pem")
 
+
+#### Huge shoutout to @SkelSec for this code
+#### https://github.com/xpn/sccmwtf/blob/main/policysecretunobfuscate.py
+
     def mscrypt_derive_key_sha1(self, secret:bytes):
         # Implementation of CryptDeriveKey(prov, CALG_3DES, hash, 0, &cryptKey);
         buf1 = bytearray([0x36] * 64)
@@ -324,7 +329,7 @@ class SCCMTools():
         padder = padding.PKCS7(64).unpadder() # 64 is the block size in bits for DES3
         decrypted_data = padder.update(decrypted_data) + padder.finalize()
         return decrypted_data
-    
+
 
     def parse_xml(self, xml_file):
         try:
