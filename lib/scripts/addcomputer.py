@@ -10,7 +10,7 @@ import random
 import ssl
 import os
 from binascii import unhexlify
-
+from lib.logger import logger as sccmlogger
 
 class AddComputerSAMR:
 
@@ -181,6 +181,12 @@ class AddComputerSAMR:
                         sys.exit()
                     else:
                         raise
+                except Exception as e:
+                    if str(e) == "Relayed user machine quota exceeded!":
+                        sccmlogger.error("[-] User %s machine quota exceeded!" % self.__username)
+                        sys.exit(1)
+                    else:
+                        print("An unexpected error occurred:", str(e))
 
                 userHandle = createUser['UserHandle']
 
