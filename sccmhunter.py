@@ -1,5 +1,5 @@
 import typer
-from lib.commands import find, mssql, smb, http, show, admin
+from lib.commands import find, mssql, smb, http, show, admin, dpapi
 from lib.scripts.banner import show_banner
 
 
@@ -47,6 +47,12 @@ app.add_typer(
     admin.app,
     name=admin.COMMAND_NAME,
     help=admin.HELP
+)
+
+app.add_typer(
+    dpapi.app,
+    name=dpapi.COMMAND_NAME,
+    help=dpapi.HELP
 )
 
 if __name__ == '__main__':
