@@ -152,12 +152,12 @@ class DPAPI:
                 dcom.disconnect()
             except:
                 pass
-            sys.exit(1)
+
         
 
         if len(self.raw_sccm_blobs) == 0:
             logger.info("[!] No SCCM secrets found")
-            sys.exit(1)
+
         else:
             logger.info("[+] Got " + str(len(self.raw_sccm_blobs)) + " SCCM secrets.")
 
@@ -195,7 +195,7 @@ class DPAPI:
                             self.raw_credentials[filename] = data
                         else:
                             logger.info("[!] Could not get content of credential file: " + filename + ", skipping")
-                            sys.exit(1)
+
 
                 # for each credential, get corresponding masterkey file
                 useless_credentials = []
@@ -231,7 +231,7 @@ class DPAPI:
                 # check whether there's something left to decrypt
                 if len(self.raw_credentials) == 0 and len(self.raw_sccm_blobs) == 0:
                     logger.info("[!] Nothing to decrypt, quitting")
-                    sys.exit(1)
+                    return
 
 
                 # prepare to dump LSA secrets to get SYSTEM userkey if not provided
@@ -261,7 +261,7 @@ class DPAPI:
                         import traceback
                         traceback.print_exc()
                     logger.info('[!] LSA hashes extraction failed: %s' % str(e))
-                    sys.exit(1)
+
             self.cleanup()
 
 
