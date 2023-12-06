@@ -1,2 +1,0 @@
-update all the console logging gotta be a better way to store it
-add checks for commands to have a value to interact with
