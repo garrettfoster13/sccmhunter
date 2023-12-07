@@ -1,3 +1,0 @@
-#!/opt/sccmhunter/bin/python
-import ldapdomaindump
-ldapdomaindump.main()

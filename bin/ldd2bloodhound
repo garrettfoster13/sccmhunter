@@ -1,3 +1,0 @@
-#!/opt/sccmhunter/bin/python
-from ldapdomaindump import convert
-convert.ldd2bloodhound()
