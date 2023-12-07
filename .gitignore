@@ -7,3 +7,4 @@ __pycache__
 *.cfg
 .bin/
 .python3.11
+share/doc/impacket
