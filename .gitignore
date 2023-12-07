@@ -4,3 +4,6 @@ dist/
 .ruff_cache/
 resources/dotnet/*.dll
 __pycache__
+*.cfg
+.bin/
+.python3.11
