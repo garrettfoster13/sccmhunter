@@ -44,9 +44,14 @@ class SMB:
  
     def run(self):
         logfile = f"{self.logs_dir}/sccmhunter.log"
+        siteservers = f"{self.logs_dir}/siteservers.log"
         if os.path.exists(logfile):
             logger.info("[+] Found targets from logfile.")
-            targets = self.read_logs()
+            targets = self.read_logs(logfile)
+            self.smb_hunter(targets)
+        if os.path.exists(siteservers):
+            logger.info("[+] Found site servers from logfile.")
+            targets = self.read_logs(siteservers)
             self.smb_hunter(targets)
         else:
             logger.info("[-] Existing log file not found, searching LDAP for site servers.")
@@ -57,9 +62,9 @@ class SMB:
             sccmhunter.run()
             self.run()
 
-    def read_logs(self):
+    def read_logs(self, file):
         targets = []
-        with open(f"{self.logs_dir}/sccmhunter.log", "r") as f:
+        with open(f"{file}", "r") as f:
             for line in f.readlines():
                 targets.append(line.strip())
         return targets
