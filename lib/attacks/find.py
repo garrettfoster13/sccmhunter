@@ -191,9 +191,9 @@ class SCCMHUNTER:
         if self.ldap_session.entries:
             logger.debug(f"[+] Found {len(self.ldap_session.entries)} principals that contain the string 'SCCM' or 'MECM'.")
             for entry in self.ldap_session.entries:
-                USER_DICT = {"cn": "", "sAMAccountName": "", "memberOf": "", "servicePrincipalName": "", "description": ""}
-                COMPUTER_DICT = {"cn": "", "sAMAccountName": "", "dNSHostName": "", "memberOf": "", "description": ""}
-                GROUP_DICT = {"cn": "", "name": "", "sAMAccountName": "", "member": "", "memberOf": "", "description": ""}
+                USER_DICT = {"cn": "", "sAMAccountName": "", "servicePrincipalName": "", "description": ""}
+                COMPUTER_DICT = {"cn": "", "sAMAccountName": "", "dNSHostName": "", "description": ""}
+                GROUP_DICT = {"cn": "", "name": "", "sAMAccountName": "", "member": "", "description": ""}
                 #if a user
                 try:
                     if (entry['sAMAccountType']) == 805306368:
@@ -300,9 +300,9 @@ class SCCMHUNTER:
 
 
     def save_csv(self, users, computers, groups):
-        user_fields =  ["cn","sAMAccountName", "memberOf", "servicePrincipalName", "description"]
-        computer_fields = ["cn", "sAMAccountName", "dNSHostName","memberOf", "description"]
-        group_fields = ["cn", "name", "sAMAccountName", "member", "memberOf", "description"]
+        user_fields =  ["cn","sAMAccountName", "servicePrincipalName", "description"]
+        computer_fields = ["cn", "sAMAccountName", "dNSHostName", "description"]
+        group_fields = ["cn", "name", "sAMAccountName", "member", "description"]
         if users:
             with open(f'{self.logs_dir}/csvs/users.csv', 'w', newline='') as f:
                 writer = csv.DictWriter(f, fieldnames=user_fields)
