@@ -11,6 +11,7 @@ import pandas as pd
 from tabulate import tabulate
 from lib.scripts.banner import show_banner
 import socket
+import requests
 
 
 
@@ -43,24 +44,27 @@ class SMB:
 
  
     def run(self):
-        logfile = f"{self.logs_dir}/sccmhunter.log"
-        siteservers = f"{self.logs_dir}/siteservers.log"
-        if os.path.exists(logfile):
-            logger.info("[+] Found targets from logfile.")
-            targets = self.read_logs(logfile)
-            self.smb_hunter(targets)
-        if os.path.exists(siteservers):
-            logger.info("[+] Found site servers from logfile.")
-            targets = self.read_logs(siteservers)
-            self.smb_hunter(targets)
-        else:
-            logger.info("[-] Existing log file not found, searching LDAP for site servers.")
-            sccmhunter = SCCMHUNTER(username=self.username, password=self.password, domain=self.domain, 
-                                    target_dom=self.target_dom, dc_ip=self.dc_ip,ldaps=self.ldaps,
-                                    kerberos=self.kerberos, no_pass=self.no_pass, hashes=self.hashes, 
-                                    aes=self.aes, debug=self.debug, logs_dir=self.logs_dir)
-            sccmhunter.run()
-            self.run()
+        logfiles = [
+            "sccmhunter.log",
+            "mps.log",
+            "siteservers.log"
+        ]
+        for logfile in logfiles:
+            path = f"{self.logs_dir}/{logfile}"
+
+            if os.path.exists(path):
+                logger.info(f"[+] Found targets from {logfile} logfile.")
+                targets = self.read_logs(path)
+                self.smb_hunter(targets)
+
+            else:
+                logger.info("[-] Existing log file not found, searching LDAP for site servers.")
+                sccmhunter = SCCMHUNTER(username=self.username, password=self.password, domain=self.domain, 
+                                        target_dom=self.target_dom, dc_ip=self.dc_ip,ldaps=self.ldaps,
+                                        kerberos=self.kerberos, no_pass=self.no_pass, hashes=self.hashes, 
+                                        aes=self.aes, debug=self.debug, logs_dir=self.logs_dir)
+                sccmhunter.run()
+                self.run()
 
     def read_logs(self, file):
         targets = []
@@ -91,11 +95,6 @@ class SMB:
                 dp = False
                 wsus = False
 
-                if not signing:
-                    logger.debug(f"[+] SMB signing not required on {server}")
-                else:
-                    logger.debug(f"[-] SMB signing requred on {server}")
-
                 for share in conn.listShares():
                     remark = share['shi1_remark'][:-1]
                     name = share['shi1_netname'][:-1]
@@ -117,15 +116,20 @@ class SMB:
 
                 mssql = self.mssql_check(server)
 
+                mp = self.http_check(server)
+
                 self.test_array.append({'Hostname': f'{server}', 
                                         'Site Code': f'{site_code}',
                                         'Signing Status': f'{signing}', 
                                         'Site Server' : f'{siteserv}', 
                                         'Distribution Point': f'{dp}',
+                                        'Management Point': f'{mp}',
                                         'WSUS': f'{wsus}',
                                         'MSSQL': f'{mssql}'})
+        
             except Exception as e:
                 logger.info(f"[-] {e}")
+
         
         # spider and save the paths of variables files if discovered with optional save
         if pxe_boot_servers:
@@ -133,6 +137,7 @@ class SMB:
         if self.test_array:
             self.save_csv(self.test_array)
             self.print_table()
+        return
 
     def smb_spider(self, conn, targets):
         vars_files = []
@@ -160,8 +165,7 @@ class SMB:
                                 conn.getFile(shareName="REMINST",pathName = path, callback=fh.write)
                                 downloaded.append(file_name)
                             except Exception as e:
-                                print(e)
-                                print("shit broke")
+                                logger.info(f"[-] {e}")
             except Exception as e:
                 print(e)
         conn.logoff()
@@ -175,6 +179,8 @@ class SMB:
             printlog(vars_files, self.logs_dir, filename)
         
     def mssql_check(self, server):
+        #check if the target host is running MSSQL
+        #intention here is to find the site database location
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(5)
         try:
@@ -184,9 +190,25 @@ class SMB:
         except Exception as e:
             logger.info(f"[-] {e}")
         return False
+    
+
+    def http_check(self, server):
+        try:
+            endpoint = f"https://{server}/SMS_MP"
+            r = requests.request("GET",
+                                endpoint,
+                                verify=False)
+            if r.status_code == 403:
+                return True
+            else:
+                return False
+        except Exception as e:
+            logger.info("An unknown error occurred")
+            logger.info(e)
+
         
     def save_csv(self, array):
-        fields = ["Hostname", "Site Code", "Signing Status","Site Server", "Distribution Point", "WSUS", "MSSQL"]
+        fields = ["Hostname", "Site Code", "Signing Status","Site Server", "Distribution Point", "Management Point", "WSUS", "MSSQL"]
         with open(f'{self.logs_dir}/csvs/smbhunter.csv', 'w', newline='') as f:
             writer = csv.DictWriter(f, fieldnames=fields)
             writer.writeheader()
