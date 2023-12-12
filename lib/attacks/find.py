@@ -92,6 +92,7 @@ class SCCMHUNTER:
         else:
             self.search_base = get_dn(self.domain)
 
+
         # Query the ACL Of the System Management container for FULL CONTROL permissions. This container
         # is created during extension of the Active Directory schema to allow site servers to publish to LDAP.
 
@@ -128,13 +129,11 @@ class SCCMHUNTER:
 
         # Done with ACL now check 
         # Now query for the mssmsmanagementpoint object class and pull out DNS names for Management Points
-        # Write each hostname to a file
-
+        # add to the site servers array
 
         logger.info(f'[*] Querying LDAP for published Management Points')
-        container_servers = []
         try:
-            controls = ldap3.protocol.microsoft.security_descriptor_control(sdflags=0x07)
+            controls = self.controls
             self.ldap_session.extend.standard.paged_search(self.search_base, 
                                                            self.search_filter, 
                                                            attributes=self.attributes, 
@@ -147,22 +146,16 @@ class SCCMHUNTER:
                 for entry in self.ldap_session.entries:
                     hostname =  entry['dNSHostname']
                     logger.debug(f"[+] Found Management Point: {hostname}")
-                    container_servers.append(str(hostname).lower())
-                if len(container_servers) > 0:
-                    mps = list(set(container_servers))
-                    filename = "mps.log"    
-                    printlog(mps, self.logs_dir, filename)
+                    self.servers.append(str(hostname).lower())
 
         except ldap3.core.exceptions.LDAPObjectClassError as e:
-            logger.info(f'[-] Management Point Attribute not found')
-            logger.info(f'[-] SCCM doesn\'t appear to be published in this domain.')
-
+            logger.info(f'[-] Could not find any Management Points published in LDAP')
 
         #now search for anything related to "SCCM" and build a csv
         _users = []
         _computers = []
         _groups = []
-        yeet = '(|(samaccountname=*sccm*)(samaccountname=*mecm*)(description=*sccm*)(description=*mecm*))'
+        yeet = '(|(samaccountname=*sccm*)(samaccountname=*mecm*)(description=*sccm*)(description=*mecm*)(name=*sccm*)(name=*mecm*))'
         logger.info("[*] Searching LDAP for anything containing the strings 'SCCM'or 'MECM'")
         try:
             self.ldap_session.extend.standard.paged_search(self.search_base, 
@@ -171,14 +164,15 @@ class SCCMHUNTER:
                                                            paged_size=500, 
                                                            generator=False)  
         except ldap3.core.exceptions.LDAPAttributeError as e:
-            print()
             logger.info(f'Error: {str(e)}')
         if self.ldap_session.entries:
+            USER_DICT = {"cn": "", "sAMAccountName": "", "servicePrincipalName": "", "description": ""}
+            COMPUTER_DICT = {"cn": "", "sAMAccountName": "", "dNSHostName": "", "description": ""}
+            GROUP_DICT = {"cn": "", "name": "", "sAMAccountName": "", "member": "", "description": ""}
+
             logger.debug(f"[+] Found {len(self.ldap_session.entries)} principals that contain the string 'SCCM' or 'MECM'.")
             for entry in self.ldap_session.entries:
-                USER_DICT = {"cn": "", "sAMAccountName": "", "servicePrincipalName": "", "description": ""}
-                COMPUTER_DICT = {"cn": "", "sAMAccountName": "", "dNSHostName": "", "description": ""}
-                GROUP_DICT = {"cn": "", "name": "", "sAMAccountName": "", "member": "", "description": ""}
+
                 #if a user
                 try:
                     if (entry['sAMAccountType']) == 805306368:
@@ -192,13 +186,13 @@ class SCCMHUNTER:
                         _users.append(copy.deepcopy(USER_DICT))
                     # if a computer
                     if (entry['sAMAccountType']) == 805306369:
-                        #COMPUTER_DICT = {"cn": "", "sAMAccountName": "None", "dNSHostName": "", "memberOf": "", "description": ""}
                             for k, v in COMPUTER_DICT.items():
                                 if k in entry:
                                     COMPUTER_DICT[k] = str(entry[k].value)
                                 #might as well add it to the results list for SMB scanning
                                 dnshostname = entry["dNSHostName"]
                                 if dnshostname and dnshostname not in self.servers:
+                                    print(f"added {dnshostname} to list")
                                     self.servers.append(str(dnshostname).lower())
                                 #return
                             _computers.append(copy.deepcopy(COMPUTER_DICT))
@@ -212,6 +206,9 @@ class SCCMHUNTER:
                                 #i should learn regex
                                 j = v.replace("', '", "\n").replace("['", "").replace("']", "")
                                 GROUP_DICT[k] = j
+                        dn = (entry['distinguishedname'])
+                        self.recursive_resolution(dn)
+                        
                         _groups.append(copy.deepcopy(GROUP_DICT))
                 except ldap3.core.exceptions.LDAPAttributeError as e:
                     logger.debug(f"[-] {e}")
@@ -233,6 +230,24 @@ class SCCMHUNTER:
         if total_servers:
             filename = "sccmhunter.log"
             printlog(total_servers, self.logs_dir, filename)
+
+
+    def recursive_resolution(self, dn):
+            dn = dn
+            search_filter = f"(memberOf:1.2.840.113556.1.4.1941:={dn})"
+            try:
+                self.ldap_session.extend.standard.paged_search(self.search_base, 
+                                                            search_filter, 
+                                                            attributes="*", 
+                                                            paged_size=500, 
+                                                            generator=False)  
+            except ldap3.core.exceptions.LDAPAttributeError as e:
+                logger.debug(f'Error: {str(e)}')
+            
+            for i in self.ldap_session.entries:
+                if (i['samaccounttype'] == 805306369):
+                    self.servers.append(str(i['dnshostname']).lower())
+
 
     def sid_resolver(self, sids):
         resolved_sids = []
@@ -264,6 +279,8 @@ class SCCMHUNTER:
                         if dnsname not in self.servers:
                             self.servers.append(str(dnsname).lower())
                         resolved_sids.append(dnsname)
+            except ldap3.core.exceptions.LDAPKeyError as e:
+                logger.debug(e)
             except Exception as e:
                 logger.info(e)
 

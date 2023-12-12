@@ -12,6 +12,8 @@ from tabulate import tabulate
 from lib.scripts.banner import show_banner
 import socket
 import requests
+from requests.exceptions import RequestException
+
 
 
 
@@ -42,12 +44,13 @@ class SMB:
         if self.hashes:
             self.lmhash, self.nthash = self.hashes.split(':')
 
- 
+ #create a separate function for MP enum and Site Server enum I think
+
+
     def run(self):
         logfiles = [
-            "sccmhunter.log",
-            "mps.log",
-            "siteservers.log"
+            "siteservers.log",
+            "sccmhunter.log"
         ]
         for logfile in logfiles:
             path = f"{self.logs_dir}/{logfile}"
@@ -55,8 +58,10 @@ class SMB:
             if os.path.exists(path):
                 logger.info(f"[+] Found targets from {logfile} logfile.")
                 targets = self.read_logs(path)
-                self.smb_hunter(targets)
-
+                if logfile == "siteservers.log":
+                    self.siteserver_check(targets)
+                if logfile == "sccmhunter.log":
+                    self.smb_hunter(targets)
             else:
                 logger.info("[-] Existing log file not found, searching LDAP for site servers.")
                 sccmhunter = SCCMHUNTER(username=self.username, password=self.password, domain=self.domain, 
@@ -114,10 +119,13 @@ class SMB:
                     if name == "WsusContent":
                         wsus = True
 
+                #check for 1433 open
                 mssql = self.mssql_check(server)
 
+                #check for SMS_MP endpoint via http(s)
                 mp = self.http_check(server)
 
+                #add results to array
                 self.test_array.append({'Hostname': f'{server}', 
                                         'Site Code': f'{site_code}',
                                         'Signing Status': f'{signing}', 
@@ -128,15 +136,15 @@ class SMB:
                                         'MSSQL': f'{mssql}'})
         
             except Exception as e:
-                logger.info(f"[-] {e}")
+                logger.debug(f"[-] {e}")
 
-        
         # spider and save the paths of variables files if discovered with optional save
         if pxe_boot_servers:
             self.smb_spider(conn, pxe_boot_servers)
+        #save and print the results
         if self.test_array:
-            self.save_csv(self.test_array)
-            self.print_table()
+            self.save_csv(self.test_array, method="smbhunter")
+            self.print_table(csv="smbhunter")
         return
 
     def smb_spider(self, conn, targets):
@@ -167,7 +175,7 @@ class SMB:
                             except Exception as e:
                                 logger.info(f"[-] {e}")
             except Exception as e:
-                print(e)
+                logger.debug(e)
         conn.logoff()
         
         if len(downloaded) > 0:
@@ -178,9 +186,10 @@ class SMB:
             filename = "smbhunter.log"
             printlog(vars_files, self.logs_dir, filename)
         
+
+#check if the target host is running MSSQL
+#intention here is to help find the site database location or at least narrow it down    
     def mssql_check(self, server):
-        #check if the target host is running MSSQL
-        #intention here is to find the site database location
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(5)
         try:
@@ -188,10 +197,11 @@ class SMB:
             if sock:
                 return True
         except Exception as e:
-            logger.info(f"[-] {e}")
+            logger.debug(f"[-] {e}")
         return False
     
-
+#check if the target host is hosting the SMS_MP directory
+#intention here is to return whether the host has the Management Point role
     def http_check(self, server):
         try:
             endpoint = f"https://{server}/SMS_MP"
@@ -202,24 +212,86 @@ class SMB:
                 return True
             else:
                 return False
+        except RequestException as e:
+            logger.debug(e)
+            return False
         except Exception as e:
-            logger.info("An unknown error occurred")
-            logger.info(e)
+            logger.debug("An unknown error occurred")
+            logger.debug(e)
 
-        
-    def save_csv(self, array):
-        fields = ["Hostname", "Site Code", "Signing Status","Site Server", "Distribution Point", "Management Point", "WSUS", "MSSQL"]
-        with open(f'{self.logs_dir}/csvs/smbhunter.csv', 'w', newline='') as f:
+#treat all siteservers as true
+#active site servers will have expected file shares when they're stood up
+#passive site servers will not due to remote file share requirements
+    def siteserver_check(self, servers):
+        siteservers = []
+        for i in servers:
+            try:
+                timeout = 10
+                server = str(i)
+                conn = SMBConnection(server, server, None, timeout=timeout)
+                if self.kerberos:
+                    conn.kerberosLogin(user=self.username, password=self.password, domain=self.domain, kdcHost=self.dc_ip)
+                else:
+                    conn.login(user=self.username, password=self.password, domain=self.domain, lmhash=self.lmhash, nthash=self.nthash)
+                logger.debug(f"[+] Connected to smb://{server}:445")
+
+                signing = conn.isSigningRequired()
+                siteserv = True
+                site_code = ''
+                active = False
+                passive = True
+
+                for share in conn.listShares():
+                    remark = share['shi1_remark'][:-1]
+                    name = share['shi1_netname'][:-1]
+                    #default remarks reveal role
+                    if name == "SMS_SITE":
+                        active = True
+                        passive = False
+                        site_code = (remark.split(" ")[-2])
+
+                mssql = self.mssql_check(server)
+
+                siteservers.append({'Hostname': f'{server}', 
+                        'Site Code': f'{site_code}',
+                        'Signing Status': f'{signing}', 
+                        'Site Server' : f'{siteserv}',
+                        'Active' : f'{active}', 
+                        'Passive': f'{passive}',
+                        'MSSQL': f'{mssql}'})
+            except Exception as e:
+                logger.debug(f"[-] {e}")
+        if siteservers:
+            self.save_csv(siteservers, method="siteservers")
+            self.print_table(csv="siteservers")
+
+    def save_csv(self, array, method):
+        if method == "smbhunter":
+            fields = ["Hostname", "Site Code", "Signing Status","Site Server", "Distribution Point", "Management Point", "WSUS", "MSSQL"]
+            filename = "smbhunter.csv"
+        if method == "siteservers":
+            fields = ["Hostname", "Site Code", "Signing Status","Site Server", "Active", "Passive", "MSSQL"]
+            filename = "siteservers.csv"
+        if method == "mps":
+            fields = ["Hostname", "Site Code", "Signing Status"]
+            filename = "mps.csv"
+
+        with open(f'{self.logs_dir}/csvs/{filename}', 'w', newline='') as f:
             writer = csv.DictWriter(f, fieldnames=fields)
             writer.writeheader()
             writer.writerows(array)
         f.close()
         
     
-    def print_table(self):
-        df = pd.read_csv(f"{self.logs_dir}/csvs/smbhunter.csv").fillna("None")
+    def print_table(self, csv):
+        if csv == "smbhunter":
+            df = pd.read_csv(f"{self.logs_dir}/csvs/smbhunter.csv").fillna("None")
+            logger.info("[*] SMBHunter Results:")
+        if csv == "siteservers":
+            df = pd.read_csv(f"{self.logs_dir}/csvs/siteservers.csv").fillna("None")
+            logger.info("[*] Site Server Results:")
         logger.info(tabulate(df, headers = 'keys', tablefmt = 'grid'))
-        logger.info(f'SMB results saved to {self.logs_dir}/smbhunter.csv')
+        logger.info(f'Results saved to {self.logs_dir}/csvs/')
 
 
     def printlog(self, servers):
