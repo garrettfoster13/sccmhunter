@@ -11,8 +11,8 @@ HELP = 'Enumerate LDAP for SCCM assets.'
 def main(
     username        : str   = typer.Option(None, "-u",  help="Username"),
     password        : str   = typer.Option(None, '-p',  help="Password"),
-    domain          : str   = typer.Option(..., '-d',  help="Target domain"),
-    target_dom      : str   = typer.Option(None, '-t',  help='Use if authenticating across trusts.'),
+    domain          : str   = typer.Option(..., '-d',  help="Domain "),
+    target_dom      : str   = typer.Option(None, '-t',  help='Target domain. Use if authenticating across trusts.'),
     dc_ip           : str   = typer.Option(..., '-dc-ip',  help = "IP address or FQDN of domain controller"),
     ldaps           : bool  = typer.Option(False, '-ldaps', help='Use LDAPS instead of LDAP'),
     kerberos        : bool  = typer.Option(False, "-k", help='Use Kerberos authentication'),

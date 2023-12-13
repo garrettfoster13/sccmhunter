@@ -13,6 +13,7 @@ from lib.scripts.banner import show_banner
 import socket
 import requests
 from requests.exceptions import RequestException
+import json
 
 
 
@@ -50,26 +51,34 @@ class SMB:
     def run(self):
         logfiles = [
             "siteservers.log",
-            "sccmhunter.log"
+            "sccmhunter.log",
+            "mps.json"
         ]
         for logfile in logfiles:
             path = f"{self.logs_dir}/{logfile}"
 
             if os.path.exists(path):
-                logger.info(f"[+] Found targets from {logfile} logfile.")
-                targets = self.read_logs(path)
-                if logfile == "siteservers.log":
-                    self.siteserver_check(targets)
-                if logfile == "sccmhunter.log":
-                    self.smb_hunter(targets)
+                try:
+                    logger.info(f"[+] Found targets from {logfile} logfile.")
+                    targets = self.read_logs(path)
+                    if logfile == "siteservers.log":
+                        self.siteserver_check(targets)
+                    if logfile == "sccmhunter.log":
+                        self.smb_hunter(targets)
+                    if logfile == "mps.json":
+                        self.print_table("mps")
+                except Exception as e:
+                    logger.info(f"{e}")
             else:
-                logger.info("[-] Existing log file not found, searching LDAP for site servers.")
-                sccmhunter = SCCMHUNTER(username=self.username, password=self.password, domain=self.domain, 
-                                        target_dom=self.target_dom, dc_ip=self.dc_ip,ldaps=self.ldaps,
-                                        kerberos=self.kerberos, no_pass=self.no_pass, hashes=self.hashes, 
-                                        aes=self.aes, debug=self.debug, logs_dir=self.logs_dir)
-                sccmhunter.run()
-                self.run()
+                logger.info(f"[-] Necessary {logfile} file not found. Run the find module prior to SMB usage.")
+                print(path)
+                # logger.info("[-] Existing log file not found, searching LDAP for site servers.")
+                # sccmhunter = SCCMHUNTER(username=self.username, password=self.password, domain=self.domain, 
+                #                         target_dom=self.target_dom, dc_ip=self.dc_ip,ldaps=self.ldaps,
+                #                         kerberos=self.kerberos, no_pass=self.no_pass, hashes=self.hashes, 
+                #                         aes=self.aes, debug=self.debug, logs_dir=self.logs_dir)
+                # sccmhunter.run()
+                # self.run()
 
     def read_logs(self, file):
         targets = []
@@ -204,6 +213,13 @@ class SMB:
 #intention here is to return whether the host has the Management Point role
     def http_check(self, server):
         try:
+            endpoint = f"http://{server}/SMS_MP"
+            r = requests.request("GET",
+                                endpoint,
+                                verify=False)
+            if r.status_code == 403:
+                return True
+            
             endpoint = f"https://{server}/SMS_MP"
             r = requests.request("GET",
                                 endpoint,
@@ -290,9 +306,15 @@ class SMB:
         if csv == "siteservers":
             df = pd.read_csv(f"{self.logs_dir}/csvs/siteservers.csv").fillna("None")
             logger.info("[*] Site Server Results:")
+        if csv == "mps":
+            with open (f"{self.logs_dir}/mps.json") as f:
+                data = json.load(f)
+                df = pd.read_json(data).T.drop(index="dn")
+                df.replace("['", '').replace("']", '')
+            logger.info("[*] Management Point Results:")
         logger.info(tabulate(df, headers = 'keys', tablefmt = 'grid'))
         logger.info(f'Results saved to {self.logs_dir}/csvs/')
-
+        return
 
     def printlog(self, servers):
         filename = (f'{self.logs_dir}/smbhunter.log')
