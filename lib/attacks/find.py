@@ -49,20 +49,168 @@ class SCCMHUNTER:
         self.debug = debug
         self.ldap_session = None
         self.search_base = None
-        self.attributes = ["dNSHostName", "nTSecurityDescriptor"]
-        self.search_filter = "(objectclass=mssmsmanagementpoint)"
         self.servers = []
-        self.resolvedowners = []
-        self.samname= []
-        self.users = []
-        self.groups = []
-        self.computers = []
         self.logs_dir = logs_dir
         self.controls = ldap3.protocol.microsoft.security_descriptor_control(sdflags=0x07)
 
 
     def run(self):
+        #bind to ldap
+        if not self.ldap_session:
+            self.ldapsession()
 
+        # set search base to query
+        if self.target_dom:
+            self.search_base = get_dn(self.target_dom)
+        else:
+            self.search_base = get_dn(self.domain)
+
+        self.check_schema()
+        self.check_strings()
+
+        if self.servers:
+            self.results()
+
+        
+    def check_schema(self):
+        # Query the ACL Of the System Management container for FULL CONTROL permissions. This container
+        # is created during optional extension of the Active Directory schema to allow site servers to publish 
+        # to LDAP.
+        logger.info(f'[*] Checking for presence of System Management Container.')
+        try:
+            self.ldap_session.extend.standard.paged_search(self.search_base, 
+                                                           search_filter="(cn=System Management)", 
+                                                           attributes="nTSecurityDescriptor", 
+                                                           controls=self.controls,
+                                                           paged_size=500, 
+                                                           generator=False)
+            if self.ldap_session.entries:
+                for entry in self.ldap_session.entries:
+                    logger.info("[+] Found System Management Container. Parsing DACL.")
+                    #refactor: can this be crunched down? I don't think the json load is necessary
+                    json_entry = json.loads(entry.entry_to_json())
+                    attributes = json_entry['attributes'].keys()
+                    dacl = DACLPARSE()
+                    for attr in attributes:
+                        secdesc = (entry[attr].value)
+                        dacl.security_descriptor.fromString(secdesc)
+                self.ace_parser(dacl)
+
+            if len(self.servers) > 0:
+                total_control = list(set(self.servers))
+                if self.debug:
+                    for hostname in total_control:
+                        logger.debug(f'[+] Found {hostname} with Full Control Ace')
+                logger.info(f'[+] Found {len(total_control)} computers with Full Control ACE')
+                filename = "siteservers.log"
+                printlog(total_control, self.logs_dir, filename)
+                self.check_mps()
+            else:
+                logger.info("[-] System Management Container not found.")
+        except ldap3.core.exceptions.LDAPAttributeError as e:
+            logger.info("[-] Did not find System Management Container")
+            return
+
+
+    def check_mps(self):
+        # Now query for the mssmsmanagementpoint object class. If schema exists there should be at least one.
+        # Add to the site servers array // this might be redundant if we're querying for them specifically
+        logger.info(f'[*] Querying LDAP for published Management Points')
+        mps = []
+        try:
+            self.ldap_session.extend.standard.paged_search(self.search_base, 
+                                                           "(objectclass=mssmsmanagementpoint)", 
+                                                           attributes=["dNSHostName", "msSMSSiteCode"], 
+                                                           controls=self.controls, 
+                                                           paged_size=500, 
+                                                           generator=False)  
+            if self.ldap_session.entries:
+                os.remove(f'{self.logs_dir}/mps.json')
+                #output the number of objects found
+                logger.info(f"[+] Found {len(self.ldap_session.entries)} Management Points in LDAP.")
+                for entry in self.ldap_session.entries:
+                    hostname =  entry['dNSHostname']
+                    logger.debug(f"[+] Found Management Point: {hostname}")
+                    self.servers.append(str(hostname).lower())
+                    with open(f'{self.logs_dir}/mps.json', 'a') as f:
+                        json.dump(entry.entry_to_json(), f, indent=None )
+                json_entry = json.loads(entry.entry_to_json())
+                print(json_entry)
+
+
+        except ldap3.core.exceptions.LDAPObjectClassError as e:
+            logger.info(f'[-] Could not find any Management Points published in LDAP')
+
+
+    def check_strings(self):
+        #now search for anything related to "SCCM" 
+        _users = []
+        _computers = []
+        _groups = []
+        yeet = '(|(samaccountname=*sccm*)(samaccountname=*mecm*)(description=*sccm*)(description=*mecm*)(name=*sccm*)(name=*mecm*))'
+        logger.info("[*] Searching LDAP for anything containing the strings 'SCCM'or 'MECM'")
+        try:
+            self.ldap_session.extend.standard.paged_search(self.search_base, 
+                                                           yeet, 
+                                                           attributes="*", 
+                                                           paged_size=500, 
+                                                           generator=False)  
+        except ldap3.core.exceptions.LDAPAttributeError as e:
+            logger.info(f'Error: {str(e)}')
+        
+        
+        if self.ldap_session.entries:
+            logger.info(f"[+] Found {len(self.ldap_session.entries)} principals that contain the string 'SCCM' or 'MECM'.")
+            for entry in self.ldap_session.entries:
+                USER_DICT = {"cn": "", "sAMAccountName": "", "servicePrincipalName": "", "description": ""}
+                COMPUTER_DICT = {"cn": "", "sAMAccountName": "", "dNSHostName": "", "description": ""}
+                GROUP_DICT = {"cn": "", "name": "", "sAMAccountName": "", "member": "", "description": ""}
+                #if a user
+                try:
+                    if (entry['sAMAccountType']) == 805306368:
+                        for k, v in USER_DICT.items():
+                            if k in entry:
+                                USER_DICT[k] = str(entry[k].value)
+                        _users.append(USER_DICT)
+                    # if a computer
+                    if (entry['sAMAccountType']) == 805306369:
+                        for k, v in COMPUTER_DICT.items():
+                            if k in entry:
+                                COMPUTER_DICT[k] = str(entry[k].value)
+                            # add to potential site servers array
+                            dnshostname = entry["dNSHostName"]
+                            if dnshostname:
+                                self.servers.append(str(dnshostname).lower())
+                        _computers.append(COMPUTER_DICT)
+                    # #if a group
+                    if (entry['sAMAccountType']) == 268435456:
+                        for k, v in GROUP_DICT.items():
+                            if k in entry:
+                                GROUP_DICT[k] = str(entry[k].value)
+                        dn = (entry['distinguishedname'])
+                        self.recursive_resolution(dn)
+                        _groups.append(GROUP_DICT)
+                except ldap3.core.exceptions.LDAPAttributeError as e:
+                    logger.debug(f"[-] {e}")
+                except ldap3.core.exceptions.LDAPKeyError as e:
+                    logger.debug(f"[-] {e}")
+        else:
+            logger.info("[-] No results found.")
+
+        self.save_csv(_users, _computers, _groups)
+
+
+    def results(self):
+        total_servers = list(set(self.servers))
+        logger.info(f"[*] Found {len(total_servers)} total potential site servers.")
+        if self.debug:
+            for server in total_servers:
+                logger.debug(f"[+] {server}")
+        filename = "sccmhunter.log"
+        printlog(total_servers, self.logs_dir, filename)
+
+
+    def ldapsession(self):
         lmhash = ""
         nthash = ""
         if self.hashes:
@@ -85,153 +233,8 @@ class SCCMHUNTER:
         except ldap3.core.exceptions.LDAPBindError as e:
             logger.info(f'Error: {str(e)}')
             exit()
-        
-        # set search base to query
-        if self.target_dom:
-            self.search_base = get_dn(self.target_dom)
-        else:
-            self.search_base = get_dn(self.domain)
 
-
-        # Query the ACL Of the System Management container for FULL CONTROL permissions. This container
-        # is created during extension of the Active Directory schema to allow site servers to publish to LDAP.
-
-        logger.debug(f'[*] Querying ACL of System Management Container')
-        try:
-            self.ldap_session.extend.standard.paged_search(self.search_base, 
-                                                           search_filter="(cn=System Management)", 
-                                                           attributes="nTSecurityDescriptor", 
-                                                           controls=self.controls,
-                                                           paged_size=500, 
-                                                           generator=False)
-            if self.ldap_session.entries:
-                for entry in self.ldap_session.entries:
-                    logger.info("[+] Found System Management Container. Parsing DACL.")
-                    json_entry = json.loads(entry.entry_to_json())
-                    attributes = json_entry['attributes'].keys()
-                    dacl = DACLPARSE()
-                    for attr in attributes:
-                        secdesc = (entry[attr].value)
-                        dacl.security_descriptor.fromString(secdesc)
-                #parse the dacl for object ownership
-                self.ace_parser(dacl)
-
-            if len(self.servers) > 0:
-                total_control = list(set(self.servers))
-                if self.debug:
-                    for hostname in total_control:
-                        logger.debug(f'[+] Found {hostname} with Full Control Ace')
-                logger.info(f'[+] Found {len(total_control)} computers with Full Control ACE')
-                filename = "siteservers.log"
-                printlog(total_control, self.logs_dir, filename)
-        except ldap3.core.exceptions.LDAPAttributeError as e:
-            logger.info("[-] Did not find System Management Container")
-
-        # Done with ACL now check 
-        # Now query for the mssmsmanagementpoint object class and pull out DNS names for Management Points
-        # add to the site servers array
-
-        logger.info(f'[*] Querying LDAP for published Management Points')
-        try:
-            controls = self.controls
-            self.ldap_session.extend.standard.paged_search(self.search_base, 
-                                                           self.search_filter, 
-                                                           attributes=self.attributes, 
-                                                           controls=controls, 
-                                                           paged_size=500, 
-                                                           generator=False)  
-            if self.ldap_session.entries:
-                #output the number of objects found
-                logger.info(f"[+] Found {len(self.ldap_session.entries)} Management Points in LDAP.")
-                for entry in self.ldap_session.entries:
-                    hostname =  entry['dNSHostname']
-                    logger.debug(f"[+] Found Management Point: {hostname}")
-                    self.servers.append(str(hostname).lower())
-
-        except ldap3.core.exceptions.LDAPObjectClassError as e:
-            logger.info(f'[-] Could not find any Management Points published in LDAP')
-
-        #now search for anything related to "SCCM" and build a csv
-        _users = []
-        _computers = []
-        _groups = []
-        yeet = '(|(samaccountname=*sccm*)(samaccountname=*mecm*)(description=*sccm*)(description=*mecm*)(name=*sccm*)(name=*mecm*))'
-        logger.info("[*] Searching LDAP for anything containing the strings 'SCCM'or 'MECM'")
-        try:
-            self.ldap_session.extend.standard.paged_search(self.search_base, 
-                                                           yeet, 
-                                                           attributes="*", 
-                                                           paged_size=500, 
-                                                           generator=False)  
-        except ldap3.core.exceptions.LDAPAttributeError as e:
-            logger.info(f'Error: {str(e)}')
-        if self.ldap_session.entries:
-            USER_DICT = {"cn": "", "sAMAccountName": "", "servicePrincipalName": "", "description": ""}
-            COMPUTER_DICT = {"cn": "", "sAMAccountName": "", "dNSHostName": "", "description": ""}
-            GROUP_DICT = {"cn": "", "name": "", "sAMAccountName": "", "member": "", "description": ""}
-
-            logger.debug(f"[+] Found {len(self.ldap_session.entries)} principals that contain the string 'SCCM' or 'MECM'.")
-            for entry in self.ldap_session.entries:
-
-                #if a user
-                try:
-                    if (entry['sAMAccountType']) == 805306368:
-                        for k, v in USER_DICT.items():
-                            if k in entry:
-                                USER_DICT[k] = str(entry[k].value)
-                        for k, v in USER_DICT.items():
-                            if k =='servicePrincipalName':
-                                j = v.replace("['", "").replace("', '", "\n").replace("']", "")
-                                USER_DICT[k] = j
-                        _users.append(copy.deepcopy(USER_DICT))
-                    # if a computer
-                    if (entry['sAMAccountType']) == 805306369:
-                            for k, v in COMPUTER_DICT.items():
-                                if k in entry:
-                                    COMPUTER_DICT[k] = str(entry[k].value)
-                                #might as well add it to the results list for SMB scanning
-                                dnshostname = entry["dNSHostName"]
-                                if dnshostname and dnshostname not in self.servers:
-                                    print(f"added {dnshostname} to list")
-                                    self.servers.append(str(dnshostname).lower())
-                                #return
-                            _computers.append(copy.deepcopy(COMPUTER_DICT))
-                    #if a group
-                    if (entry['sAMAccountType']) == 268435456:
-                        for k, v in GROUP_DICT.items():
-                            if k in entry:
-                                GROUP_DICT[k] = str(entry[k].value)
-                        for k, v in GROUP_DICT.items():
-                            if k =='member':
-                                #i should learn regex
-                                j = v.replace("', '", "\n").replace("['", "").replace("']", "")
-                                GROUP_DICT[k] = j
-                        dn = (entry['distinguishedname'])
-                        self.recursive_resolution(dn)
-                        
-                        _groups.append(copy.deepcopy(GROUP_DICT))
-                except ldap3.core.exceptions.LDAPAttributeError as e:
-                    logger.debug(f"[-] {e}")
-                except ldap3.core.exceptions.LDAPKeyError as e:
-                    logger.debug(f"[-] {e}")
-        else:
-            logger.info("[-] No SCCM Servers found.")
-
-        self.save_csv(_users, _computers, _groups)
-
-        # show results
-        total_servers = list(set(self.servers))
-        logger.info(f"[*] Found {len(total_servers)} total potential site servers.")
-        if self.debug:
-            for server in total_servers:
-                logger.debug(f"[+] {server}")
-
-        # log results if we found anything
-        if total_servers:
-            filename = "sccmhunter.log"
-            printlog(total_servers, self.logs_dir, filename)
-
-
+    # if a group is discovered rip out all the servers
     def recursive_resolution(self, dn):
             dn = dn
             search_filter = f"(memberOf:1.2.840.113556.1.4.1941:={dn})"
@@ -248,7 +251,6 @@ class SCCMHUNTER:
                 if (i['samaccounttype'] == 805306369):
                     self.servers.append(str(i['dnshostname']).lower())
 
-
     def sid_resolver(self, sids):
         resolved_sids = []
         for sid in sids:
@@ -260,8 +262,6 @@ class SCCMHUNTER:
                                                            generator=False)
             try:
                 for entry in self.ldap_session.entries:
-                    # dig into groups
-                    # could probably make this better
                     if (entry['sAMAccounttype']) == 268435456:                      
                         for member in entry['member']:
                             member = escape_filter_chars(member)
@@ -295,6 +295,11 @@ class SCCMHUNTER:
                 if mask.hasPriv(fullcontrol):
                     sids.append(sid)
         self.sid_resolver(sids)
+
+    def save_json(self, users, computers, groups):
+        if users:
+            with open(f'{self.logs_dir}/csvs/users.json', 'w', newline='') as f:
+                json.dump(users, f)
 
 
     def save_csv(self, users, computers, groups):
