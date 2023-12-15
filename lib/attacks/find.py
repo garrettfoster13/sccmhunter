@@ -35,7 +35,7 @@ class DACLPARSE:
 class DATABASE:
 
     def __init__(self, logs_dir=None):
-        self.database = f"{logs_dir}/db/sccmhunter.db"
+        self.database = f"{logs_dir}/db/find.db"
         self.conn = sqlite3.connect(self.database, check_same_thread=False)
 
 
@@ -103,7 +103,7 @@ class SCCMHUNTER:
         self.servers = []
         self.logs_dir = logs_dir
         self.controls = ldap3.protocol.microsoft.security_descriptor_control(sdflags=0x07)
-        self.database = f"{logs_dir}/db/sccmhunter.db"
+        self.database = f"{logs_dir}/db/find.db"
         self.conn = sqlite3.connect(self.database, check_same_thread=False)
         self.resolved_sids = []
 
@@ -124,16 +124,16 @@ class SCCMHUNTER:
         else:
             self.search_base = get_dn(self.domain)
 
+        #check for AD extension
         self.check_schema()
+        #if they're using DNS only: thoughts and prayers
         self.check_strings()
 
         if self.servers:
             self.results()
 
-
         self.conn.close()
 
-        
     def check_schema(self):
         # Query the ACL Of the System Management container for FULL CONTROL permissions. This container
         # is created during optional extension of the Active Directory schema to allow site servers to publish 
@@ -167,6 +167,7 @@ class SCCMHUNTER:
                 cursor.execute('''SELECT COUNT (Hostname) FROM SiteServers''')
                 count = cursor.fetchone()[0]
                 logger.info(f'[+] Found {count} computers with Full Control ACE')
+                cursor.close()
                 self.check_mps()
             else:
                 logger.info("[-] System Management Container not found.")
@@ -204,9 +205,6 @@ class SCCMHUNTER:
 
     def check_strings(self):
         #now search for anything related to "SCCM" 
-        _users = []
-        _computers = []
-        _groups = []
         yeet = '(|(samaccountname=*sccm*)(samaccountname=*mecm*)(description=*sccm*)(description=*mecm*)(name=*sccm*)(name=*mecm*))'
         logger.info("[*] Searching LDAP for anything containing the strings 'SCCM' or 'MECM'")
         try:
@@ -220,36 +218,25 @@ class SCCMHUNTER:
         
         
         if self.ldap_session.entries:
+            cursor = self.conn.cursor()
             logger.info(f"[+] Found {len(self.ldap_session.entries)} principals that contain the string 'SCCM' or 'MECM'.")
             for entry in self.ldap_session.entries:
-                USER_DICT = {"cn": "", "sAMAccountName": "", "servicePrincipalName": "", "description": ""}
-                COMPUTER_DICT = {"cn": "", "sAMAccountName": "", "dNSHostName": "", "description": ""}
-                GROUP_DICT = {"cn": "", "name": "", "sAMAccountName": "", "member": "", "description": ""}
-                #if a user
                 try:
+                    #add user to db
                     if (entry['sAMAccountType']) == 805306368:
-                        for k, v in USER_DICT.items():
-                            if k in entry:
-                                USER_DICT[k] = str(entry[k].value)
-                        _users.append(USER_DICT)
-                    # if a computer
+                        self.add_user_to_db(entry)
+                    #add computer to db
                     if (entry['sAMAccountType']) == 805306369:
-                        for k, v in COMPUTER_DICT.items():
-                            if k in entry:
-                                COMPUTER_DICT[k] = str(entry[k].value)
-                            # add to potential site servers array
-                            dnshostname = entry["dNSHostName"]
-                            if dnshostname:
-                                self.servers.append(str(dnshostname).lower())
-                        _computers.append(COMPUTER_DICT)
-                    # #if a group
+                        self.add_computer_to_db(entry)
+                    #add group to db and resolve members
                     if (entry['sAMAccountType']) == 268435456:
-                        for k, v in GROUP_DICT.items():
-                            if k in entry:
-                                GROUP_DICT[k] = str(entry[k].value)
                         dn = (entry['distinguishedname'])
-                        self.recursive_resolution(dn)
-                        _groups.append(GROUP_DICT)
+                        results = self.recursive_resolution(dn)
+                        for result in results:
+                            if (result['sAMAccountType']) == 805306368:
+                                self.add_user_to_db(result)
+                            if (result['sAMAccountType']) == 805306369:
+                                self.add_computer_to_db(result)
                 except ldap3.core.exceptions.LDAPAttributeError as e:
                     logger.debug(f"[-] {e}")
                 except ldap3.core.exceptions.LDAPKeyError as e:
@@ -257,7 +244,51 @@ class SCCMHUNTER:
         else:
             logger.info("[-] No results found.")
 
-        self.save_csv(_users, _computers, _groups)
+
+    def add_user_to_db(self, entry):
+        cursor = self.conn.cursor()
+        cn = str(entry['cn']) if 'cn' in entry else ''
+        name = str(entry['name']) if 'name' in entry else ''
+        sam = str(entry['sAMAccountName']) if 'sAMAccountName' in entry else ''
+        spn = str(entry['servicePrincipalName']) if 'servicePrincipalName' in entry else ''
+        description = str(entry['description']) if 'description' in entry else ''
+        cursor.execute('''insert into Users (cn, name, sAMAAccontName, servicePrincipalName, description) values (?,?,?,?,?)''', 
+                        (cn, name,sam,spn,description))
+        return
+    
+    def add_computer_to_db(self, entry):
+        cursor = self.conn.cursor()
+        hostname = str(entry['dNSHostName']) if 'dNSHostName' in entry else ''
+        sitecode = ''
+        signing = ''
+        siteserver = ''
+        mp = ''
+        dp = ''
+        wsus = ''
+        mssql = ''
+        if hostname:
+            self.servers.append(str(hostname).lower())
+        cursor.execute('''insert into Computers (Hostname, SiteCode, SigningStatus, SiteServer, ManagementPoint, DistributionPoint, WSUS, MSSQL) values (?,?,?,?,?,?,?,?)''', 
+                        (hostname, sitecode, signing, siteserver, mp, dp, wsus, mssql))
+        self.conn.commit()
+        return
+
+    # if a group is discovered rip out all the servers
+    def recursive_resolution(self, dn):
+        dn = dn
+        search_filter = f"(memberOf:1.2.840.113556.1.4.1941:={dn})"
+        try:
+            self.ldap_session.extend.standard.paged_search(self.search_base, 
+                                                        search_filter, 
+                                                        attributes="*", 
+                                                        paged_size=500, 
+                                                        generator=False)  
+        except ldap3.core.exceptions.LDAPAttributeError as e:
+            logger.debug(f'Error: {str(e)}')
+        
+
+        results = self.ldap_session.entries
+        return results
 
 
     def results(self):
@@ -294,22 +325,7 @@ class SCCMHUNTER:
             logger.info(f'Error: {str(e)}')
             exit()
 
-    # if a group is discovered rip out all the servers
-    def recursive_resolution(self, dn):
-            dn = dn
-            search_filter = f"(memberOf:1.2.840.113556.1.4.1941:={dn})"
-            try:
-                self.ldap_session.extend.standard.paged_search(self.search_base, 
-                                                            search_filter, 
-                                                            attributes="*", 
-                                                            paged_size=500, 
-                                                            generator=False)  
-            except ldap3.core.exceptions.LDAPAttributeError as e:
-                logger.debug(f'Error: {str(e)}')
-            
-            for i in self.ldap_session.entries:
-                if (i['samaccounttype'] == 805306369):
-                    self.servers.append(str(i['dnshostname']).lower())
+
 
     def sid_resolver(self, sids):
         for sid in sids:
