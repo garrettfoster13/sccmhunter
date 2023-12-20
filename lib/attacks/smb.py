@@ -53,8 +53,11 @@ class SMB:
 
 
     def run(self):
-        #self.check_siteservers()
+        #TODO add check to be sure FIND module was run
+        #TODO add some output to show completions
+        self.check_siteservers()
         self.check_managementpoints()
+        self.check_computers()
         self.conn.close()
 
     def check_siteservers(self):
@@ -76,23 +79,57 @@ class SMB:
                     passive = "True"
                 cursor.execute(f'''Update SiteServers SET SiteCode=?, SigningStatus=?, SiteServer=?, Active=?, Passive=?, MSSQL=? WHERE Hostname=?''',
                                (str(site_code), str(signing), "True", str(active), str(passive), str(mssql), hostname))
-                self.conn.commit()
+            else:
+                cursor.execute(f'''Update SiteServers SET SiteCode=?, SigningStatus=?, SiteServer=?, Active=?, Passive=?, MSSQL=? WHERE Hostname=?''',
+                               ("Connection Failed", "", "True", "", "", "", hostname))
+
+            self.conn.commit()
+        logger.info("[+] Finished profiling Site Servers.")
         cursor.close()
+        tb_ss = dp.read_sql("SELECT * FROM SiteServers WHERE Hostname IS NOT 'Unknown' ", self.conn)
+        logger.info(tabulate(tb_ss, showindex=False, headers=tb_ss.columns, tablefmt='grid'))
         return
-        #used for testing
-        # tb_ss = dp.read_sql("SELECT * FROM SiteServers WHERE Hostname IS NOT 'Unknown' ", self.conn)
-        # logger.info(tabulate(tb_ss, showindex=False, headers=tb_ss.columns, tablefmt='grid'))
-    
+
     def check_managementpoints(self):
         cursor = self.conn.cursor()
         cursor.execute("SELECT Hostname FROM ManagementPoints WHERE Hostname IS NOT 'Unknown'")
         hostnames = cursor.fetchall()
         for i in hostnames:
-            print(i)
+            hostname = i[0]
+            conn = self.smb_connection(hostname)
+            if conn:
+                signing, site_code, siteserv, distp, wsus = self.smb_hunter(hostname, conn)
+                cursor.execute(f'''Update ManagementPoints SET SigningStatus=? WHERE Hostname=?''',
+                               (str(signing), hostname))
+            self.conn.commit()
 
-
-
+        logger.info("[+] Finished profiling Management Points.")
+        cursor.close()
+        tb_mp = dp.read_sql("SELECT * FROM ManagementPoints WHERE Hostname IS NOT 'Unknown' ", self.conn)
+        logger.info(tabulate(tb_mp, showindex=False, headers=tb_mp.columns, tablefmt='grid'))
+        return
     
+    def check_computers(self):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT Hostname FROM Computers WHERE Hostname IS NOT 'Unknown'")
+        hostnames = cursor.fetchall()
+        for i in hostnames:
+            hostname = i[0]
+            conn = self.smb_connection(hostname)
+            if conn:
+                mssql = self.mssql_check(hostname)
+                mp = self.http_check(hostname)
+                signing, site_code, siteserv, distp, wsus = self.smb_hunter(hostname, conn)
+                cursor.execute(f'''Update Computers SET SiteCode=?, SigningStatus=?, SiteServer=?, ManagementPoint=?, DistributionPoint=?, WSUS=?, MSSQL=? WHERE Hostname=?''',
+                               (str(site_code), str(signing), str(siteserv), str(mp), str(distp), str(wsus), str(mssql), hostname))
+            self.conn.commit()
+        logger.info("[+] Finished profiling all discovered computers.")
+        cursor.close()
+        tb_ss = dp.read_sql("SELECT * FROM Computers WHERE Hostname IS NOT 'Unknown' ", self.conn)
+        logger.info(tabulate(tb_ss, showindex=False, headers=tb_ss.columns, tablefmt='grid'))
+        return
+
+
     def read_logs(self, file):
         targets = []
         with open(f"{file}", "r") as f:
@@ -120,7 +157,6 @@ class SMB:
 
     def smb_hunter(self, server, conn):
         pxe_boot_servers = []
-
         try:
             signing = conn.isSigningRequired()
             site_code = 'None'
@@ -188,6 +224,7 @@ class SMB:
                 logger.debug(e)
         conn.logoff()
         
+        #these logs should stay
         if len(downloaded) > 0:
             logger.info("[+] Variables files downloaded!")
             for i in (downloaded):
