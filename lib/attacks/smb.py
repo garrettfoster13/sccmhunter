@@ -1,24 +1,15 @@
 # fix debug output, not seeing enough info "or any info"
 
-from lib.ldap import init_ldap_session
 from lib.logger import logger, printlog
-from lib.attacks.find import SCCMHUNTER
 from impacket.smbconnection import SMBConnection, SessionError
 import ntpath
 import os
-import csv
-import pandas as pd
 from tabulate import tabulate
-from lib.scripts.banner import show_banner
 import socket
 import requests
 from requests.exceptions import RequestException
-import json
 import sqlite3
 import pandas as dp
-
-
-
 
 class SMB:
     
@@ -49,17 +40,18 @@ class SMB:
         self.database = f"{logs_dir}/db/find.db"
         self.conn = sqlite3.connect(self.database, check_same_thread=False)
 
- #create a separate function for MP enum and Site Server enum I think
-
-
     def run(self):
         #TODO add check to be sure FIND module was run
-        #TODO add some output to show completions
         self.check_siteservers()
         self.check_managementpoints()
         self.check_computers()
         self.conn.close()
 
+
+    #treat all computers with full control as siteservers and active
+    #if default file shares are missing implies the use of high availability
+    #which means it's possibly a passive site server that still retains the same
+    #privileges
     def check_siteservers(self):
         cursor = self.conn.cursor()
         cursor.execute("SELECT Hostname FROM SiteServers WHERE Hostname IS NOT 'Unknown'")
@@ -90,6 +82,10 @@ class SMB:
         logger.info(tabulate(tb_ss, showindex=False, headers=tb_ss.columns, tablefmt='grid'))
         return
 
+    #check for signing status on management points
+    #TODO: add http check for http module
+    #TODO: idea is to add a TRUE value if you can reach the expected endpoint so the HTTP module will query 
+    #TODO: for that any of the MPs with a true for the NAA recovery
     def check_managementpoints(self):
         cursor = self.conn.cursor()
         cursor.execute("SELECT Hostname FROM ManagementPoints WHERE Hostname IS NOT 'Unknown'")
@@ -109,6 +105,7 @@ class SMB:
         logger.info(tabulate(tb_mp, showindex=False, headers=tb_mp.columns, tablefmt='grid'))
         return
     
+    #read from computers table created from strings check in LDAP module
     def check_computers(self):
         cursor = self.conn.cursor()
         cursor.execute("SELECT Hostname FROM Computers WHERE Hostname IS NOT 'Unknown'")
@@ -128,14 +125,6 @@ class SMB:
         tb_ss = dp.read_sql("SELECT * FROM Computers WHERE Hostname IS NOT 'Unknown' ", self.conn)
         logger.info(tabulate(tb_ss, showindex=False, headers=tb_ss.columns, tablefmt='grid'))
         return
-
-
-    def read_logs(self, file):
-        targets = []
-        with open(f"{file}", "r") as f:
-            for line in f.readlines():
-                targets.append(line.strip())
-        return targets
     
     def smb_connection(self, server):
         try:
@@ -154,7 +143,7 @@ class SMB:
             logger.info(f"[-] {e}")
             return
 
-
+    #profile remote hosts based on default file shares configured on particular roles
     def smb_hunter(self, server, conn):
         pxe_boot_servers = []
         try:
@@ -193,6 +182,9 @@ class SMB:
             logger.info(f"[-] {e}")
             return
 
+
+    #if a distribution point is found with this directory
+    #spider and search for pxeboot variables files
     def smb_spider(self, conn, targets):
         vars_files = []
         downloaded = []
@@ -272,87 +264,6 @@ class SMB:
         except Exception as e:
             logger.debug("An unknown error occurred")
             logger.debug(e)
-
-#treat all siteservers as true
-#active site servers will have expected file shares when they're stood up
-#passive site servers will not due to remote file share requirements
-    def siteserver_check(self, servers):
-        siteservers = []
-        for i in servers:
-            try:
-                timeout = 10
-                server = str(i)
-                conn = SMBConnection(server, server, None, timeout=timeout)
-                if self.kerberos:
-                    conn.kerberosLogin(user=self.username, password=self.password, domain=self.domain, kdcHost=self.dc_ip)
-                else:
-                    conn.login(user=self.username, password=self.password, domain=self.domain, lmhash=self.lmhash, nthash=self.nthash)
-                logger.debug(f"[+] Connected to smb://{server}:445")
-
-                signing = conn.isSigningRequired()
-                siteserv = True
-                site_code = ''
-                active = False
-                passive = True
-
-                for share in conn.listShares():
-                    remark = share['shi1_remark'][:-1]
-                    name = share['shi1_netname'][:-1]
-                    #default remarks reveal role
-                    if name == "SMS_SITE":
-                        active = True
-                        passive = False
-                        site_code = (remark.split(" ")[-2])
-
-                mssql = self.mssql_check(server)
-
-                siteservers.append({'Hostname': f'{server}', 
-                        'Site Code': f'{site_code}',
-                        'Signing Status': f'{signing}', 
-                        'Site Server' : f'{siteserv}',
-                        'Active' : f'{active}', 
-                        'Passive': f'{passive}',
-                        'MSSQL': f'{mssql}'})
-            except Exception as e:
-                logger.debug(f"[-] {e}")
-        if siteservers:
-            self.save_csv(siteservers, method="siteservers")
-            self.print_table(csv="siteservers")
-
-    def save_csv(self, array, method):
-        if method == "smbhunter":
-            fields = ["Hostname", "Site Code", "Signing Status","Site Server", "Distribution Point", "Management Point", "WSUS", "MSSQL"]
-            filename = "smbhunter.csv"
-        if method == "siteservers":
-            fields = ["Hostname", "Site Code", "Signing Status","Site Server", "Active", "Passive", "MSSQL"]
-            filename = "siteservers.csv"
-        if method == "mps":
-            fields = ["Hostname", "Site Code", "Signing Status"]
-            filename = "mps.csv"
-
-        with open(f'{self.logs_dir}/csvs/{filename}', 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=fields)
-            writer.writeheader()
-            writer.writerows(array)
-        f.close()
-        
-    
-    def print_table(self, csv):
-        if csv == "smbhunter":
-            df = pd.read_csv(f"{self.logs_dir}/csvs/smbhunter.csv").fillna("None")
-            logger.info("[*] SMBHunter Results:")
-        if csv == "siteservers":
-            df = pd.read_csv(f"{self.logs_dir}/csvs/siteservers.csv").fillna("None")
-            logger.info("[*] Site Server Results:")
-        if csv == "mps":
-            with open (f"{self.logs_dir}/mps.json") as f:
-                data = json.load(f)
-                df = pd.read_json(data).T.drop(index="dn")
-                df.replace("['", '').replace("']", '')
-            logger.info("[*] Management Point Results:")
-        logger.info(tabulate(df, headers = 'keys', tablefmt = 'grid'))
-        logger.info(f'Results saved to {self.logs_dir}/csvs/')
-        return
 
     def printlog(self, servers):
         filename = (f'{self.logs_dir}/smbhunter.log')

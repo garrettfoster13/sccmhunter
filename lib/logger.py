@@ -21,6 +21,7 @@ def prep_logs():
     logs_dir = f'{save_dir}/logs'
     loot_dir = f'{logs_dir}/loot'
     csv_dir = f'{logs_dir}/csvs'
+    json_dir = f'{logs_dir}/json'
     db_dir = f'{logs_dir}/db'
     if not os.path.isdir(save_dir):
         logger.info("[!] First time use detected.")
@@ -32,6 +33,8 @@ def prep_logs():
         os.mkdir(loot_dir)
     if not os.path.isdir(csv_dir):
         os.mkdir(csv_dir)
+    if not os.path.isdir(json_dir):
+        os.mkdir(json_dir)
     if not os.path.isdir(db_dir):
         os.mkdir(db_dir)
         with open(f'{db_dir}/sccmhunter.db', 'w') as fp:
