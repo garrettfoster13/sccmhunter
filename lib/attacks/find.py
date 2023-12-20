@@ -269,6 +269,7 @@ class SCCMHUNTER:
         else:
             cursor.execute('''insert into Users (cn, name, sAMAAccontName, servicePrincipalName, description) values (?,?,?,?,?)''', 
                         (cn, name,sam,spn,description))
+        self.conn.commit()
         return
     
     def add_computer_to_db(self, entry):
