@@ -3,7 +3,7 @@
 from lib.ldap import init_ldap_session
 from lib.logger import logger, printlog
 from lib.attacks.find import SCCMHUNTER
-from impacket.smbconnection import SMBConnection
+from impacket.smbconnection import SMBConnection, SessionError
 import ntpath
 import os
 import csv
@@ -14,6 +14,8 @@ import socket
 import requests
 from requests.exceptions import RequestException
 import json
+import sqlite3
+import pandas as dp
 
 
 
@@ -44,117 +46,116 @@ class SMB:
         self.nthash = ""
         if self.hashes:
             self.lmhash, self.nthash = self.hashes.split(':')
+        self.database = f"{logs_dir}/db/find.db"
+        self.conn = sqlite3.connect(self.database, check_same_thread=False)
 
  #create a separate function for MP enum and Site Server enum I think
 
 
     def run(self):
-        logfiles = [
-            "siteservers.log",
-            "sccmhunter.log",
-            "mps.json"
-        ]
-        for logfile in logfiles:
-            path = f"{self.logs_dir}/{logfile}"
+        #self.check_siteservers()
+        self.check_managementpoints()
+        self.conn.close()
 
-            if os.path.exists(path):
-                try:
-                    logger.info(f"[+] Found targets from {logfile} logfile.")
-                    targets = self.read_logs(path)
-                    if logfile == "siteservers.log":
-                        self.siteserver_check(targets)
-                    if logfile == "sccmhunter.log":
-                        self.smb_hunter(targets)
-                    if logfile == "mps.json":
-                        self.print_table("mps")
-                except Exception as e:
-                    logger.info(f"{e}")
-            else:
-                logger.info(f"[-] Necessary {logfile} file not found. Run the find module prior to SMB usage.")
-                print(path)
-                # logger.info("[-] Existing log file not found, searching LDAP for site servers.")
-                # sccmhunter = SCCMHUNTER(username=self.username, password=self.password, domain=self.domain, 
-                #                         target_dom=self.target_dom, dc_ip=self.dc_ip,ldaps=self.ldaps,
-                #                         kerberos=self.kerberos, no_pass=self.no_pass, hashes=self.hashes, 
-                #                         aes=self.aes, debug=self.debug, logs_dir=self.logs_dir)
-                # sccmhunter.run()
-                # self.run()
+    def check_siteservers(self):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT Hostname FROM SiteServers WHERE Hostname IS NOT 'Unknown'")
+        hostnames = cursor.fetchall()
+        for i in hostnames:
+            hostname = (i[0])
+            #only enumerate if the host is reachable
+            conn = self.smb_connection(hostname)
+            if conn:
+                signing, site_code, siteserv, distp, wsus = self.smb_hunter(hostname, conn)
+                mssql = self.mssql_check(hostname)
+                if siteserv:
+                    active = "True" 
+                    passive = "False"
+                else:
+                    active = "False"
+                    passive = "True"
+                cursor.execute(f'''Update SiteServers SET SiteCode=?, SigningStatus=?, SiteServer=?, Active=?, Passive=?, MSSQL=? WHERE Hostname=?''',
+                               (str(site_code), str(signing), "True", str(active), str(passive), str(mssql), hostname))
+                self.conn.commit()
+        cursor.close()
+        return
+        #used for testing
+        # tb_ss = dp.read_sql("SELECT * FROM SiteServers WHERE Hostname IS NOT 'Unknown' ", self.conn)
+        # logger.info(tabulate(tb_ss, showindex=False, headers=tb_ss.columns, tablefmt='grid'))
+    
+    def check_managementpoints(self):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT Hostname FROM ManagementPoints WHERE Hostname IS NOT 'Unknown'")
+        hostnames = cursor.fetchall()
+        for i in hostnames:
+            print(i)
 
+
+
+    
     def read_logs(self, file):
         targets = []
         with open(f"{file}", "r") as f:
             for line in f.readlines():
                 targets.append(line.strip())
         return targets
+    
+    def smb_connection(self, server):
+        try:
+            timeout = 10
+            conn = SMBConnection(server, server, None, timeout=timeout)
+            if self.kerberos:
+                conn.kerberosLogin(user=self.username, password=self.password, domain=self.domain, kdcHost=self.dc_ip)
+            else:
+                conn.login(user=self.username, password=self.password, domain=self.domain, lmhash=self.lmhash, nthash=self.nthash)
+            logger.debug(f"[+] Connected to smb://{server}:445")
+            return conn
+        except socket.error:
+            logger.debug(f"[-] Error connecting to smb://{server}:445")
+            return
+        except Exception as e:
+            logger.info(f"[-] {e}")
+            return
 
-    def smb_hunter(self, servers):
+
+    def smb_hunter(self, server, conn):
         pxe_boot_servers = []
-        for i in servers:
-            try:
-                timeout = 10
-                server = str(i)
-                # might need some DNS resolution here for site servers
-                conn = SMBConnection(server, server, None, timeout=timeout)
-                # need to setup kerberos authentication here too...
-                if self.kerberos:
-                    #kerberosLogin(username, password, domain, lmhash, nthash, options.aesKey, options.dc_ip )
-                    conn.kerberosLogin(user=self.username, password=self.password, domain=self.domain, kdcHost=self.dc_ip)
-                else:
-                    conn.login(user=self.username, password=self.password, domain=self.domain, lmhash=self.lmhash, nthash=self.nthash)
-                logger.debug(f"[+] Connected to smb://{server}:445")
 
-                signing = conn.isSigningRequired()
-                site_code = ''
-                siteserv = False
-                dp = False
-                wsus = False
-
-                for share in conn.listShares():
-                    remark = share['shi1_remark'][:-1]
-                    name = share['shi1_netname'][:-1]
-                    #default remarks reveal role
-                    if name == "SMS_DP$" and "SMS Site" in remark:
-                        siteserv=False
-                        dp = True
-                        site_code = (remark.split(" ")[-3])
-                    if name == "SMS_SITE":
-                        siteserv = True
-                        dp = True
-                        site_code = (remark.split(" ")[-2])
-                    if name =="REMINST":
-                        check = conn.listPath(shareName="REMINST", path="SMSTemp//*")
-                        if "STATUS_OBJECT_NAME_NOT_FOUND" not in check:
-                            pxe_boot_servers.append(server)
-                    if name == "WsusContent":
-                        wsus = True
-
-                #check for 1433 open
-                mssql = self.mssql_check(server)
-
-                #check for SMS_MP endpoint via http(s)
-                mp = self.http_check(server)
-
-                #add results to array
-                self.test_array.append({'Hostname': f'{server}', 
-                                        'Site Code': f'{site_code}',
-                                        'Signing Status': f'{signing}', 
-                                        'Site Server' : f'{siteserv}', 
-                                        'Distribution Point': f'{dp}',
-                                        'Management Point': f'{mp}',
-                                        'WSUS': f'{wsus}',
-                                        'MSSQL': f'{mssql}'})
-        
-            except Exception as e:
-                logger.debug(f"[-] {e}")
-
-        # spider and save the paths of variables files if discovered with optional save
-        if pxe_boot_servers:
-            self.smb_spider(conn, pxe_boot_servers)
-        #save and print the results
-        if self.test_array:
-            self.save_csv(self.test_array, method="smbhunter")
-            self.print_table(csv="smbhunter")
-        return
+        try:
+            signing = conn.isSigningRequired()
+            site_code = 'None'
+            siteserv = False
+            distp = False
+            wsus = False
+            
+            for share in conn.listShares():
+                remark = share['shi1_remark'][:-1]
+                name = share['shi1_netname'][:-1]
+                #default remarks reveal role
+                if name == "SMS_DP$" and "SMS Site" in remark:
+                    siteserv=False
+                    distp = True
+                    site_code = (remark.split(" ")[-3])
+                if name == "SMS_SITE":
+                    siteserv = True
+                    distp = True
+                    site_code = (remark.split(" ")[-2])
+                if name =="REMINST":
+                    check = conn.listPath(shareName="REMINST", path="SMSTemp//*")
+                    if "STATUS_OBJECT_NAME_NOT_FOUND" not in check:
+                        pxe_boot_servers.append(server)
+                if name == "WsusContent":
+                    wsus = True
+            # spider and save the paths of variables files if discovered with optional save
+            if pxe_boot_servers:
+                self.smb_spider(conn, pxe_boot_servers)
+            return signing, site_code, siteserv, distp, wsus
+        except socket.error:
+            logger.info(socket.error)
+            return
+        except Exception as e:
+            logger.info(f"[-] {e}")
+            return
 
     def smb_spider(self, conn, targets):
         vars_files = []
