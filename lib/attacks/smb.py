@@ -56,30 +56,33 @@ class SMB:
         cursor = self.conn.cursor()
         cursor.execute("SELECT Hostname FROM SiteServers WHERE Hostname IS NOT 'Unknown'")
         hostnames = cursor.fetchall()
-        for i in hostnames:
-            hostname = (i[0])
-            #only enumerate if the host is reachable
-            conn = self.smb_connection(hostname)
-            if conn:
-                signing, site_code, siteserv, distp, wsus = self.smb_hunter(hostname, conn)
-                mssql = self.mssql_check(hostname)
-                if siteserv:
-                    active = "True" 
-                    passive = "False"
+        if hostnames:
+            for i in hostnames:
+                hostname = (i[0])
+                #only enumerate if the host is reachable
+                conn = self.smb_connection(hostname)
+                if conn:
+                    signing, site_code, siteserv, distp, wsus = self.smb_hunter(hostname, conn)
+                    mssql = self.mssql_check(hostname)
+                    if siteserv:
+                        active = "True" 
+                        passive = "False"
+                    else:
+                        active = "False"
+                        passive = "True"
+                    cursor.execute(f'''Update SiteServers SET SiteCode=?, SigningStatus=?, SiteServer=?, Active=?, Passive=?, MSSQL=? WHERE Hostname=?''',
+                                (str(site_code), str(signing), "True", str(active), str(passive), str(mssql), hostname))
                 else:
-                    active = "False"
-                    passive = "True"
-                cursor.execute(f'''Update SiteServers SET SiteCode=?, SigningStatus=?, SiteServer=?, Active=?, Passive=?, MSSQL=? WHERE Hostname=?''',
-                               (str(site_code), str(signing), "True", str(active), str(passive), str(mssql), hostname))
-            else:
-                cursor.execute(f'''Update SiteServers SET SiteCode=?, SigningStatus=?, SiteServer=?, Active=?, Passive=?, MSSQL=? WHERE Hostname=?''',
-                               ("Connection Failed", "", "True", "", "", "", hostname))
+                    cursor.execute(f'''Update SiteServers SET SiteCode=?, SigningStatus=?, SiteServer=?, Active=?, Passive=?, MSSQL=? WHERE Hostname=?''',
+                                ("Connection Failed", "", "True", "", "", "", hostname))
 
-            self.conn.commit()
-        logger.info("[+] Finished profiling Site Servers.")
-        cursor.close()
-        tb_ss = dp.read_sql("SELECT * FROM SiteServers WHERE Hostname IS NOT 'Unknown' ", self.conn)
-        logger.info(tabulate(tb_ss, showindex=False, headers=tb_ss.columns, tablefmt='grid'))
+                self.conn.commit()
+            logger.info("[+] Finished profiling Site Servers.")
+            cursor.close()
+            tb_ss = dp.read_sql("SELECT * FROM SiteServers WHERE Hostname IS NOT 'Unknown' ", self.conn)
+            logger.info(tabulate(tb_ss, showindex=False, headers=tb_ss.columns, tablefmt='grid'))
+        else:
+            logger.info("[-] No SiteServers found in database.")
         return
 
     #check for signing status on management points
@@ -90,41 +93,57 @@ class SMB:
         cursor = self.conn.cursor()
         cursor.execute("SELECT Hostname FROM ManagementPoints WHERE Hostname IS NOT 'Unknown'")
         hostnames = cursor.fetchall()
-        for i in hostnames:
-            hostname = i[0]
-            conn = self.smb_connection(hostname)
-            if conn:
-                signing, site_code, siteserv, distp, wsus = self.smb_hunter(hostname, conn)
-                cursor.execute(f'''Update ManagementPoints SET SigningStatus=? WHERE Hostname=?''',
-                               (str(signing), hostname))
-            self.conn.commit()
+        if hostnames:
+            for i in hostnames:
+                hostname = i[0]
+                conn = self.smb_connection(hostname)
+                if conn:
+                    signing, site_code, siteserv, distp, wsus = self.smb_hunter(hostname, conn)
+                    cursor.execute(f'''Update ManagementPoints SET SigningStatus=? WHERE Hostname=?''',
+                                (str(signing), hostname))
+                self.conn.commit()
 
-        logger.info("[+] Finished profiling Management Points.")
-        cursor.close()
-        tb_mp = dp.read_sql("SELECT * FROM ManagementPoints WHERE Hostname IS NOT 'Unknown' ", self.conn)
-        logger.info(tabulate(tb_mp, showindex=False, headers=tb_mp.columns, tablefmt='grid'))
-        return
+            logger.info("[+] Finished profiling Management Points.")
+            cursor.close()
+            tb_mp = dp.read_sql("SELECT * FROM ManagementPoints WHERE Hostname IS NOT 'Unknown' ", self.conn)
+            logger.info(tabulate(tb_mp, showindex=False, headers=tb_mp.columns, tablefmt='grid'))
+            return
+        else:
+            logger.info("[-] No Management Points found in database.")
     
     #read from computers table created from strings check in LDAP module
     def check_computers(self):
         cursor = self.conn.cursor()
         cursor.execute("SELECT Hostname FROM Computers WHERE Hostname IS NOT 'Unknown'")
         hostnames = cursor.fetchall()
-        for i in hostnames:
-            hostname = i[0]
-            conn = self.smb_connection(hostname)
-            if conn:
-                mssql = self.mssql_check(hostname)
-                mp = self.http_check(hostname)
-                signing, site_code, siteserv, distp, wsus = self.smb_hunter(hostname, conn)
-                cursor.execute(f'''Update Computers SET SiteCode=?, SigningStatus=?, SiteServer=?, ManagementPoint=?, DistributionPoint=?, WSUS=?, MSSQL=? WHERE Hostname=?''',
-                               (str(site_code), str(signing), str(siteserv), str(mp), str(distp), str(wsus), str(mssql), hostname))
-            self.conn.commit()
-        logger.info("[+] Finished profiling all discovered computers.")
-        cursor.close()
-        tb_ss = dp.read_sql("SELECT * FROM Computers WHERE Hostname IS NOT 'Unknown' ", self.conn)
-        logger.info(tabulate(tb_ss, showindex=False, headers=tb_ss.columns, tablefmt='grid'))
-        return
+        if hostnames:
+            for i in hostnames:
+                hostname = i[0]
+                conn = self.smb_connection(hostname)
+                if conn:
+                    mssql = self.mssql_check(hostname)
+                    mp = self.http_check(hostname)
+                    signing, site_code, siteserv, distp, wsus = self.smb_hunter(hostname, conn)
+                    if site_code == 'None':
+                        try:
+                            cursor.execute(f"SELECT SiteCode FROM ManagementPoints WHERE Hostname IS '{hostname}'")
+                            result = cursor.fetchall()
+                            if not result:
+                                site_code = 'None'
+                            else:
+                                site_code = result[0][0]
+                        except:
+                            pass
+                    cursor.execute(f'''Update Computers SET SiteCode=?, SigningStatus=?, SiteServer=?, ManagementPoint=?, DistributionPoint=?, WSUS=?, MSSQL=? WHERE Hostname=?''',
+                                (str(site_code), str(signing), str(siteserv), str(mp), str(distp), str(wsus), str(mssql), hostname))
+                self.conn.commit()
+            logger.info("[+] Finished profiling all discovered computers.")
+            cursor.close()
+            tb_ss = dp.read_sql("SELECT * FROM Computers WHERE Hostname IS NOT 'Unknown' ", self.conn)
+            logger.info(tabulate(tb_ss, showindex=False, headers=tb_ss.columns, tablefmt='grid'))
+            return
+        else:
+            logger.info("[-] No computers found in database.")
     
     def smb_connection(self, server):
         try:

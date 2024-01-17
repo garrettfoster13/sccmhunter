@@ -8,6 +8,7 @@ import requests
 import getpass
 import random
 import string
+import sqlite3
 import ldap3
 import sys
 import os
@@ -38,17 +39,18 @@ class HTTP:
         self.computer_pass = computer_pass
         self.targets = []
         self.logs_dir = logs_dir
+        self.database = f"{logs_dir}/db/find.db"
+        self.conn = sqlite3.connect(self.database, check_same_thread=False)
 
  
     def run(self):
-        logfile = f"{os.path.expanduser('~')}/.sccmhunter/logs/sccmhunter.log"
-        if os.path.exists(logfile):
-            logger.info("[*] Found targets from logfile.")
-            targets = self.read_logs(logfile)
+        if os.path.exists(self.database):
+            logger.info("[*] Searching for Management Points from database.")
+            targets = self.conn.execute(f'''select Hostname FROM ManagementPoints''').fetchall()
             self.targets = self.http_hunter(targets)
             self.autopwn()
         else:
-            logger.info("Log file not found, searching LDAP for site servers.")
+            logger.info("Database file not found, searching LDAP for site servers.")
             sccmhunter = SCCMHUNTER(username=self.username, password=self.password, domain=self.domain, 
                                     target_dom=self.target_dom, dc_ip=self.dc_ip,ldaps=self.ldaps,
                                     kerberos=self.kerberos, no_pass=self.no_pass, hashes=self.hashes, 
@@ -79,37 +81,28 @@ class HTTP:
             logger.info("[-] Missing machine account credentials, check your arguments and try again.")
             sys.exit()
 
-        for target in self.targets:
-            target_name = self.computer_name[:-1]
-            target_fqdn = f'{target_name}.{self.domain}'
-            try:
-                logger.info(f"[*] Atempting to grab policy from {target}")
-                SCCMWTF=SCCMTools(target_name, target_fqdn, target, self.computer_name, self.computer_pass, self.logs_dir)
-                SCCMWTF.sccmwtf_run()
-            except Exception as e:
-                print(e)
-
-    def read_logs(self, logfile):
-        targets = []
-        with open(f"{logfile}", "r") as f:
-            for line in f.readlines():
-                targets.append(line.strip())
-        return targets
-    
+        result = False
+        while not result:
+            for target in self.targets:
+                target_name = self.computer_name[:-1]
+                target_fqdn = f'{target_name}.{self.domain}'
+                try:
+                    logger.info(f"[*] Atempting to grab policy from {target}")
+                    SCCMWTF=SCCMTools(target_name, target_fqdn, target, self.computer_name, self.computer_pass, self.logs_dir)
+                    result = SCCMWTF.sccmwtf_run()
+                    break
+                except Exception as e:
+                    logger.info(e)
 
     def http_hunter(self, servers):
         validated = []                   
         for server in servers:
+            server = server[0]
             url=(f"http://{server}/ccm_system_windowsauth")
-            url2=(f"http://{server}/ccm_system/")
             try:
                 x = requests.get(url, timeout=5)
-                x2 = requests.get(url2,timeout=5)
                 if x.status_code == 401:
                     logger.info(f"[+] Found {url}")
-                    validated.append(server)
-                if x2.status_code == 403:
-                    logger.info(f"[+] Found {url2}")
                     validated.append(server)
             except requests.exceptions.Timeout:
                 logger.info(f"[-] {server} connection timed out.")

