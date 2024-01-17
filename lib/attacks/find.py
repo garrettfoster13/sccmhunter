@@ -1,6 +1,3 @@
-#improvement ideas:
-#make the list of site servers a set
-
 from getpass import getpass
 from impacket.ldap.ldaptypes import SR_SECURITY_DESCRIPTOR
 from ldap3.utils.conv import escape_filter_chars
@@ -36,11 +33,11 @@ class DATABASE:
     def run(self):
         db_ready = self.validate_tables()
         if db_ready:
-            logger.debug("[*] Database built.")
+            logger.debug("[*] Database ready.")
             return True
         
     def validate_tables(self):
-        table_names = ["SiteServers", "ManagementPoints", "Users", "Groups", "Computers"]
+        table_names = ["SiteServers", "ManagementPoints", "Users", "Groups", "Computers", "Creds"]
         try:
             for table_name in table_names:
                 validated = self.conn.execute(f'''select name FROM sqlite_master WHERE type=\'table\' and name =\'{table_name}\'
@@ -54,13 +51,13 @@ class DATABASE:
             exit()
 
     def build_tables(self):
-        logger.debug("[*] First time run detected. Building database")
         try:
             self.conn.execute('''CREATE TABLE SiteServers(Hostname, SiteCode, SigningStatus, SiteServer, Active, Passive, MSSQL)''')
             self.conn.execute('''CREATE TABLE ManagementPoints(Hostname, SiteCode, SigningStatus)''')
             self.conn.execute('''CREATE TABLE Users(cn, name, sAMAAccontName, servicePrincipalName, description)''')
             self.conn.execute('''CREATE TABLE Groups(cn, name, sAMAAccontName, member, description)''')
             self.conn.execute('''CREATE TABLE Computers(Hostname, SiteCode, SigningStatus, SiteServer, ManagementPoint, DistributionPoint, WSUS, MSSQL)''')
+            self.conn.execute('''CREATE TABLE Creds(Username, Password, Source)''')
         except Exception as e:
             logger.info(f"{e}")
         finally:
@@ -92,7 +89,6 @@ class SCCMHUNTER:
         self.debug = debug
         self.ldap_session = None
         self.search_base = None
-        self.servers = []
         self.logs_dir = logs_dir
         self.controls = ldap3.protocol.microsoft.security_descriptor_control(sdflags=0x07)
         self.database = f"{logs_dir}/db/find.db"
@@ -183,7 +179,6 @@ class SCCMHUNTER:
                 for entry in self.ldap_session.entries:
                     hostname =  str(entry['dNSHostname']).lower()
                     sitecode = str(entry['msSMSSitecode'])
-                    self.servers.append(str(hostname).lower())
                     cursor.execute(f'''insert into ManagementPoints (Hostname, SiteCode, SigningStatus) values (?,?,?)''',
                                    (hostname, sitecode, '')) 
                     self.conn.commit()
@@ -217,7 +212,7 @@ class SCCMHUNTER:
                         #add computer to db
                         if (entry['sAMAccountType']) == 805306369:
                             self.add_computer_to_db(entry)
-                        #add group to db and resolve members
+                        #add group to db and then resolve members
                         if (entry['sAMAccountType']) == 268435456:
                             self.add_group_to_db(entry)
                             dn = (entry['distinguishedname'])
@@ -247,12 +242,10 @@ class SCCMHUNTER:
         description = str(entry['description']) if 'description' in entry else ''
         cursor.execute('''select * from Groups where name = ?''', (name,))
         exists = cursor.fetchone()
-        if exists:
-            pass
-        else:
+        if not exists:
             cursor.execute('''insert into Groups (cn, name, sAMAAccontName, member, description) values (?,?,?,?,?)''', 
                         (cn, name,sam,member,description))
-        self.conn.commit()
+            self.conn.commit()
         return
 
     def add_user_to_db(self, entry):
@@ -264,12 +257,10 @@ class SCCMHUNTER:
         description = str(entry['description']) if 'description' in entry else ''
         cursor.execute('''select * from Users where name = ?''', (name,))
         exists = cursor.fetchone()
-        if exists:
-            pass
-        else:
+        if not exists:
             cursor.execute('''insert into Users (cn, name, sAMAAccontName, servicePrincipalName, description) values (?,?,?,?,?)''', 
                         (cn, name,sam,spn,description))
-        self.conn.commit()
+            self.conn.commit()
         return
     
     def add_computer_to_db(self, entry):
@@ -282,16 +273,12 @@ class SCCMHUNTER:
         dp = ''
         wsus = ''
         mssql = ''
-        if hostname:
-            self.servers.append(str(hostname).lower())
         cursor.execute('''select * from Computers where Hostname = ?''', (hostname,))
         exists = cursor.fetchone()
-        if exists:
-            pass
-        else:
+        if not exists:
             cursor.execute('''insert into Computers (Hostname, SiteCode, SigningStatus, SiteServer, ManagementPoint, DistributionPoint, WSUS, MSSQL) values (?,?,?,?,?,?,?,?)''', 
                         (hostname, sitecode, signing, siteserver, mp, dp, wsus, mssql))
-        self.conn.commit()
+            self.conn.commit()
         return
 
     #resolve all group members

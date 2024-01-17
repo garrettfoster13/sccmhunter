@@ -31,7 +31,6 @@ class SHOW:
                 tb_ss.to_csv(f"{self.logs_dir}/csvs/siteservers.csv", encoding='utf-8')
             if self.json:
                 tb_ss.to_json(f"{self.logs_dir}/json/siteservers.json")
-
         if self.management_points or self.all:
             logger.info("[+] Showing ManagementPoints Table")
             tb_mp = dp.read_sql("SELECT * FROM ManagementPoints WHERE Hostname IS NOT 'Unknown'", self.conn)
