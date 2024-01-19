@@ -63,15 +63,18 @@ class SMB:
                 conn = self.smb_connection(hostname)
                 if conn:
                     signing, site_code, siteserv, distp, wsus = self.smb_hunter(hostname, conn)
+                    #check if mssql is self hosted
                     mssql = self.mssql_check(hostname)
+                    #check for SMS provider roles
+                    provider = self.provider_check(hostname)
                     if siteserv:
                         active = "True" 
                         passive = "False"
                     else:
                         active = "False"
                         passive = "True"
-                    cursor.execute(f'''Update SiteServers SET SiteCode=?, SigningStatus=?, SiteServer=?, Active=?, Passive=?, MSSQL=? WHERE Hostname=?''',
-                                (str(site_code), str(signing), "True", str(active), str(passive), str(mssql), hostname))
+                    cursor.execute(f'''Update SiteServers SET SiteCode=?, SigningStatus=?, SiteServer=?, SMSProvider=?, Active=?, Passive=?, MSSQL=? WHERE Hostname=?''',
+                                (str(site_code), str(signing), "True", str(provider), str(active), str(passive), str(mssql), hostname))
                 else:
                     cursor.execute(f'''Update SiteServers SET SiteCode=?, SigningStatus=?, SiteServer=?, Active=?, Passive=?, MSSQL=? WHERE Hostname=?''',
                                 ("Connection Failed", "", "True", "", "", "", hostname))
@@ -86,9 +89,6 @@ class SMB:
         return
 
     #check for signing status on management points
-    #TODO: add http check for http module
-    #TODO: idea is to add a TRUE value if you can reach the expected endpoint so the HTTP module will query 
-    #TODO: for that any of the MPs with a true for the NAA recovery
     def check_managementpoints(self):
         cursor = self.conn.cursor()
         cursor.execute("SELECT Hostname FROM ManagementPoints WHERE Hostname IS NOT 'Unknown'")
@@ -123,6 +123,7 @@ class SMB:
                 if conn:
                     mssql = self.mssql_check(hostname)
                     mp = self.http_check(hostname)
+                    provider = self.provider_check(hostname)
                     signing, site_code, siteserv, distp, wsus = self.smb_hunter(hostname, conn)
                     if site_code == 'None':
                         try:
@@ -134,8 +135,8 @@ class SMB:
                                 site_code = result[0][0]
                         except:
                             pass
-                    cursor.execute(f'''Update Computers SET SiteCode=?, SigningStatus=?, SiteServer=?, ManagementPoint=?, DistributionPoint=?, WSUS=?, MSSQL=? WHERE Hostname=?''',
-                                (str(site_code), str(signing), str(siteserv), str(mp), str(distp), str(wsus), str(mssql), hostname))
+                    cursor.execute(f'''Update Computers SET SiteCode=?, SigningStatus=?, SiteServer=?, ManagementPoint=?, DistributionPoint=?, SMSProvider=?, WSUS=?, MSSQL=? WHERE Hostname=?''',
+                                (str(site_code), str(signing), str(siteserv), str(mp), str(distp), str(provider), str(wsus), str(mssql), hostname))
                 self.conn.commit()
             logger.info("[+] Finished profiling all discovered computers.")
             cursor.close()
@@ -165,6 +166,9 @@ class SMB:
     #profile remote hosts based on default file shares configured on particular roles
     def smb_hunter(self, server, conn):
         pxe_boot_servers = []
+        primary_shares = ["SMS_SITE", "EasySetupPayload", "AdminUIContentPayload"]
+        passive_shares = ["SMS_SITE", "SMS_SUIAgent"]
+
         try:
             signing = conn.isSigningRequired()
             site_code = 'None'
@@ -172,17 +176,24 @@ class SMB:
             distp = False
             wsus = False
             
+            shares = conn.listShares()
+            sharenames = [share['shi1_netname'][:-1] for share in shares]
+            active_check = all(name in sharenames for name in primary_shares)
+            passive_check = all(name in sharenames for name in passive_shares)
+
+            if active_check and passive_check:
+                siteserv = True
+            elif passive_check and not active_check:
+                siteserv = False
+
             for share in conn.listShares():
                 remark = share['shi1_remark'][:-1]
                 name = share['shi1_netname'][:-1]
                 #default remarks reveal role
                 if name == "SMS_DP$" and "SMS Site" in remark:
-                    siteserv=False
                     distp = True
                     site_code = (remark.split(" ")[-3])
                 if name == "SMS_SITE":
-                    siteserv = True
-                    distp = True
                     site_code = (remark.split(" ")[-2])
                 if name =="REMINST":
                     check = conn.listPath(shareName="REMINST", path="SMSTemp//*")
@@ -283,6 +294,27 @@ class SMB:
         except Exception as e:
             logger.debug("An unknown error occurred")
             logger.debug(e)
+
+#check if the target host is hosting the adminservice api 
+#intention here is to return whether the host is hosting the SMS 
+#Provider role
+    def provider_check(self, server):
+        try:
+            endpoint = f"https://{server}/adminservice/wmi/"
+            r = requests.request("GET",
+                                endpoint,
+                                verify=False)
+            if r.status_code == 401:
+                return True
+            else:
+                return False
+        except RequestException as e:
+            logger.debug(e)
+            return False
+        except Exception as e:
+            logger.debug("An unknown error occurred")
+            logger.debug(e)
+        return
 
     def printlog(self, servers):
         filename = (f'{self.logs_dir}/smbhunter.log')

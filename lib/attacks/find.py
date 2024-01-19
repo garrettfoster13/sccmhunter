@@ -52,11 +52,11 @@ class DATABASE:
 
     def build_tables(self):
         try:
-            self.conn.execute('''CREATE TABLE SiteServers(Hostname, SiteCode, SigningStatus, SiteServer, Active, Passive, MSSQL)''')
+            self.conn.execute('''CREATE TABLE SiteServers(Hostname, SiteCode, SigningStatus, SiteServer, SMSProvider, Active, Passive, MSSQL)''')
             self.conn.execute('''CREATE TABLE ManagementPoints(Hostname, SiteCode, SigningStatus)''')
             self.conn.execute('''CREATE TABLE Users(cn, name, sAMAAccontName, servicePrincipalName, description)''')
             self.conn.execute('''CREATE TABLE Groups(cn, name, sAMAAccontName, member, description)''')
-            self.conn.execute('''CREATE TABLE Computers(Hostname, SiteCode, SigningStatus, SiteServer, ManagementPoint, DistributionPoint, WSUS, MSSQL)''')
+            self.conn.execute('''CREATE TABLE Computers(Hostname, SiteCode, SigningStatus, SiteServer, ManagementPoint, DistributionPoint, SMSProvider, WSUS, MSSQL)''')
             self.conn.execute('''CREATE TABLE Creds(Username, Password, Source)''')
         except Exception as e:
             logger.info(f"{e}")
