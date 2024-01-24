@@ -1,15 +1,16 @@
 # fix debug output, not seeing enough info "or any info"
 
-from lib.logger import logger, printlog
 from impacket.smbconnection import SMBConnection, SessionError
+from lib.logger import logger, printlog
+from requests.exceptions import RequestException
+from tabulate import tabulate
+from getpass import getpass
 import ntpath
 import os
-from tabulate import tabulate
-import socket
-import requests
-from requests.exceptions import RequestException
-import sqlite3
 import pandas as dp
+import requests
+import socket
+import sqlite3
 
 class SMB:
     
@@ -148,6 +149,8 @@ class SMB:
     
     def smb_connection(self, server):
         try:
+            if not (self.password or self.hashes or self.aes or self.no_pass):
+                self.password = getpass("Password:")
             timeout = 10
             conn = SMBConnection(server, server, None, timeout=timeout)
             if self.kerberos:
