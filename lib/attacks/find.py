@@ -74,13 +74,14 @@ class DATABASE:
 class SCCMHUNTER:
     
     def __init__(self, username=None, password=None, domain=None, target_dom=None, 
-                 dc_ip=None,ldaps=False, kerberos=False, no_pass=False, hashes=None, 
+                 dc_ip=None, resolve=False, ldaps=False, kerberos=False, no_pass=False, hashes=None, 
                  aes=None, debug=False, logs_dir = None):
         self.username = username
         self.password= password
         self.domain = domain
         self.target_dom = target_dom
         self.dc_ip = dc_ip
+        self.resolve = resolve
         self.ldaps = ldaps
         self.kerberos = kerberos
         self.no_pass = no_pass
@@ -215,16 +216,17 @@ class SCCMHUNTER:
                         #add group to db and then resolve members
                         if (entry['sAMAccountType']) == 268435456:
                             self.add_group_to_db(entry)
-                            dn = (entry['distinguishedname'])
-                            results = self.recursive_resolution(dn)
-                            for result in results:
-                                #add parsed results to DB
-                                if (result['sAMAccountType']) == 805306368:
-                                    self.add_user_to_db(result)
-                                if (result['sAMAccountType']) == 805306369:
-                                    self.add_computer_to_db(result)
-                                if (result['sAMAccountType']) == 268435456:
-                                    self.add_group_to_db(result)
+                            if self.resolve:
+                                dn = (entry['distinguishedname'])
+                                results = self.recursive_resolution(dn)
+                                for result in results:
+                                    #add parsed results to DB
+                                    if (result['sAMAccountType']) == 805306368:
+                                        self.add_user_to_db(result)
+                                    if (result['sAMAccountType']) == 805306369:
+                                        self.add_computer_to_db(result)
+                                    if (result['sAMAccountType']) == 268435456:
+                                        self.add_group_to_db(result)
                 except ldap3.core.exceptions.LDAPAttributeError as e:
                     logger.debug(f"[-] {e}")
                 except ldap3.core.exceptions.LDAPKeyError as e:
