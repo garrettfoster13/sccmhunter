@@ -166,42 +166,43 @@ class SMB:
     #profile remote hosts based on default file shares configured on particular roles
     def smb_hunter(self, server, conn):
         pxe_boot_servers = []
-        primary_shares = ["SMS_SITE", "EasySetupPayload", "AdminUIContentPayload"]
-        passive_shares = ["SMS_SITE", "SMS_SUIAgent"]
-
         try:
-            signing = conn.isSigningRequired()
             site_code = 'None'
             siteserv = False
             distp = False
             wsus = False
-            
+
+            signing = conn.isSigningRequired()
             shares = conn.listShares()
             sharenames = [share['shi1_netname'][:-1] for share in shares]
-            active_check = all(name in sharenames for name in primary_shares)
-            passive_check = all(name in sharenames for name in passive_shares)
+            remarks = [share['shi1_remark'][:-1] for share in shares]
+            shares_dict = dict(zip(sharenames, remarks)) 
 
-            if active_check and passive_check:
-                siteserv = True
-            elif passive_check and not active_check:
-                siteserv = False
-
-            for share in conn.listShares():
-                remark = share['shi1_remark'][:-1]
-                name = share['shi1_netname'][:-1]
-                #default remarks reveal role
-                if name == "SMS_DP$" and "SMS Site" in remark:
-                    distp = True
-                    site_code = (remark.split(" ")[-3])
-                if name == "SMS_SITE":
-                    site_code = (remark.split(" ")[-2])
-                if name =="REMINST":
-                    check = conn.listPath(shareName="REMINST", path="SMSTemp//*")
-                    if "STATUS_OBJECT_NAME_NOT_FOUND" not in check:
-                        pxe_boot_servers.append(server)
-                if name == "WsusContent":
-                    wsus = True
-            # spider and save the paths of variables files if discovered with optional save
+            if "SMS_SITE" in shares_dict:
+                try:
+                    remark = shares_dict.get('SMS_DP$', '')  
+                    if 'ConfigMgr Site Server' in remark:
+                        siteserv = True
+                    sc = shares_dict.get("SMS_SITE", '')
+                    if 'SMS Site' in sc:
+                        site_code = (sc.split(" ")[2])
+                except:
+                    siteserv = False
+            if "SMS_DP$" in shares_dict:
+                try:
+                    remark = shares_dict.get("SMS_DP$", '')
+                    if "SMS Site" in remark:
+                        distp = True
+                        site_code = (remark.split(" ")[2])
+                except:
+                    distp = False
+            if "REMINST" in shares_dict:
+                check = conn.listPath(shareName="REMINST", path="SMSTemp//*")
+                if "STATUS_OBJECT_NAME_NOT_FOUND" not in check:
+                    pxe_boot_servers.append(server)
+            if "WsusContent" in shares_dict:
+                wsus = True
+        
             if pxe_boot_servers:
                 self.smb_spider(conn, pxe_boot_servers)
             return signing, site_code, siteserv, distp, wsus
