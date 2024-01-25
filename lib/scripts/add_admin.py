@@ -85,13 +85,21 @@ class ADD_ADMIN:
                                 auth=HttpNtlmAuth(self.username, self.password),
                                 verify=False,headers=self.headers)
             if r.status_code == 200:
-                data = r.json()
-                if IndexError:
-                    logger.info(f"[*] Could not find {self.targetuser} configured as an SCCM admin.")
-                else:
-                    adminid = data['value'][0]['AdminID']
-                    logger.debug(f"[+] Got AdminID: {adminid}")
-                    return adminid
+                try:
+                    data = r.json()
+                    #len(obj['results']) == 0
+                    if len(data['value']) == 0:
+                         logger.info(f"Target user {self.targetuser} is not configured as an SMS Admin")
+                    # if IndexError:
+                    #     logger.info(f"[*] Could not find {self.targetuser} configured as an SCCM admin.")
+                    else:
+                        adminid = data['value'][0]['AdminID']
+                        logger.debug(f"[+] Got AdminID: {adminid}")
+                        return adminid
+                except:
+                    logger.info("Something went wrong")
+                    logger.info(r.text)
+                    logger.info(r.status_code)
             else:
                 logger.info("[*] Something went wrong")
                 logger.info(r.text)
