@@ -99,6 +99,27 @@ class ADD_ADMIN:
         except Exception as e:
                 print(e)
         
+    def show_admins(self):
+        url = f"https://{self.target_ip}/AdminService/wmi/SMS_Admin?$select=LogonName"
+        try:
+            r = requests.get(f"{url}",
+                                auth=HttpNtlmAuth(self.username, self.password),
+                                verify=False,headers=self.headers)
+            if r.status_code == 200:
+                data = r.json()
+                if data:
+                    logger.info("Current Full Admin Users:")
+                    admins = data['value']
+                    for i in admins:
+                         logger.info(i['LogonName'])
+                return
+            else:
+                logger.info("[*] Something went wrong")
+                logger.info(r.text)
+                logger.info(r.status_code)
+        except Exception as e:
+                print(e)  
+        
         
          # adminid = value[adminid]
          #lookup sccm admin with provided args
