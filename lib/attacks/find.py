@@ -53,7 +53,7 @@ class DATABASE:
     def build_tables(self):
         try:
             self.conn.execute('''CREATE TABLE CAS(SiteCode)''')
-            self.conn.execute('''CREATE TABLE SiteServers(Hostname, SiteCode, SigningStatus, SiteServer, SMSProvider, Config, MSSQL)''')
+            self.conn.execute('''CREATE TABLE SiteServers(Hostname, SiteCode, CAS, SigningStatus, SiteServer, SMSProvider, Config, MSSQL)''')
             self.conn.execute('''CREATE TABLE ManagementPoints(Hostname, SiteCode, SigningStatus)''')
             self.conn.execute('''CREATE TABLE Users(cn, name, sAMAAccontName, servicePrincipalName, description)''')
             self.conn.execute('''CREATE TABLE Groups(cn, name, sAMAAccontName, member, description)''')
@@ -128,9 +128,9 @@ class SCCMHUNTER:
         # to LDAP.
         logger.info(f'[*] Checking for System Management Container.')
         try:
+            #print(self.search_base)
             self.ldap_session.extend.standard.paged_search(self.search_base, 
-                                                           #this is too broad, need to see if it can be made to the distinguished name
-                                                           search_filter="(cn=System Management)", 
+                                                           search_filter=f"(distinguishedName=CN=System Management,CN=System,{self.search_base})", 
                                                            attributes="nTSecurityDescriptor", 
                                                            controls=self.controls,
                                                            paged_size=500, 
@@ -150,8 +150,8 @@ class SCCMHUNTER:
             if self.resolved_sids:
                 cursor = self.conn.cursor()
                 for result in self.resolved_sids:
-                    cursor.execute(f'''insert into SiteServers (Hostname, SiteCode, SigningStatus, SiteServer, Config, MSSQL) values (?,?,?,?,?,?)''',
-                                   (result, '', '', 'True', '', '')) 
+                    cursor.execute(f'''insert into SiteServers (Hostname, SiteCode, CAS, SigningStatus, SiteServer, Config, MSSQL) values (?,?,?,?,?,?,?)''',
+                                   (result, '', '', '', 'True', '', '')) 
                     self.conn.commit()
                 cursor.execute('''SELECT COUNT (Hostname) FROM SiteServers''')
                 count = cursor.fetchone()[0]
