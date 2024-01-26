@@ -57,9 +57,12 @@ class SMB:
         cursor = self.conn.cursor()
         cursor.execute("SELECT Hostname FROM SiteServers WHERE Hostname IS NOT 'Unknown'")
         hostnames = cursor.fetchall()
+        cursor.execute("SELECT * FROM CAS")
+        cas = cursor.fetchall()
         if hostnames:
             for i in hostnames:
                 hostname = (i[0])
+                cas_sitecode = False
                 #only enumerate if the host is reachable
                 conn = self.smb_connection(hostname)
                 if conn:
@@ -68,15 +71,21 @@ class SMB:
                     mssql = self.mssql_check(hostname)
                     #check for SMS provider roles
                     provider = self.provider_check(hostname)
+                    #check if fileshares are on 
                     if siteserv:
                         status = "Active" 
                     else:
                         status = "Passive"
-                    cursor.execute(f'''Update SiteServers SET SiteCode=?, SigningStatus=?, SiteServer=?, SMSProvider=?, Config=?, MSSQL=? WHERE Hostname=?''',
-                                (str(site_code), str(signing), "True", str(provider), str(status), str(mssql), hostname))
+
+                    for i in cas:
+                        if site_code in i:
+                            cas_sitecode = True
+
+                    cursor.execute(f'''Update SiteServers SET SiteCode=?, CAS=?, SigningStatus=?, SiteServer=?, SMSProvider=?, Config=?, MSSQL=? WHERE Hostname=?''',
+                                (str(site_code), str(cas_sitecode), str(signing), "True", str(provider), str(status), str(mssql), hostname))
                 else:
-                    cursor.execute(f'''Update SiteServers SET SiteCode=?, SigningStatus=?, SiteServer=?, Config=?, MSSQL=? WHERE Hostname=?''',
-                                ("Connection Failed", "", "True", "", "", hostname))
+                    cursor.execute(f'''Update SiteServers SET SiteCode=?, CAS=?, SigningStatus=?, SiteServer=?, Config=?, MSSQL=? WHERE Hostname=?''',
+                                ("Connection Failed", "", "", "True", "", "", hostname))
 
                 self.conn.commit()
             logger.info("[+] Finished profiling Site Servers.")
