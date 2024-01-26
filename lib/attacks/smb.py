@@ -69,16 +69,14 @@ class SMB:
                     #check for SMS provider roles
                     provider = self.provider_check(hostname)
                     if siteserv:
-                        active = "True" 
-                        passive = "False"
+                        status = "Active" 
                     else:
-                        active = "False"
-                        passive = "True"
-                    cursor.execute(f'''Update SiteServers SET SiteCode=?, SigningStatus=?, SiteServer=?, SMSProvider=?, Active=?, Passive=?, MSSQL=? WHERE Hostname=?''',
-                                (str(site_code), str(signing), "True", str(provider), str(active), str(passive), str(mssql), hostname))
+                        status = "Passive"
+                    cursor.execute(f'''Update SiteServers SET SiteCode=?, SigningStatus=?, SiteServer=?, SMSProvider=?, Config=?, MSSQL=? WHERE Hostname=?''',
+                                (str(site_code), str(signing), "True", str(provider), str(status), str(mssql), hostname))
                 else:
-                    cursor.execute(f'''Update SiteServers SET SiteCode=?, SigningStatus=?, SiteServer=?, Active=?, Passive=?, MSSQL=? WHERE Hostname=?''',
-                                ("Connection Failed", "", "True", "", "", "", hostname))
+                    cursor.execute(f'''Update SiteServers SET SiteCode=?, SigningStatus=?, SiteServer=?, Config=?, MSSQL=? WHERE Hostname=?''',
+                                ("Connection Failed", "", "True", "", "", hostname))
 
                 self.conn.commit()
             logger.info("[+] Finished profiling Site Servers.")

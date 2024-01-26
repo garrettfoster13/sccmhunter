@@ -37,7 +37,7 @@ class DATABASE:
             return True
         
     def validate_tables(self):
-        table_names = ["SiteServers", "ManagementPoints", "Users", "Groups", "Computers", "Creds"]
+        table_names = ["CAS", "SiteServers", "ManagementPoints", "Users", "Groups", "Computers", "Creds"]
         try:
             for table_name in table_names:
                 validated = self.conn.execute(f'''select name FROM sqlite_master WHERE type=\'table\' and name =\'{table_name}\'
@@ -52,7 +52,8 @@ class DATABASE:
 
     def build_tables(self):
         try:
-            self.conn.execute('''CREATE TABLE SiteServers(Hostname, SiteCode, SigningStatus, SiteServer, SMSProvider, Active, Passive, MSSQL)''')
+            self.conn.execute('''CREATE TABLE CAS(SiteCode)''')
+            self.conn.execute('''CREATE TABLE SiteServers(Hostname, SiteCode, SigningStatus, SiteServer, SMSProvider, Config, MSSQL)''')
             self.conn.execute('''CREATE TABLE ManagementPoints(Hostname, SiteCode, SigningStatus)''')
             self.conn.execute('''CREATE TABLE Users(cn, name, sAMAAccontName, servicePrincipalName, description)''')
             self.conn.execute('''CREATE TABLE Groups(cn, name, sAMAAccontName, member, description)''')
@@ -97,6 +98,8 @@ class SCCMHUNTER:
             os.remove(self.database)
         self.conn = sqlite3.connect(self.database, check_same_thread=False)
         self.resolved_sids = []
+        self.site_codes= []
+        self.mp_sitecodes = []
 
     def run(self):
         #make sure the DB is built
@@ -126,6 +129,7 @@ class SCCMHUNTER:
         logger.info(f'[*] Checking for System Management Container.')
         try:
             self.ldap_session.extend.standard.paged_search(self.search_base, 
+                                                           #this is too broad, need to see if it can be made to the distinguished name
                                                            search_filter="(cn=System Management)", 
                                                            attributes="nTSecurityDescriptor", 
                                                            controls=self.controls,
@@ -146,8 +150,8 @@ class SCCMHUNTER:
             if self.resolved_sids:
                 cursor = self.conn.cursor()
                 for result in self.resolved_sids:
-                    cursor.execute(f'''insert into SiteServers (Hostname, SiteCode, SigningStatus, SiteServer, Active, Passive, MSSQL) values (?,?,?,?,?,?,?)''',
-                                   (result, '', '', 'True', '', '', '')) 
+                    cursor.execute(f'''insert into SiteServers (Hostname, SiteCode, SigningStatus, SiteServer, Config, MSSQL) values (?,?,?,?,?,?)''',
+                                   (result, '', '', 'True', '', '')) 
                     self.conn.commit()
                 cursor.execute('''SELECT COUNT (Hostname) FROM SiteServers''')
                 count = cursor.fetchone()[0]
@@ -163,15 +167,44 @@ class SCCMHUNTER:
         except Exception as e:
             logger.info(e)
 
+                    
+                    
+    def check_sites(self):
+        try:
+            self.ldap_session.extend.standard.paged_search(self.search_base, 
+                                                search_filter="(objectclass=mssmssite)", 
+                                                attributes="mSSMSSiteCode", 
+                                                controls=self.controls,
+                                                paged_size=500, 
+                                                generator=False)
+            if self.ldap_session.entries:
+                for entry in self.ldap_session.entries:
+                    sitecode = entry['msSMSSiteCode']
+                    self.site_codes.append(sitecode)
+                cas = [item for item in self.site_codes if item not in self.mp_sitecodes]
+                if cas:
+                    for sitecode in cas:
+                        cursor = self.conn.cursor()
+                        cursor.execute(f'''insert into CAS (SiteCode) values (?)''', (sitecode))
+
+                
+        except ldap3.core.exceptions.LDAPAttributeError as e:
+            logger.info("[-] Did not find mSMSSite objectclass")
+            return
+        except Exception as e:
+            logger.info(e)
+
+    
+
     def check_mps(self):
         # Now query for the mssmsmanagementpoint object class. If schema exists there should be at least one.
         # Add to the site servers array // this might be redundant if we're querying for them specifically
-        logger.info(f'[*] Querying LDAP for published Management Points')
+        logger.info(f'[*] Querying LDAP for published Sites and Management Points')
         cursor = self.conn.cursor()
         try:
             self.ldap_session.extend.standard.paged_search(self.search_base, 
                                                            "(objectclass=mssmsmanagementpoint)", 
-                                                           attributes=["dNSHostName", "msSMSSiteCode"], 
+                                                           attributes="*", 
                                                            controls=self.controls, 
                                                            paged_size=500, 
                                                            generator=False)  
@@ -180,9 +213,13 @@ class SCCMHUNTER:
                 for entry in self.ldap_session.entries:
                     hostname =  str(entry['dNSHostname']).lower()
                     sitecode = str(entry['msSMSSitecode'])
+                    self.mp_sitecodes.append(sitecode)
                     cursor.execute(f'''insert into ManagementPoints (Hostname, SiteCode, SigningStatus) values (?,?,?)''',
                                    (hostname, sitecode, '')) 
                     self.conn.commit()
+            cursor.close()
+            self.check_sites()
+
         except ldap3.core.exceptions.LDAPObjectClassError as e:
             logger.info(f'[-] Could not find any Management Points published in LDAP')
 
@@ -308,9 +345,9 @@ class SCCMHUNTER:
         tb_u = dp.read_sql("SELECT * FROM Users", self.conn)
         tb_g = dp.read_sql("SELECT * FROM Groups", self.conn)
         logger.info("Site Servers Table")
-        logger.info(tabulate(tb_ss, showindex=False, headers=tb_c.columns, tablefmt='grid'))
+        logger.info(tabulate(tb_ss, showindex=False, headers=tb_ss.columns, tablefmt='grid'))
         logger.info("Management Points Table")
-        logger.info(tabulate(tb_mp, showindex=False, headers=tb_c.columns, tablefmt='grid'))
+        logger.info(tabulate(tb_mp, showindex=False, headers=tb_mp.columns, tablefmt='grid'))
         logger.info('Computers Table')
         logger.info(tabulate(tb_c, showindex=False, headers=tb_c.columns, tablefmt='grid'))
         logger.info("Users Table")
