@@ -99,11 +99,16 @@ class HTTP:
         for server in servers:
             server = server[0]
             url=(f"http://{server}/ccm_system_windowsauth")
+            url2=(f"http://{server}/ccm_system")
             try:
                 x = requests.get(url, timeout=5)
+                x2 = requests.get(url2,timeout=5)
                 if x.status_code == 401:
                     logger.info(f"[+] Found {url}")
                     validated.append(server)
+                # if x2.status_code == 403:
+                #     logger.info(f"[+] Found {url2}")
+                #     validated.append(server)
             except requests.exceptions.Timeout:
                 logger.info(f"[-] {server} connection timed out.")
             except requests.ConnectionError as e:
@@ -113,6 +118,7 @@ class HTTP:
             return validated
         else:
             print("[-] No HTTP endpoints found :(")
+
 
 
     def validate_add(self, computername):
