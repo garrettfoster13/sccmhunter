@@ -149,9 +149,10 @@ class SCCMHUNTER:
             #save results to DB
             if self.resolved_sids:
                 cursor = self.conn.cursor()
-                for result in self.resolved_sids:
+                for result in set(self.resolved_sids):
                     cursor.execute(f'''insert into SiteServers (Hostname, SiteCode, CAS, SigningStatus, SiteServer, Config, MSSQL) values (?,?,?,?,?,?,?)''',
-                                   (result, '', '', '', 'True', '', '')) 
+                                   (result, '', '', '', 'True', '', ''))
+                    self.add_computer_to_db(result) 
                     self.conn.commit()
                 cursor.execute('''SELECT COUNT (Hostname) FROM SiteServers''')
                 count = cursor.fetchone()[0]
@@ -215,7 +216,8 @@ class SCCMHUNTER:
                     sitecode = str(entry['msSMSSitecode'])
                     self.mp_sitecodes.append(sitecode)
                     cursor.execute(f'''insert into ManagementPoints (Hostname, SiteCode, SigningStatus) values (?,?,?)''',
-                                   (hostname, sitecode, '')) 
+                                   (hostname, sitecode, ''))
+                    self.add_computer_to_db(hostname) 
                     self.conn.commit()
             cursor.close()
             self.check_sites()
@@ -304,7 +306,10 @@ class SCCMHUNTER:
     
     def add_computer_to_db(self, entry):
         cursor = self.conn.cursor()
-        hostname = str(entry['dNSHostName']).lower() if 'dNSHostName' in entry else 'Unknown'
+        if 'dNSHostName' in entry:
+            hostname = str(entry['dNSHostName']).lower()
+        else:
+            hostname = entry
         sitecode = ''
         signing = ''
         siteserver = ''
