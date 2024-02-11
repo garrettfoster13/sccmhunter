@@ -304,19 +304,19 @@ class SCCMHUNTER:
         computer_fields = ["cn", "sAMAccountName", "dNSHostName","memberOf", "description"]
         group_fields = ["cn", "name", "sAMAccountName", "member", "memberOf", "description"]
         if users:
-            with open(f'{self.logs_dir}/csvs/users.csv', 'w', newline='') as f:
+            with open(f'{self.logs_dir}/csvs/users.csv', 'w', newline='', encoding="utf-8") as f:
                 writer = csv.DictWriter(f, fieldnames=user_fields)
                 writer.writeheader()
                 writer.writerows(users)
             f.close()
         if computers:
-            with open(f'{self.logs_dir}/csvs/computers.csv', 'w', newline='') as f:
+            with open(f'{self.logs_dir}/csvs/computers.csv', 'w', newline='', encoding="utf-8") as f:
                 writer = csv.DictWriter(f, fieldnames=computer_fields)
                 writer.writeheader()
                 writer.writerows(computers)
             f.close()
         if groups:
-            with open(f'{self.logs_dir}/csvs/groups.csv', 'w', newline='') as f:
+            with open(f'{self.logs_dir}/csvs/groups.csv', 'w', newline='', encoding="utf-8") as f:
                 writer = csv.DictWriter(f, fieldnames=group_fields)
                 writer.writeheader()
                 writer.writerows(groups)
