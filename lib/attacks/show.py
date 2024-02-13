@@ -18,8 +18,8 @@ class SHOW:
         self.debug = debug
         self.database = f"{logs_dir}/db/find.db"
         self.conn = sqlite3.connect(self.database, check_same_thread=False)
-        self.csv = True
-        self.json = True
+        self.csv = csv
+        self.json = js
 
 
     def run(self):

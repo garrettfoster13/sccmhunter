@@ -228,6 +228,7 @@ class SCCMHUNTER:
     def check_strings(self):
         #now search for anything related to "SCCM" 
         yeet = '(|(samaccountname=*sccm*)(samaccountname=*mecm*)(description=*sccm*)(description=*mecm*)(name=*sccm*)(name=*mecm*))'
+        #yeet ='(|(distinguishedname=*sccm*)(distinguishedname=*mecm*)(description=*sccm*)(description=*mecm*))'
         logger.info("[*] Searching LDAP for anything containing the strings 'SCCM' or 'MECM'")
         try:
             self.ldap_session.extend.standard.paged_search(self.search_base, 
