@@ -60,6 +60,7 @@ class SMB:
         cursor.execute("SELECT * FROM CAS")
         cas = cursor.fetchall()
         if hostnames:
+            logger.info (f"Profiling {len(hostnames)} site servers.")
             for i in hostnames:
                 hostname = (i[0])
                 cas_sitecode = False
@@ -101,7 +102,9 @@ class SMB:
         cursor = self.conn.cursor()
         cursor.execute("SELECT Hostname FROM ManagementPoints WHERE Hostname IS NOT 'Unknown'")
         hostnames = cursor.fetchall()
+                #logger.info(f"Profling {len(cas)} site servers.")
         if hostnames:
+            logger.info (f"Profiling {len(hostnames)} management points.")
             for i in hostnames:
                 hostname = i[0]
                 conn = self.smb_connection(hostname)
@@ -125,6 +128,7 @@ class SMB:
         cursor.execute("SELECT Hostname FROM Computers WHERE Hostname IS NOT 'Unknown'")
         hostnames = cursor.fetchall()
         if hostnames:
+            logger.info (f"Profiling {len(hostnames)} computers.")
             for i in hostnames:
                 hostname = i[0]
                 conn = self.smb_connection(hostname)
