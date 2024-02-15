@@ -227,7 +227,6 @@ class SMB:
             logger.info(f"[-] {e}")
             return
 
-
     #if a distribution point is found with this directory
     #spider and search for pxeboot variables files
     def smb_spider(self, conn, targets):
