@@ -386,6 +386,7 @@ class SCCMTools():
         time.sleep(20)
 
         logger.debug("[*] Requesting NAAPolicy.. 2 secs")
+        print(self._target_name, self._target_fqdn, uuid, self._target_name, self._target_fqdn, uuid)
         urls = self.sendPolicyRequest(self._target_name, self._target_fqdn, uuid, self._target_name, self._target_fqdn, uuid)
 
         logger.debug("[*] Parsing for Secretz...")

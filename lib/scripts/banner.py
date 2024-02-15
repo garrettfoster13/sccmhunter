@@ -16,5 +16,9 @@ d,dP   "88,e8'  "88,e8' 888 888 888 888 888  "88 88"  888 888  888    "YeeP" 888
     
     
     '''
+    print(banner)
+
+def small_banner():
+    banner = f'''SCCMHunter v{__version__} by @garrfoster'''
 
     print(banner)

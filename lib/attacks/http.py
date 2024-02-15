@@ -45,18 +45,24 @@ class HTTP:
  
     def run(self):
         if os.path.exists(self.database):
-            logger.info("[*] Searching for Management Points from database.")
-            targets = self.conn.execute(f'''select Hostname FROM ManagementPoints''').fetchall()
-            self.targets = self.http_hunter(targets)
-            self.autopwn()
-        else:
-            logger.info("Database file not found, searching LDAP for site servers.")
-            sccmhunter = SCCMHUNTER(username=self.username, password=self.password, domain=self.domain, 
-                                    target_dom=self.target_dom, dc_ip=self.dc_ip,ldaps=self.ldaps,
-                                    kerberos=self.kerberos, no_pass=self.no_pass, hashes=self.hashes, 
-                                    aes=self.aes, debug=self.debug, logs_dir=self.logs_dir)
-            sccmhunter.run()
-            self.run()
+            try:
+                logger.info("[*] Searching for Management Points from database.")
+                targets = self.conn.execute(f'''select Hostname FROM ManagementPoints''').fetchall()
+                self.targets = self.http_hunter(targets)
+                self.autopwn()
+            except sqlite3.OperationalError:
+                logger.debug("[*] Database file not found. Did you run the find module?")
+            except Exception as e:
+                logger.info("An unknown error occured. Use -debug to print a stacktrace.")
+                logger.debug(e)
+    
+            # logger.info("Database file not found, searching LDAP for site servers.")
+            # sccmhunter = SCCMHUNTER(username=self.username, password=self.password, domain=self.domain, 
+            #                         target_dom=self.target_dom, dc_ip=self.dc_ip,ldaps=self.ldaps,
+            #                         kerberos=self.kerberos, no_pass=self.no_pass, hashes=self.hashes, 
+            #                         aes=self.aes, debug=self.debug, logs_dir=self.logs_dir)
+            # sccmhunter.run()
+            # self.run()
 
 
     def autopwn(self):
