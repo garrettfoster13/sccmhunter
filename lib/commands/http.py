@@ -11,8 +11,8 @@ HELP = 'Abuse client enrollment.'
 def main(
     username        : str   = typer.Option(None, "-u",  help="Username"),
     password        : str   = typer.Option(None, '-p',  help="Password"),
-    domain          : str   = typer.Option(..., '-d',  help="Target domain"),
-    dc_ip           : str   = typer.Option(..., '-dc-ip',  help = "IP address or FQDN of domain controller"),
+    domain          : str   = typer.Option(None, '-d',  help="Target domain"),
+    dc_ip           : str   = typer.Option(None, '-dc-ip',  help = "IP address or FQDN of domain controller"),
     ldaps           : bool  = typer.Option(False, '-ldaps', help='Use LDAPS instead of LDAP'),
     kerberos        : bool  = typer.Option(False, "-k", help='Use Kerberos authentication'),
     no_pass         : bool  = typer.Option(False, "-no-pass", help="don't ask for password (useful for -k)"),
