@@ -388,7 +388,7 @@ class SCCMTools():
         uuid = self.sendRegistration(self._target_name, self._target_fqdn, self.target_username, self.target_password)
 
         self.rename_key(uuid)
-        logger.debug(f"[*] Done.. our ID is {uuid}")
+        logger.info(f"[*] Done.. our ID is {uuid}")
 
 
 

