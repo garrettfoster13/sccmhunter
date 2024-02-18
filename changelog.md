@@ -41,6 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Refactored code and fixed bug to not properly handle LDAP searches
 - SMB module
     - Fixed a bug where discovered site servers and management points weren't being added for service checks
+- HTTP module
+    - Fixed a bug where errors weren't properly handled if the database was missing (caused by not running the find module)
 
 
 ## [0.0.3] - 2023-12-04
