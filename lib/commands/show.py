@@ -14,6 +14,7 @@ def main(
     users           : bool   = typer.Option(False, "-users", help="Show SCCM related users."),
     computers       : bool   = typer.Option(False, "-computers", help="Show SCCM related computers."),
     groups          : bool   = typer.Option(False, "-groups", help="Show SCCM related groups."),
+    creds           : bool   = typer.Option(False, "-creds", help="Show recovered SCCM credentials."),
     all             : bool   = typer.Option(False, "-all", help="Show all recon results."),
     json            : bool   = typer.Option(False, "-json", help="Export chosen results in JSON."),
     csv             : bool   = typer.Option(False, "-csv", help="Export chosen results in CSV."),
@@ -21,5 +22,5 @@ def main(
 
 
     logs_dir = init_logger(debug)
-    show  = SHOW(users=users, computers=computers, groups=groups,all=all, logs_dir=logs_dir, site_servers=siteservers, mps=mps, csv=csv, js=json, debug=debug)
+    show  = SHOW(users=users, computers=computers, groups=groups, creds=creds, all=all, logs_dir=logs_dir, site_servers=siteservers, mps=mps, csv=csv, js=json, debug=debug)
     show.run()

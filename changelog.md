@@ -28,14 +28,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Added `show_admins` command to list current admin accounts
 - Show module
     - Added `-json` and `-csv` flags to export tables 
-    - NOT DONE: Added `-creds` flag to show recovered credentials from HTTP or DPAPI
+    - Added `-creds` flag to show recovered credentials from HTTP or DPAPI
 
 ### Changed
 - Updated all data storage methods to SQLite
 - Changed banner
 
-
-### Removed
 
 ### Fixed
 - Find module

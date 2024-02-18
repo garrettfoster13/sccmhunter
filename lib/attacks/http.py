@@ -88,7 +88,6 @@ class HTTP:
                         Tools.write_to_file(decryptedResult, file_name)
                         logger.info(f"[+] Done.. decrypted policy dumped to {self.logs_dir}/loot/{self.mp.split('.')[0]}_naapolicy.xml")
                         return True
-                input("breaking for exception")
         except FileNotFoundError:
             logger.info(f"Missing required files -- check the UUID.")
         except Exception as e:

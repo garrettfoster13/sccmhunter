@@ -6,11 +6,12 @@ import sqlite3
 
 class SHOW:
 
-    def __init__(self, users=False, computers=False, groups=False, all=False,logs_dir=None,site_servers=False, mps=False,
+    def __init__(self, users=False, computers=False, groups=False, creds=False, all=False,logs_dir=None,site_servers=False, mps=False,
                  csv=False, js=False, debug=False):
         self.users = users
         self.computers = computers
         self.groups = groups
+        self.creds = creds
         self.all = all
         self.site_servers = site_servers
         self.management_points = mps
@@ -55,6 +56,14 @@ class SHOW:
                 tb_gp.to_csv(f"{self.logs_dir}/csvs/groups.csv", encoding='utf-8')
             if self.json:
                 tb_gp.to_json(f"{self.logs_dir}/json/groups.json")
+        if self.creds:
+            logger.info("[+] Showing Crdentials Table")
+            tb_gp = dp.read_sql("SELECT * FROM Creds", self.conn)
+            logger.info(tabulate(tb_gp, showindex=False, headers=tb_gp.columns, tablefmt='grid'))
+            if self.csv:
+                tb_gp.to_csv(f"{self.logs_dir}/csvs/creds.csv", encoding='utf-8')
+            if self.json:
+                tb_gp.to_json(f"{self.logs_dir}/json/creds.json")
         if self.computers or self.all:
             logger.info("[+] Showing COMPUTERS Table")
             tb_c = dp.read_sql("SELECT * FROM Computers", self.conn)
