@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - HTTP module
     - Added "stop on success" logic if credentials are recovered
     - Added `-sleep` flag to set time to wait until requesting policies following registration
-    - Added `-uuid` and `-mp` flags to allow the operator to manually request policie
+    - Added `-uuid` and `-mp` flags to allow the operator to manually request policies
 - MSSQL module
     - Added `-stacked` flag to provide a stacked MSSQL query for relaying rather than individual queries
 - Admin module
