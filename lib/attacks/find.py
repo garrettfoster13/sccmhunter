@@ -283,7 +283,10 @@ class SCCMHUNTER:
         description = str(entry['description']) if 'description' in entry else ''
         cursor.execute('''select * from Groups where name = ?''', (name,))
         exists = cursor.fetchone()
+        if exists:
+            logger.debug(f"[*] Skipping already group: {name}")        
         if not exists:
+            logger.debug(f"[+] Found group: {name}")
             cursor.execute('''insert into Groups (cn, name, sAMAAccontName, member, description) values (?,?,?,?,?)''', 
                         (cn, name,sam,member,description))
             self.conn.commit()
@@ -298,7 +301,10 @@ class SCCMHUNTER:
         description = str(entry['description']) if 'description' in entry else ''
         cursor.execute('''select * from Users where name = ?''', (name,))
         exists = cursor.fetchone()
+        if exists:
+            logger.debug(f"[*] Skipping already known user: {name}")
         if not exists:
+            logger.debug(f"[+] Found user: {name}")
             cursor.execute('''insert into Users (cn, name, sAMAAccontName, servicePrincipalName, description) values (?,?,?,?,?)''', 
                         (cn, name,sam,spn,description))
             self.conn.commit()
@@ -319,10 +325,14 @@ class SCCMHUNTER:
         mssql = ''
         cursor.execute('''select * from Computers where Hostname = ?''', (hostname,))
         exists = cursor.fetchone()
+        if exists:
+            logger.debug(f"[*] Skipping already known host: {hostname}")
         if not exists:
+            logger.debug(f"[+] Found host: {hostname}")
             cursor.execute('''insert into Computers (Hostname, SiteCode, SigningStatus, SiteServer, ManagementPoint, DistributionPoint, WSUS, MSSQL) values (?,?,?,?,?,?,?,?)''', 
                         (hostname, sitecode, signing, siteserver, mp, dp, wsus, mssql))
             self.conn.commit()
+
         return
 
     #resolve all group members
@@ -336,8 +346,10 @@ class SCCMHUNTER:
                                                         paged_size=500, 
                                                         generator=False)  
         except ldap3.core.exceptions.LDAPAttributeError as e:
+            logger.info("Something went wrong. Use -debug to print a stack trace.")
             logger.debug(f'Error: {str(e)}')
         except Exception as e:
+            logger.info("Something went wrong. Use -debug to print a stack trace.")
             logger.debug(f"[-] {e}")
         
         results = self.ldap_session.entries
