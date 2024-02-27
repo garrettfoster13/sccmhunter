@@ -85,19 +85,48 @@ class ADD_ADMIN:
                                 auth=HttpNtlmAuth(self.username, self.password),
                                 verify=False,headers=self.headers)
             if r.status_code == 200:
-                data = r.json()
-                if IndexError:
-                    logger.info(f"[*] Could not find {self.targetuser} configured as an SCCM admin.")
-                else:
-                    adminid = data['value'][0]['AdminID']
-                    logger.debug(f"[+] Got AdminID: {adminid}")
-                    return adminid
+                try:
+                    data = r.json()
+                    #len(obj['results']) == 0
+                    if len(data['value']) == 0:
+                         logger.info(f"Target user {self.targetuser} is not configured as an SMS Admin")
+                    # if IndexError:
+                    #     logger.info(f"[*] Could not find {self.targetuser} configured as an SCCM admin.")
+                    else:
+                        adminid = data['value'][0]['AdminID']
+                        logger.debug(f"[+] Got AdminID: {adminid}")
+                        return adminid
+                except:
+                    logger.info("Something went wrong")
+                    logger.info(r.text)
+                    logger.info(r.status_code)
             else:
                 logger.info("[*] Something went wrong")
                 logger.info(r.text)
                 logger.info(r.status_code)
         except Exception as e:
                 print(e)
+        
+    def show_admins(self):
+        url = f"https://{self.target_ip}/AdminService/wmi/SMS_Admin?$select=LogonName"
+        try:
+            r = requests.get(f"{url}",
+                                auth=HttpNtlmAuth(self.username, self.password),
+                                verify=False,headers=self.headers)
+            if r.status_code == 200:
+                data = r.json()
+                if data:
+                    logger.info("Current Full Admin Users:")
+                    admins = data['value']
+                    for i in admins:
+                         logger.info(i['LogonName'])
+                return
+            else:
+                logger.info("[*] Something went wrong")
+                logger.info(r.text)
+                logger.info(r.status_code)
+        except Exception as e:
+                print(e)  
         
         
          # adminid = value[adminid]
