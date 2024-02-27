@@ -1,5 +1,5 @@
 
-__version__ = '0.0.2'
+__version__ = '1.0.0'
 
 
 def show_banner():
@@ -16,5 +16,9 @@ d,dP   "88,e8'  "88,e8' 888 888 888 888 888  "88 88"  888 888  888    "YeeP" 888
     
     
     '''
+    print(banner)
+
+def small_banner():
+    banner = f'''SCCMHunter v{__version__} by @garrfoster'''
 
     print(banner)

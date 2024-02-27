@@ -11,8 +11,8 @@ HELP = 'Abuse client enrollment.'
 def main(
     username        : str   = typer.Option(None, "-u",  help="Username"),
     password        : str   = typer.Option(None, '-p',  help="Password"),
-    domain          : str   = typer.Option(..., '-d',  help="Target domain"),
-    dc_ip           : str   = typer.Option(..., '-dc-ip',  help = "IP address or FQDN of domain controller"),
+    domain          : str   = typer.Option(None, '-d',  help="Target domain"),
+    dc_ip           : str   = typer.Option(None, '-dc-ip',  help = "IP address or FQDN of domain controller"),
     ldaps           : bool  = typer.Option(False, '-ldaps', help='Use LDAPS instead of LDAP'),
     kerberos        : bool  = typer.Option(False, "-k", help='Use Kerberos authentication'),
     no_pass         : bool  = typer.Option(False, "-no-pass", help="don't ask for password (useful for -k)"),
@@ -21,12 +21,15 @@ def main(
     debug           : bool  = typer.Option(False, '-debug',help='Enable Verbose Logging'),
     auto            : bool  = typer.Option(False, '-auto', help='Attempt to create a machine and recover policies with provided credentials.'),
     computer_pass   : str   = typer.Option(None, '-cp', help='Machine account password'),
-    computer_name   : str   = typer.Option(None, '-cn', help='Machine account name.')):
+    computer_name   : str   = typer.Option(None, '-cn', help='Machine account name.'),
+    uuid            : str   = typer.Option(None, '-uuid', help='UUID for manual request.'),
+    mp              : str   = typer.Option(None, '-mp', help='Management Point to manually request from'),
+    sleep           : str   = typer.Option(10, '-sleep', help='Time to wait between registering and requesting policies')):
 
     logs_dir = init_logger(debug)
     httphunter = HTTP(username=username, password=password, domain=domain, dc_ip=dc_ip,ldaps=ldaps,
                             kerberos=kerberos, no_pass=no_pass, hashes=hashes, aes=aes, debug=debug, auto=auto,
-                            computer_pass=computer_pass, computer_name=computer_name, logs_dir=logs_dir)
+                            computer_pass=computer_pass, computer_name=computer_name, uuid=uuid, mp=mp, sleep=sleep, logs_dir=logs_dir)
     httphunter.run()
 
 

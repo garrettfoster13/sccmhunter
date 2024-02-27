@@ -111,7 +111,6 @@ class SHELL(cmd2.Cmd):
         self.db.last_logon(arg)
 
     
-    
 
 # ############
 # PowerShell Script Section
@@ -270,6 +269,13 @@ class SHELL(cmd2.Cmd):
         targetuser = option[0]
         logger.info(f"Tasked SCCM to remove {targetuser} as an administrative user.")
         self.admin.delete(targetuser=targetuser)
+
+    @cmd2.with_category(PE)
+    def do_show_admins(self, arg):
+        """List admin users                        show_admins"""
+        logger.info(f"Tasked SCCM to list current SMS Admins.")
+        self.admin.show_admins()
+
 
     
 
