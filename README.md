@@ -4,7 +4,7 @@
 
 # SCCMHunter
 
-SCCMHunter is a post-ex tool built to streamline identifying, profiling, and attacking SCCM related assets in an Active Directory domain. Pleaes checkout the [wiki](https://github.com/garrettfoster13/sccmhunter/wiki) for detailed usage.
+SCCMHunter is a post-ex tool built to streamline identifying, profiling, and attacking SCCM related assets in an Active Directory domain. Please checkout the [wiki](https://github.com/garrettfoster13/sccmhunter/wiki) for detailed usage.
 
 ### Please note
 This tool was developed and tested in a lab environment. Your mileage may vary on performance. If you run into any problems please don't hesitate to open an issue.
