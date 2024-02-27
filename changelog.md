@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Changed banner
 
 
+
 ### Fixed
 - Find module
     - Refactored code and fixed bug to not properly perform LDAP searches
@@ -42,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Fixed a bug where discovered site servers and management points weren't being added for service checks
 - HTTP module
     - Fixed a bug where errors weren't properly handled if the database was missing (caused by not running the find module)
+    - Fixed a bug where Management Points weren't being pulled from the Computers table
 
 
 ## [0.0.3] - 2023-12-04

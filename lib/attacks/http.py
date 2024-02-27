@@ -54,8 +54,16 @@ class HTTP:
         if os.path.exists(self.database):
             try:
                 logger.info("[*] Searching for Management Points from database.")
-                targets = self.conn.execute(f'''select Hostname FROM ManagementPoints''').fetchall()
+                targets = set()
+                mpscheck = self.conn.execute(f'''select Hostname FROM ManagementPoints''').fetchall()
+                allcompscheck = self.conn.execute(f"SELECT Hostname FROM Computers WHERE ManagementPoint = 'True'").fetchall()
+                for mp in mpscheck:
+                    targets.add(mp[0])
+                for mp in allcompscheck:
+                    targets.add(mp[0])
+                
                 self.targets = self.http_hunter(targets)
+                print(targets)
                 if self.targets:
                     self.autopwn()
             except sqlite3.OperationalError:
@@ -118,6 +126,10 @@ class HTTP:
 
         result = False
         while not result:
+            #not so great way of handling targeted MP searches but will get back to this later
+            if self.mp:
+                self.targets = []
+                self.targets.append(self.mp)
             for target in self.targets:
                 target_name = self.computer_name[:-1]
                 target_fqdn = f'{target_name}.{self.domain}'
@@ -132,7 +144,7 @@ class HTTP:
     def http_hunter(self, servers):
         validated = []                   
         for server in servers:
-            server = server[0]
+            #server = server[0]
             url=(f"http://{server}/ccm_system_windowsauth")
             url2=(f"http://{server}/ccm_system")
             try:

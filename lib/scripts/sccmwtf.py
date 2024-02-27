@@ -170,6 +170,12 @@ class SCCMTools():
         for part in multipart_data.parts:
             if part.headers[b'content-type'] == b'application/octet-stream':
                 return zlib.decompress(part.content).decode('utf-16')
+            if part.headers[b'content-type'] == b'text/html':
+                logger.info("Got an unexepcted mimetype error. Use -debug to print the response.")
+                logger.debug("Response headers: ")
+                logger.debug(r.headers)
+                logger.debug("Response content:")
+                logger.debug(r.content)
 
     def requestPolicy(self, url, clientID="", authHeaders=False, retcontent=False, key=""):
         headers = {
