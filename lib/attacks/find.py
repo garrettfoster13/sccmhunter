@@ -1,5 +1,7 @@
 from getpass import getpass
 from impacket.ldap.ldaptypes import SR_SECURITY_DESCRIPTOR
+from ldap3.protocol.formatters.formatters import format_sid
+from ldap3.protocol.formatters.formatters import format_uuid_le
 from ldap3.utils.conv import escape_filter_chars
 from lib.ldap import init_ldap_session, get_dn
 from lib.logger import logger
@@ -9,7 +11,7 @@ import ldap3
 import os
 import pandas as dp
 import sqlite3
-
+import base64
 
 class DACLPARSE:
 
@@ -396,9 +398,27 @@ class SCCMHUNTER:
             logger.info(f'Error: {str(e)}')
             exit()
 
+    def member_sid_resolver(self, member):
+        sid = []
+        member = escape_filter_chars(member)
+        search_filter = f"(distinguishedName={member})"
+        self.ldap_session.extend.standard.paged_search(self.search_base, 
+                                                    search_filter, 
+                                                    attributes="*", 
+                                                    paged_size=500, 
+                                                    generator=False)
+        for entry in self.ldap_session.entries:
+            json_entry = json.loads(entry.entry_to_json())
+            attributes = json_entry['attributes'].keys()
+            for attr in attributes:
+                if attr == "objectSid":
+                    sid.append(format_sid(entry[attr].value))
+        self.sid_resolver(sid)
+
+
     def sid_resolver(self, sids):
         for sid in sids:
-            search_filter ="(objectSid={})".format(sid)
+            search_filter = "(objectSid={})".format(sid)
             self.ldap_session.extend.standard.paged_search(self.search_base, 
                                                            search_filter,
                                                            attributes="*",
@@ -406,22 +426,22 @@ class SCCMHUNTER:
                                                            generator=False)
             try:
                 for entry in self.ldap_session.entries:
-                    if (entry['sAMAccounttype']) == 268435456:                      
-                        for member in entry['member']:
-                            member = escape_filter_chars(member)
-                            search_filter = f"(distinguishedName={member})"
-                            self.ldap_session.extend.standard.paged_search(self.search_base, 
-                                                                        search_filter, 
-                                                                        attributes="*", 
-                                                                        paged_size=500, 
-                                                                        generator=False)
-                            for entry in self.ldap_session.entries:
-                                sid = entry['objectSid']
-                                self.sid_resolver(sid)
-                    if (entry['sAMAccountType']) == 805306369:
-                        if 'dNSHostName' in entry:
-                            dnsname = entry['dNSHostName']  
-                            self.resolved_sids.append(str(dnsname).lower())
+                    json_entry = json.loads(entry.entry_to_json())
+                    attributes = json_entry['attributes'].keys()
+                    for attr in attributes:
+                        if entry['sAMAccountType'] == "268435456":
+                            if attr == 'member':
+                                if type(entry[attr].value) is list:
+                                    for member in entry['member'].value:
+                                        self.member_sid_resolver(member)
+                                if type(entry[attr].value) is str:
+                                    member = entry[attr].value
+                                    self.member_sid_resolver(member)
+
+                        if entry['sAMAccountType'] == "805306369":
+                            if attr == 'dNSHostName':
+                                dnsname = entry['dNSHostName'].value  
+                                self.resolved_sids.append(str(dnsname).lower())
 
             except ldap3.core.exceptions.LDAPKeyError as e:
                 logger.debug(e)
