@@ -426,12 +426,10 @@ class SCCMHUNTER:
                                                         generator=False)
             try:
                 for entry in self.ldap_session.entries:
-                    #print(entry)
                     json_entry = json.loads(entry.entry_to_json())
                     attributes = json_entry['attributes'].keys()
                     for attr in attributes:
-                        #print((entry['sAMAccountType']))
-                        if (entry['sAMAccountType']) == "805306369" or 805306369:
+                        if (entry['sAMAccountType']) == "268435456" or 268435456:
                             if attr == 'member':
                                 if type(entry[attr].value) is list:
                                     for member in entry['member'].value:
