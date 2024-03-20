@@ -77,8 +77,8 @@ class DATABASE:
 class SCCMHUNTER:
     
     def __init__(self, username=None, password=None, domain=None, target_dom=None, 
-                 dc_ip=None, resolve=False, ldaps=False, kerberos=False, no_pass=False, hashes=None, 
-                 aes=None, debug=False, logs_dir = None):
+                dc_ip=None, resolve=False, ldaps=False, kerberos=False, no_pass=False, hashes=None, 
+                aes=None, debug=False, logs_dir = None):
         self.username = username
         self.password= password
         self.domain = domain
@@ -132,11 +132,11 @@ class SCCMHUNTER:
         try:
             #print(self.search_base)
             self.ldap_session.extend.standard.paged_search(self.search_base, 
-                                                           search_filter=f"(distinguishedName=CN=System Management,CN=System,{self.search_base})", 
-                                                           attributes="nTSecurityDescriptor", 
-                                                           controls=self.controls,
-                                                           paged_size=500, 
-                                                           generator=False)
+                                                        search_filter=f"(distinguishedName=CN=System Management,CN=System,{self.search_base})", 
+                                                        attributes="nTSecurityDescriptor", 
+                                                        controls=self.controls,
+                                                        paged_size=500, 
+                                                        generator=False)
             #parse DACL
             if self.ldap_session.entries:
                 for entry in self.ldap_session.entries:
@@ -153,7 +153,7 @@ class SCCMHUNTER:
                 cursor = self.conn.cursor()
                 for result in set(self.resolved_sids):
                     cursor.execute(f'''insert into SiteServers (Hostname, SiteCode, CAS, SigningStatus, SiteServer, Config, MSSQL) values (?,?,?,?,?,?,?)''',
-                                   (result, '', '', '', 'True', '', ''))
+                                (result, '', '', '', 'True', '', ''))
                     self.add_computer_to_db(result) 
                     self.conn.commit()
                 cursor.execute('''SELECT COUNT (Hostname) FROM SiteServers''')
@@ -206,11 +206,11 @@ class SCCMHUNTER:
         cursor = self.conn.cursor()
         try:
             self.ldap_session.extend.standard.paged_search(self.search_base, 
-                                                           "(objectclass=mssmsmanagementpoint)", 
-                                                           attributes="*", 
-                                                           controls=self.controls, 
-                                                           paged_size=500, 
-                                                           generator=False)  
+                                                        "(objectclass=mssmsmanagementpoint)", 
+                                                        attributes="*", 
+                                                        controls=self.controls, 
+                                                        paged_size=500, 
+                                                        generator=False)  
             if self.ldap_session.entries:
                 logger.info(f"[+] Found {len(self.ldap_session.entries)} Management Points in LDAP.")
                 for entry in self.ldap_session.entries:
@@ -218,7 +218,7 @@ class SCCMHUNTER:
                     sitecode = str(entry['msSMSSitecode'])
                     self.mp_sitecodes.append(sitecode)
                     cursor.execute(f'''insert into ManagementPoints (Hostname, SiteCode, SigningStatus) values (?,?,?)''',
-                                   (hostname, sitecode, ''))
+                                (hostname, sitecode, ''))
                     self.add_computer_to_db(hostname) 
                     self.conn.commit()
             cursor.close()
@@ -233,10 +233,10 @@ class SCCMHUNTER:
         logger.info("[*] Searching LDAP for anything containing the strings 'SCCM' or 'MECM'")
         try:
             self.ldap_session.extend.standard.paged_search(self.search_base, 
-                                                           yeet, 
-                                                           attributes="*", 
-                                                           paged_size=500, 
-                                                           generator=False)  
+                                                        yeet, 
+                                                        attributes="*", 
+                                                        paged_size=500, 
+                                                        generator=False)  
         except ldap3.core.exceptions.LDAPAttributeError as e:
             logger.info(f'Error: {str(e)}')
         except Exception as e:
@@ -383,8 +383,8 @@ class SCCMHUNTER:
                 self.password = getpass("Password:")
         try:
             ldap_server, self.ldap_session = init_ldap_session(domain=self.domain, username=self.username, password=self.password, lmhash=lmhash, 
-                                                               nthash=nthash, kerberos=self.kerberos, domain_controller=self.dc_ip, 
-                                                               aesKey=self.aes, hashes=self.hashes, ldaps=self.ldaps)
+                                                            nthash=nthash, kerberos=self.kerberos, domain_controller=self.dc_ip, 
+                                                            aesKey=self.aes, hashes=self.hashes, ldaps=self.ldaps)
             logger.debug(f'[+] Bind successful {ldap_server}')
         except ldap3.core.exceptions.LDAPSocketOpenError as e: 
             if 'invalid server address' in str(e):
@@ -420,16 +420,18 @@ class SCCMHUNTER:
         for sid in sids:
             search_filter = "(objectSid={})".format(sid)
             self.ldap_session.extend.standard.paged_search(self.search_base, 
-                                                           search_filter,
-                                                           attributes="*",
-                                                           paged_size=500, 
-                                                           generator=False)
+                                                        search_filter,
+                                                        attributes="*",
+                                                        paged_size=500, 
+                                                        generator=False)
             try:
                 for entry in self.ldap_session.entries:
+                    #print(entry)
                     json_entry = json.loads(entry.entry_to_json())
                     attributes = json_entry['attributes'].keys()
                     for attr in attributes:
-                        if entry['sAMAccountType'] == "268435456":
+                        #print((entry['sAMAccountType']))
+                        if (entry['sAMAccountType']) == "805306369" or 805306369:
                             if attr == 'member':
                                 if type(entry[attr].value) is list:
                                     for member in entry['member'].value:
@@ -438,7 +440,7 @@ class SCCMHUNTER:
                                     member = entry[attr].value
                                     self.member_sid_resolver(member)
 
-                        if entry['sAMAccountType'] == "805306369":
+                        if entry['sAMAccountType'] == "805306369" or 805306369:
                             if attr == 'dNSHostName':
                                 dnsname = entry['dNSHostName'].value  
                                 self.resolved_sids.append(str(dnsname).lower())
