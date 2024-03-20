@@ -63,7 +63,7 @@ class HTTP:
                     targets.add(mp[0])
                 
                 self.targets = self.http_hunter(targets)
-                print(targets)
+                #print(targets)
                 if self.targets:
                     self.autopwn()
             except sqlite3.OperationalError:
