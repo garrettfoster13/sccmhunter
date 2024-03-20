@@ -1,7 +1,5 @@
 from getpass import getpass
 from impacket.ldap.ldaptypes import SR_SECURITY_DESCRIPTOR
-from ldap3.protocol.formatters.formatters import format_sid
-from ldap3.protocol.formatters.formatters import format_uuid_le
 from ldap3.utils.conv import escape_filter_chars
 from lib.ldap import init_ldap_session, get_dn
 from lib.logger import logger
@@ -11,7 +9,7 @@ import ldap3
 import os
 import pandas as dp
 import sqlite3
-import base64
+
 
 class DACLPARSE:
 
@@ -426,6 +424,7 @@ class SCCMHUNTER:
                                                         generator=False)
             try:
                 for entry in self.ldap_session.entries:
+
                     json_entry = json.loads(entry.entry_to_json())
                     attributes = json_entry['attributes'].keys()
                     for attr in attributes:
