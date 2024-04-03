@@ -211,9 +211,11 @@ class SMB:
                 except:
                     distp = False
             if "REMINST" in shares_dict:
-                check = conn.listPath(shareName="REMINST", path="SMSTemp//*")
-                if "STATUS_OBJECT_NAME_NOT_FOUND" not in check:
-                    pxe_boot_servers.append(server)
+                #list REMINST contents to check if the SMSTemp dir actually exists
+                check = conn.listPath(shareName="REMINST", path="//*")
+                for i in check:
+                    if i.get_longname() == "SMSTemp":
+                        pxe_boot_servers.append(server)
             if "WsusContent" in shares_dict:
                 wsus = True
         
