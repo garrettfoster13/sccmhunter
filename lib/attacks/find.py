@@ -315,8 +315,11 @@ class SCCMHUNTER:
         cursor = self.conn.cursor()
         if 'dNSHostName' in entry:
             hostname = str(entry['dNSHostName']).lower()
-        else:
+        elif type(entry) == str:
             hostname = entry
+        else:
+            #cheap way to catch the error if the computer doesn't have a dnshostname attribute attached
+            return
         sitecode = ''
         signing = ''
         siteserver = ''
