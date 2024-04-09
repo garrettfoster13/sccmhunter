@@ -315,11 +315,12 @@ class SCCMHUNTER:
         cursor = self.conn.cursor()
         if 'dNSHostName' in entry:
             hostname = str(entry['dNSHostName']).lower()
-        elif type(entry) == str:
-            hostname = entry
-        else:
-            #cheap way to catch the error if the computer doesn't have a dnshostname attribute attached
+        elif ldap3.core.exceptions.LDAPKeyError:
+            # if no dnshostname attribute, skip it
+            logger.debug(f"[!] Skipping {entry['samaccountname']}. DNSHostName attribute not found.")
             return
+        else:
+            entry = entry
         sitecode = ''
         signing = ''
         siteserver = ''
