@@ -118,7 +118,7 @@ class SCCMHUNTER:
         self.check_schema()
         #if they're using DNS only: thoughts and prayers
         self.check_strings()
-
+        
         if self.debug:
             self.results()
         self.conn.close()
@@ -129,7 +129,6 @@ class SCCMHUNTER:
         # to LDAP.
         logger.info(f'[*] Checking for System Management Container.')
         try:
-            #print(self.search_base)
             self.ldap_session.extend.standard.paged_search(self.search_base, 
                                                         search_filter=f"(distinguishedName=CN=System Management,CN=System,{self.search_base})", 
                                                         attributes="nTSecurityDescriptor", 
@@ -153,7 +152,7 @@ class SCCMHUNTER:
                 for result in set(self.resolved_sids):
                     cursor.execute(f'''insert into SiteServers (Hostname, SiteCode, CAS, SigningStatus, SiteServer, Config, MSSQL) values (?,?,?,?,?,?,?)''',
                                 (result, '', '', '', 'True', '', ''))
-                    self.add_computer_to_db(result) 
+                    #self.add_computer_to_db(result) 
                     self.conn.commit()
                 cursor.execute('''SELECT COUNT (Hostname) FROM SiteServers''')
                 count = cursor.fetchone()[0]
@@ -167,7 +166,7 @@ class SCCMHUNTER:
             logger.info("[-] Did not find System Management Container")
             return
         except Exception as e:
-            logger.info(e)
+            raise e
 
                     
                     
@@ -317,7 +316,6 @@ class SCCMHUNTER:
             hostname = str(entry['dNSHostName']).lower()
         elif ldap3.core.exceptions.LDAPKeyError:
             # if no dnshostname attribute, skip it
-            logger.debug(f"[!] Skipping {entry['samaccountname']}. DNSHostName attribute not found.")
             return
         else:
             entry = entry
