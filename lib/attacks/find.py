@@ -455,7 +455,7 @@ class SCCMHUNTER:
     def ace_parser(self, descriptor):
         sids = []
         for ace in descriptor.dacl.aces:
-            if ace["TypeName"] == "ACCESS_ALLOWED_ACE":
+            if ace["TypeName"] == "ACCESS_ALLOWED_ACE" or ace["TypeName"] == "ACCESS_ALLOWED_OBJECT_ACE":
                 ace = ace["Ace"]
                 sid = ace["Sid"].formatCanonical()
                 mask = ace["Mask"]
