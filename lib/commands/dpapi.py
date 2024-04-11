@@ -1,10 +1,10 @@
 import typer
-from lib.attacks.dpapi import DPAPI
+from lib.attacks.dpapi import DPAPIHunter
 from lib.logger import init_logger
 
 app = typer.Typer()
 COMMAND_NAME = 'dpapi'
-HELP = 'Extract NAA credentials from DPAPI encrypted blobs.'
+HELP = 'Extract SCCM secrets from DPAPI encrypted blobs, requires Local Administrator privileges.'
 
 @app.callback(no_args_is_help=True, invoke_without_command=True)
 
@@ -17,10 +17,22 @@ def main(
     kerberos        : bool  = typer.Option(False, "-k", help='Use Kerberos authentication'),
     no_pass         : bool  = typer.Option(False, "-no-pass", help="don't ask for password (useful for -k)"),
     hashes          : str   = typer.Option(None, "-hashes",metavar="LMHASH:NTHASH", help="LM and NT hashes, format is LMHASH:NTHASH"),
-    aes             : str   = typer.Option(None, '-aes', metavar="HEX KEY", help='AES key to use for Kerberos Authentication (128 or 256 bits)'), 
-    debug           : bool  = typer.Option(False, '-debug',help='Enable Verbose Logging')):
+    aes             : str   = typer.Option(None, '-aes', metavar="HEX KEY", help='AES key to use for Kerberos Authentication (128 or 256 bits)'),
+    wmi             : bool  = typer.Option(False, '-wmi', help='Extract SCCM secrets stored in the WMI repository.'),
+    disk            : bool  = typer.Option(False, '-disk', help='Extract SCCM secrets from disk (OBJECTS.DATA), useful for accessing potentially changed or deleted secrets.'),
+    both            : bool  = typer.Option(False, '-both', help='Combines both WMI and disk methods to retrieve SCCM secrets.'), 
+    debug           : bool  = typer.Option(False, '-debug',help='Enable Verbose Logging'),
+    impacket_debug  : bool  = typer.Option(False, '-impacket-debug',help='Enable Impacket Logging')):
+
+
+    if impacket_debug:
+        import logging
+        from impacket import version
+        logging.getLogger().setLevel(logging.DEBUG)
+        logging.debug(version.getInstallationPath())
+        logging.debug(version.BANNER)
 
     logs_dir = init_logger(debug)
-    dpapihunter = DPAPI(remoteName=target, username=username, password=password, domain=domain, 
-                        kerberos=kerberos, no_pass=no_pass, hashes=hashes, aes=aes, kdc=dc_ip, logs_dir=logs_dir)
+    dpapihunter = DPAPIHunter(remoteName=target, username=username, password=password, domain=domain, 
+                        kerberos=kerberos, no_pass=no_pass, hashes=hashes, aesKey=aes, kdc=dc_ip, logs_dir=logs_dir, debug=debug, wmi=wmi, disk=disk, both=both)
     dpapihunter.run()
