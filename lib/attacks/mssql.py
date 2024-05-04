@@ -127,9 +127,9 @@ class MSSQL:
         
         if self.stacked:
             query = f'''
-DECLARE @AdminID INT;
 USE CM_{self.site_code};
 
+DECLARE @AdminID INT;
 INSERT INTO RBAC_Admins (AdminSID, LogonName, IsGroup, IsDeleted, CreatedBy, CreatedDate, ModifiedBy, ModifiedDate, SourceSite)
 OUTPUT INSERTED.AdminID INTO @AdminID
 VALUES ({hex_sid}, '{formatted_user}', 0, 0, '', '', '', '', '{self.site_code}');
