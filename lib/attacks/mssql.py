@@ -129,13 +129,10 @@ class MSSQL:
             query = f'''
 DECLARE @AdminID INT;
 USE CM_{self.site_code};
-INSERT INTO RBAC_Admins (AdminSID, LogonName, IsGroup, IsDeleted, CreatedBy, CreatedDate, ModifiedBy, ModifiedDate, SourceSite)
-SELECT {hex_sid}, '{formatted_user}', 0, 0, '', '', '', '', '{self.site_code}'
-WHERE NOT EXISTS (
-    SELECT 1 FROM RBAC_Admins WHERE LogonName = '{formatted_user}'
-);
 
-SET @AdminID = (SELECT TOP 1 AdminID FROM RBAC_Admins WHERE LogonName = '{formatted_user}');
+INSERT INTO RBAC_Admins (AdminSID, LogonName, IsGroup, IsDeleted, CreatedBy, CreatedDate, ModifiedBy, ModifiedDate, SourceSite)
+OUTPUT INSERTED.AdminID INTO @AdminID
+VALUES ({hex_sid}, '{formatted_user}', 0, 0, '', '', '', '', '{self.site_code}');
 
 INSERT INTO RBAC_ExtendedPermissions (AdminID, RoleID, ScopeID, ScopeTypeID) 
 SELECT @AdminID, RoleID, ScopeID, ScopeTypeID
