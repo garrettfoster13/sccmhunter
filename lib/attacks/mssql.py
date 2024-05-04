@@ -127,7 +127,7 @@ class MSSQL:
         
         if self.stacked:
             query = f'''
-USE CM_{self.site_code}; INSERT INTO RBAC_Admins (AdminSID,LogonName,IsGroup,IsDeleted,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate,SourceSite) VALUES ({hex_sid},'{formatted_user}',0,0,'','','','','{self.site_code}');INSERT INTO RBAC_ExtendedPermissions (AdminID,RoleID,ScopeID,ScopeTypeID) VALUES ((SELECT AdminID FROM RBAC_Admins WHERE LogonName = '{formatted_user}'),'SMS0001R','SMS00ALL','29');INSERT INTO RBAC_ExtendedPermissions (AdminID,RoleID,ScopeID,ScopeTypeID) VALUES ((SELECT AdminID FROM RBAC_Admins WHERE LogonName = '{formatted_user}'),'SMS0001R','SMS00001','1'); INSERT INTO RBAC_ExtendedPermissions (AdminID,RoleID,ScopeID,ScopeTypeID) VALUES ((SELECT AdminID FROM RBAC_Admins WHERE LogonName = '{formatted_user}'),'SMS0001R','SMS00004','1');
+USE CM_{self.site_code}; INSERT INTO RBAC_Admins (AdminSID,LogonName,IsGroup,IsDeleted,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate,SourceSite) VALUES ({hex_sid},'{formatted_user}',0,0,'','','','','{self.site_code}');INSERT INTO RBAC_ExtendedPermissions (AdminID,RoleID,ScopeID,ScopeTypeID) VALUES ((SELECT TOP 1 AdminID FROM RBAC_Admins WHERE LogonName = '{formatted_user}'),'SMS0001R','SMS00ALL','29');INSERT INTO RBAC_ExtendedPermissions (AdminID,RoleID,ScopeID,ScopeTypeID) VALUES ((SELECT TOP 1 AdminID FROM RBAC_Admins WHERE LogonName = '{formatted_user}'),'SMS0001R','SMS00001','1'); INSERT INTO RBAC_ExtendedPermissions (AdminID,RoleID,ScopeID,ScopeTypeID) VALUES ((SELECT TOP 1 AdminID FROM RBAC_Admins WHERE LogonName = '{formatted_user}'),'SMS0001R','SMS00004','1');
             '''
             print(query)
             return
