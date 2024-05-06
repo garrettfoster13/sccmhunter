@@ -1,3 +1,6 @@
+# Original Script: https://github.com/ThePorgs/impacket/blob/master/examples/SystemDPAPIdump.py
+# Module Author: @s1zzzz
+
 import logging
 import ntpath
 import re
@@ -18,17 +21,16 @@ from impacket.uuid import bin_to_string
 
 from lib.logger import logger
 
-# Original Script: https://github.com/ThePorgs/impacket/blob/master/examples/SystemDPAPIdump.py
-# Module Author: @s1zzzz
 
 class DPAPIHunter:
     def __init__(self, remoteName, username=None, password='', domain='', kerberos=False,
                  no_pass=False, hashes=None, aesKey=None, debug=False, kdc=None, logs_dir=None, wmi=True, disk=False, both=False):
+
         self.target = remoteName
         self.username = username
         self.password = password
         self.domain = domain
-        self.doKerberos = kerberos
+        self.doKerberos = kerberos or aesKey is not None
         self.no_pass = no_pass
         self.hashes = hashes
         self.aes = aesKey
@@ -71,6 +73,7 @@ class DPAPIHunter:
         print()
         logger.info("[*] Starting SCCM secrets extraction via WMI\n")
         
+        # https://github.com/garrettfoster13/sccmhunter/pull/32
         namespace = 'root\\ccm\\Policy\\Machine\\ActualConfig'
 
         iWbemServices = self.wmi.connect_to_namespace(namespace)
@@ -125,6 +128,8 @@ class DPAPIHunter:
         self.wmi.exec(f"cmd.exe /Q /c del \"C:\\Windows\\Temp\\{filename}\"")
 
     def parseFile(self, data) -> None:
+
+        foundCreds = False
         
         if(data is None):
             logger.info("[!] Unable to retrieve the OBJECTS.DATA file.")
@@ -144,7 +149,8 @@ class DPAPIHunter:
             matches = list(pattern.finditer(data))
 
             if matches:
-                logger.info(f"[*] Found {sccm_data_type}")
+                logger.info(f"[+] Found {sccm_data_type}")
+                foundCreds = True
 
                 for match in matches:
                     match sccm_data_type:
@@ -163,9 +169,9 @@ class DPAPIHunter:
                             except:
                                 continue
             else:
-                return None
+                continue
         
-        return True
+        return foundCreds
 
     def cleanup(self):
         if self.smb:
@@ -174,11 +180,13 @@ class DPAPIHunter:
 class DPAPI:
     def __init__(self, remoteName, username=None, password='', domain='', kerberos=False,
                  no_pass=False, hashes=None, aesKey=None, debug=False, kdc=None, smb_instance=None):
+        
+        
         self.target = remoteName
         self.username = username
         self.password = password
         self.domain = domain
-        self.doKerberos = kerberos
+        self.doKerberos = kerberos or aesKey is not None
         self.no_pass = no_pass
         self.hashes = hashes
         self.aes = aesKey
@@ -361,13 +369,13 @@ class SMB:
         self.aesKey = aesKey
         self.target = remoteName
         self.kdcHost = kdc
-        self.doKerberos = kerberos
+        self.doKerberos = kerberos or aesKey is not None
         self.hashes = hashes
         self.no_pass = no_pass
         self.hashes = hashes
 
         self.smb_conn = None
-        self.share = 'C$'
+
         
         self.connect()
         self.is_admin()
@@ -377,15 +385,17 @@ class SMB:
             logger.debug(f"[*] Establishing SMB connection to {self.target}")
             self.smb_conn = SMBConnection(self.target, self.target)
             if self.doKerberos:
+                logger.debug("[*] Performing Kerberos login")
                 self.smb_conn.kerberosLogin(self.username, self.password, self.domain, self.lmhash,
                                                self.nthash, self.aesKey, self.kdcHost)
             else:
+                logger.debug("[*] Performing NTLM login")
                 self.smb_conn.login(self.username, self.password, self.domain, self.lmhash, self.nthash)
         except OSError as e:
             if str(e).find("Connection reset by peer") != -1:
                 logger.info(f"SMBv1 might be disabled on {self.target}")
             if str(e).find('timed out') != -1:
-                raise Exception('The connection is timed out. Probably 445/TCP port is closed.')
+                raise Exception(f"The connection is timed out. Port 445/TCP port is closed on {self.target}")
             return None
         except SessionError as e:
             if str(e).find('STATUS_NOT_SUPPORTED') != -1:
@@ -396,6 +406,7 @@ class SMB:
                 traceback.print_exc()
                 logging.debug(str(e))
         
+        #logger.debug("[*] SMB Connection Established!")
         return self.smb_conn
 
     def disconnect(self):
@@ -424,16 +435,16 @@ class SMB:
 
 class WMI:
     def __init__(self, remoteName, username=None, password='', domain='', kerberos=False,
-                 no_pass=False, hashes=None, aes=None, kdc=None, dpapi_instance=None, logs_dir=None):
+                 no_pass=False, hashes=None, aesKey=None, kdc=None, dpapi_instance=None, logs_dir=None):
         self.target = remoteName
         self.username = username
         self.password = password
         self.domain = domain
         self.lmhash = ""
         self.nthash = ""
-        self.aesKey = aes
+        self.aesKey = aesKey
         self.kdcHost = kdc
-        self.doKerberos = kerberos
+        self.doKerberos = kerberos or aesKey is not None
         self.hashes = hashes
         self.no_pass = no_pass
 
