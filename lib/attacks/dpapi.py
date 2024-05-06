@@ -549,7 +549,7 @@ class WMI:
                     
                     if self.found_naa_credentials is False:
                         self.found_naa_credentials = True
-                        logger.info("[*] Found NAA credentials")
+                        logger.info("[+] Found NAA credentials")
 
                     unparsed_network_access_username = record.get('NetworkAccessUsername', {}).get('value', None)
                     unparsed_network_access_password = record.get('NetworkAccessPassword', {}).get('value', None)
@@ -561,7 +561,7 @@ class WMI:
 
                     if self.found_task_sequence is False:
                         self.found_task_sequence = True
-                        logger.info("[*] Found Task Sequence")
+                        logger.info("[+] Found Task Sequence")
                 
                     unparsed_task_sequence = record.get('TS_Sequence', {}).get('value', None)
                     task_sequence_decrypted = self.dpapi.decrypt_blob(unhexlify(re.match(regex, unparsed_task_sequence).group(1))[4:])
@@ -571,7 +571,7 @@ class WMI:
 
                     if self.found_collection_variables is False:
                         self.found_collection_variables = True
-                        logger.info("[*] Found Collection Variables")
+                        logger.info("[+] Found Collection Variables")
 
                     collection_name = record.get('Name', {}).get('value', None)
                     unparsed_collection_value = record.get('Value', {}).get('value', None)
