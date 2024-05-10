@@ -44,7 +44,7 @@ class AddComputerSAMR:
 
 
         if self.__hashes is not None:
-            self.__lmhash, self.__nthash = self.hashes.split(':')
+            self.__lmhash, self.__nthash = self.__hashes.split(':')
 
         if self.__computerPassword is None:
             self.__computerPassword = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(32))
