@@ -127,31 +127,7 @@ class MSSQL:
         
         if self.stacked:
             query = f'''
-DECLARE @AdminID INT;
-USE CM_{self.site_code};
-
-INSERT INTO RBAC_Admins (AdminSID, LogonName, IsGroup, IsDeleted, CreatedBy, CreatedDate, ModifiedBy, ModifiedDate, SourceSite)
-SELECT {hex_sid}, '{formatted_user}', 0, 0, '', '', '', '', '{self.site_code}'
-WHERE NOT EXISTS (
-    SELECT 1 FROM RBAC_Admins WHERE LogonName = '{formatted_user}'
-);
-
-SET @AdminID = (SELECT TOP 1 AdminID FROM RBAC_Admins WHERE LogonName = '{formatted_user}');
-
-INSERT INTO RBAC_ExtendedPermissions (AdminID, RoleID, ScopeID, ScopeTypeID) 
-SELECT @AdminID, RoleID, ScopeID, ScopeTypeID
-FROM (VALUES 
-    ('SMS0001R', 'SMS00ALL', 29),
-    ('SMS0001R', 'SMS00001', 1),
-    ('SMS0001R', 'SMS00004', 1)
-) AS V(RoleID, ScopeID, ScopeTypeID)
-WHERE NOT EXISTS (
-    SELECT 1 FROM RBAC_ExtendedPermissions 
-    WHERE AdminID = @AdminID 
-    AND RoleID = V.RoleID 
-    AND ScopeID = V.ScopeID 
-    AND ScopeTypeID = V.ScopeTypeID
-);
+DECLARE @AdminID INT; USE CM_{self.site_code}; INSERT INTO RBAC_Admins (AdminSID, LogonName, IsGroup, IsDeleted, CreatedBy, CreatedDate, ModifiedBy, ModifiedDate, SourceSite) SELECT {hex_sid}, '{formatted_user}', 0, 0, '', '', '', '', '{self.site_code}' WHERE NOT EXISTS ( SELECT 1 FROM RBAC_Admins WHERE LogonName = '{formatted_user}' ); SET @AdminID = (SELECT TOP 1 AdminID FROM RBAC_Admins WHERE LogonName = '{formatted_user}'); INSERT INTO RBAC_ExtendedPermissions (AdminID, RoleID, ScopeID, ScopeTypeID) SELECT @AdminID, RoleID, ScopeID, ScopeTypeID FROM (VALUES  ('SMS0001R', 'SMS00ALL', 29), ('SMS0001R', 'SMS00001', 1), ('SMS0001R', 'SMS00004', 1) ) AS V(RoleID, ScopeID, ScopeTypeID) WHERE NOT EXISTS ( SELECT 1 FROM RBAC_ExtendedPermissions  WHERE AdminID = @AdminID  AND RoleID = V.RoleID  AND ScopeID = V.ScopeID AND ScopeTypeID = V.ScopeTypeID );
             '''
             print(query)
             return
