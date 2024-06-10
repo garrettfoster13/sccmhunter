@@ -265,10 +265,14 @@ class SHELL(cmd2.Cmd):
     @cmd2.with_category(PE)
     def do_delete_admin(self, arg):
         """Remove SCCM Admin                        delete_admin (user)"""
-        option =  arg.split(' ')
+        option = arg.split(' ')
         targetuser = option[0]
-        logger.info(f"Tasked SCCM to remove {targetuser} as an administrative user.")
-        self.admin.delete(targetuser=targetuser)
+        if len(targetuser) >= 1:
+            logger.info(f"Tasked SCCM to remove {targetuser} as an administrative user.")
+            self.admin.delete(targetuser=targetuser)
+        else:
+            logger.info("A target user or group is required.")
+            return
 
     @cmd2.with_category(PE)
     def do_show_admins(self, arg):

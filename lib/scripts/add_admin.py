@@ -79,7 +79,7 @@ class ADD_ADMIN:
 
 
     def get_adminid(self):
-        url = f"https://{self.target_ip}/AdminService/wmi/SMS_Admin/?$filter=DisplayName eq '{self.targetuser}'"
+        url = f"https://{self.target_ip}/AdminService/wmi/SMS_Admin/?$filter=LogonName eq '{self.targetuser}'"
         try:
             r = requests.get(f"{url}",
                                 auth=HttpNtlmAuth(self.username, self.password),
@@ -87,11 +87,8 @@ class ADD_ADMIN:
             if r.status_code == 200:
                 try:
                     data = r.json()
-                    #len(obj['results']) == 0
                     if len(data['value']) == 0:
                          logger.info(f"Target user {self.targetuser} is not configured as an SMS Admin")
-                    # if IndexError:
-                    #     logger.info(f"[*] Could not find {self.targetuser} configured as an SCCM admin.")
                     else:
                         adminid = data['value'][0]['AdminID']
                         logger.debug(f"[+] Got AdminID: {adminid}")
