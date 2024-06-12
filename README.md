@@ -1,4 +1,17 @@
 <p align="center">
+    <a href="https://github.com/garrettfoster13/sccmhunter">
+    <img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fspecterops%2F.github%2Fmain%2Fconfig%2Fshield.json&style=flat"
+        alt="Sponsored by SpecterOps"/></a>
+    <a href="https://join.slack.com/t/bloodhoundhq/shared_invite/zt-1tgq6ojd2-ixpx5nz9Wjtbhc3i8AVAWw">
+        <img src="https://img.shields.io/badge/Slack-%23sccm-blueviolet?logo=slack" alt="Slack"/></a>
+    <a href="https://twitter.com/garrfoster">
+        <img src="https://img.shields.io/twitter/follow/garrfoster?style=social"
+        alt="@garrfoster on Twitter"/></a>
+</p>
+
+
+
+<p align="center">
     <img width="316" alt="logo" src="https://user-images.githubusercontent.com/82191679/232257821-bd1a36d0-c5a0-47b8-8024-d98d67d98f68.png">
 </p>
 
