@@ -16,15 +16,22 @@ This tool was developed and tested in a lab environment. Your mileage may vary o
 
 
 ## Installation
-I strongly encourage using a python virtual environment for installation
-```
 
+I strongly encourage using a python virtual environment for installation
+
+```
 git clone https://github.com/garrettfoster13/sccmhunter.git
 cd sccmhunter
 virtualenv --python=python3 .
 source bin/activate
 pip3 install -r requirements.txt
 python3 sccmhunter.py -h
+```
+
+Or with pipx
+
+```
+pipx install git+https://github.com/garrettfoster13/sccmhunter.git
 ```
 
 # References
