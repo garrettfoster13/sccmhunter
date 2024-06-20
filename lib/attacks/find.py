@@ -291,8 +291,7 @@ class SCCMHUNTER:
             if self.ldap_session.entries:
                 logger.info(f"[+] Found {len(self.ldap_session.entries)} computers in LDAP.")
                 for entry in self.ldap_session.entries:
-                    hostname =  str(entry['dNSHostname']).lower()
-                    self.add_computer_to_db(hostname) 
+                    self.add_computer_to_db(entry)
                     self.conn.commit()
             cursor.close()
 
