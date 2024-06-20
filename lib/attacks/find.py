@@ -76,7 +76,7 @@ class DATABASE:
 class SCCMHUNTER:
     
     def __init__(self, username=None, password=None, domain=None, target_dom=None, 
-                dc_ip=None, resolve=False, ldaps=False, kerberos=False, no_pass=False, hashes=None, 
+                dc_ip=None, resolve=False, ldaps=False, channel_binding=False, kerberos=False, no_pass=False, hashes=None, 
                 aes=None, debug=False, logs_dir = None):
         self.username = username
         self.password= password
@@ -85,6 +85,7 @@ class SCCMHUNTER:
         self.dc_ip = dc_ip
         self.resolve = resolve
         self.ldaps = ldaps
+        self.binding = channel_binding
         self.kerberos = kerberos
         self.no_pass = no_pass
         self.hashes=hashes
@@ -378,14 +379,17 @@ class SCCMHUNTER:
     def ldapsession(self):
         lmhash = ""
         nthash = ""
+        channel_binding = dict()
         if self.hashes:
             lmhash, nthash = self.hashes.split(':')
         if not (self.password or self.hashes or self.aes or self.no_pass):
                 self.password = getpass("Password:")
+        if self.binding:
+            channel_binding = dict(channel_binding=ldap3.TLS_CHANNEL_BINDING)
         try:
             ldap_server, self.ldap_session = init_ldap_session(domain=self.domain, username=self.username, password=self.password, lmhash=lmhash, 
                                                             nthash=nthash, kerberos=self.kerberos, domain_controller=self.dc_ip, 
-                                                            aesKey=self.aes, hashes=self.hashes, ldaps=self.ldaps)
+                                                            aesKey=self.aes, hashes=self.hashes, ldaps=self.ldaps, channel_binding=channel_binding)
             logger.debug(f'[+] Bind successful {ldap_server}')
         except ldap3.core.exceptions.LDAPSocketOpenError as e: 
             if 'invalid server address' in str(e):

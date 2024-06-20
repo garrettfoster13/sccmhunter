@@ -14,8 +14,9 @@ def main(
     domain          : str   = typer.Option(..., '-d',  help="Domain "),
     target_dom      : str   = typer.Option(None, '-t',  help='Target domain. Use if authenticating across trusts.'),
     dc_ip           : str   = typer.Option(..., '-dc-ip',  help = "IP address or FQDN of domain controller"),
-    resolve         : bool   = typer.Option(False, "-resolve", help="Resolve nested group members. (Can be slow in large environments)"),   
+    resolve         : bool  = typer.Option(False, "-resolve", help="Resolve nested group members. (Can be slow in large environments)"),   
     ldaps           : bool  = typer.Option(False, '-ldaps', help='Use LDAPS instead of LDAP'),
+    channel_binding : bool  = typer.Option(False, '-binding', help='Use LDAPS channel binding'),
     kerberos        : bool  = typer.Option(False, "-k", help='Use Kerberos authentication'),
     no_pass         : bool  = typer.Option(False, "-no-pass", help="don't ask for password (useful for -k)"),
     hashes          : str   = typer.Option(None, "-hashes",metavar="LMHASH:NTHASH", help="LM and NT hashes, format is LMHASH:NTHASH"),
@@ -26,6 +27,6 @@ def main(
 
 
     logs_dir = init_logger(debug)
-    sccmhunter = SCCMHUNTER(username=username, password=password, domain=domain, target_dom=target_dom, dc_ip=dc_ip, resolve=resolve, ldaps=ldaps,
+    sccmhunter = SCCMHUNTER(username=username, password=password, domain=domain, target_dom=target_dom, dc_ip=dc_ip, resolve=resolve, ldaps=ldaps, channel_binding=channel_binding,
                             kerberos=kerberos, no_pass=no_pass, hashes=hashes, aes=aes, debug=debug, logs_dir=logs_dir)
     sccmhunter.run()
