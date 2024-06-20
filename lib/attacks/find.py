@@ -77,7 +77,7 @@ class SCCMHUNTER:
     
     def __init__(self, username=None, password=None, domain=None, target_dom=None, 
                 dc_ip=None, resolve=False, ldaps=False, kerberos=False, no_pass=False, hashes=None, 
-                aes=None, debug=False, logs_dir = None):
+                aes=None, debug=False, logs_dir = None, all_computers=False):
         self.username = username
         self.password= password
         self.domain = domain
@@ -101,6 +101,7 @@ class SCCMHUNTER:
         self.resolved_sids = []
         self.site_codes= []
         self.mp_sitecodes = []
+        self.all_computers = all_computers
 
     def run(self):
         #make sure the DB is built
@@ -118,6 +119,9 @@ class SCCMHUNTER:
         self.check_schema()
         #if they're using DNS only: thoughts and prayers
         self.check_strings()
+
+        if self.all_computers:
+            self.check_all_computers()
         
         if self.debug:
             self.results()
@@ -272,6 +276,27 @@ class SCCMHUNTER:
                     logger.debug(f"[-] {e}")
         else:
             logger.info("[-] No results found.")
+
+    def check_all_computers(self):
+        # If user specifies the option, get every computer object via LDAP
+        logger.info(f'[*] Querying LDAP for all computer objects')
+        cursor = self.conn.cursor()
+        try:
+            self.ldap_session.extend.standard.paged_search(self.search_base, 
+                                                        "(&(objectCategory=computer))", 
+                                                        attributes="dNSHostName", 
+                                                        controls=self.controls, 
+                                                        paged_size=500, 
+                                                        generator=False)  
+            if self.ldap_session.entries:
+                logger.info(f"[+] Found {len(self.ldap_session.entries)} computers in LDAP.")
+                for entry in self.ldap_session.entries:
+                    self.add_computer_to_db(entry)
+                    self.conn.commit()
+            cursor.close()
+
+        except ldap3.core.exceptions.LDAPObjectClassError as e:
+            logger.info(f'[-] Could not find any computer objects in LDAP')            
 
     #add entries to database, check if attributes exists on entry, check if row already exists, add if not
     def add_group_to_db(self,entry):
