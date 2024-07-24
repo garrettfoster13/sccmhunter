@@ -4,8 +4,9 @@
 
 
 
+
 <p align="center">
-    <img width="696" alt="image" src="https://github.com/garrettfoster13/sccmhunter/assets/82191679/20fad3ce-561b-4077-9b73-fea9280db97a">
+    <img width="696" alt="image" src="https://github.com/user-attachments/assets/42f6572f-9df1-4229-a213-b02d9526f16d">
 </p>
 
 # SCCMHunter
