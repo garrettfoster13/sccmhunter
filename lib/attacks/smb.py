@@ -289,18 +289,18 @@ class SMB:
 #intention here is to return whether the host has the Management Point role
     def http_check(self, server):
         try:
-            endpoint = f"http://{server}/SMS_MP"
+            endpoint = f"http://{server}/ccm_system_windowsauth/"
             r = requests.request("GET",
                                 endpoint,
                                 verify=False)
-            if r.status_code == 403:
+            if r.status_code == 401:
                 return True
             
-            endpoint = f"https://{server}/SMS_MP"
+            endpoint = f"https://{server}/ccm_system_windowsauth/"
             r = requests.request("GET",
                                 endpoint,
                                 verify=False)
-            if r.status_code == 403:
+            if r.status_code == 401:
                 return True
             else:
                 return False
