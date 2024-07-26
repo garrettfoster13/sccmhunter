@@ -92,9 +92,9 @@ class HTTP:
                         result = sccmwtf.requestPolicy(url, self.uuid, True, True, key=key)
                         decryptedResult = sccmwtf.parseEncryptedPolicy(result)
                         sccmwtf.parse_xml(decryptedResult)
-                        file_name = f"{self.logs_dir}/loot/{self.mp.split('.')[0]}_naapolicy.xml"
+                        file_name = f"{self.logs_dir}/loot/naapolicy.xml"
                         Tools.write_to_file(decryptedResult, file_name)
-                        logger.info(f"[+] Done.. decrypted policy dumped to {self.logs_dir}/loot/{self.mp.split('.')[0]}_naapolicy.xml")
+                        logger.info(f"[+] Done.. decrypted policy dumped to {self.logs_dir}/loot/naapolicy.xml")
                         return True
         except FileNotFoundError:
             logger.info(f"Missing required files -- check the UUID.")
@@ -124,27 +124,23 @@ class HTTP:
             logger.info("[-] Missing machine account credentials, check your arguments and try again.")
             sys.exit()
 
-        result = False
-        while not result:
-            #not so great way of handling targeted MP searches but will get back to this later
-            if self.mp:
-                self.targets = []
-                self.targets.append(self.mp)
-            for target in self.targets:
-                target_name = self.computer_name[:-1]
-                target_fqdn = f'{target_name}.{self.domain}'
-                try:
-                    logger.info(f"[*] Attempting to grab policy from {target}")
-                    SCCMWTF=SCCMTools(target_name, target_fqdn, target, self.computer_name, self.computer_pass, self.sleep, self.logs_dir)
-                    result = SCCMWTF.sccmwtf_run()
-                    break
-                except Exception as e:
-                    logger.info(e)
+
+        if self.mp:
+            self.targets = []
+            self.targets.append(self.mp)
+        for target in self.targets:
+            target_name = self.computer_name[:-1]
+            target_fqdn = f'{target_name}.{self.domain}'
+            try:
+                logger.info(f"[*] Attempting to grab policy from {target}")
+                SCCMWTF=SCCMTools(target_name, target_fqdn, target, self.computer_name, self.computer_pass, self.sleep, self.logs_dir)
+                SCCMWTF.sccmwtf_run()
+            except Exception as e:
+                logger.info(e)
 
     def http_hunter(self, servers):
         validated = []                   
         for server in servers:
-            #server = server[0]
             url=(f"http://{server}/ccm_system_windowsauth")
             url2=(f"http://{server}/ccm_system")
             try:
@@ -153,9 +149,6 @@ class HTTP:
                 if x.status_code == 401:
                     logger.info(f"[+] Found {url}")
                     validated.append(server)
-                # if x2.status_code == 403:
-                #     logger.info(f"[+] Found {url2}")
-                #     validated.append(server)
             except requests.exceptions.Timeout:
                 logger.info(f"[-] {server} connection timed out.")
             except requests.ConnectionError as e:
