@@ -208,6 +208,8 @@ class SMB:
                     if "SMS Site" in remark:
                         distp = True
                         site_code = (remark.split(" ")[2])
+                    elif "ConfigMgr Site Server" in remark:
+                        distp = True
                 except:
                     distp = False
             if "REMINST" in shares_dict:

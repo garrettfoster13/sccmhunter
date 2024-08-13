@@ -102,6 +102,7 @@ class SCCMHUNTER:
         self.site_codes= []
         self.mp_sitecodes = []
         self.all_computers = all_computers
+        self.entry = None
 
     def run(self):
         #make sure the DB is built
@@ -149,14 +150,14 @@ class SCCMHUNTER:
                     for attr in attributes:
                         secdesc = (entry[attr].value)
                         dacl.security_descriptor.fromString(secdesc)
-                self.ace_parser(dacl)
+                self.ace_parser(dacl, True)
             #save results to DB
             if self.resolved_sids:
                 cursor = self.conn.cursor()
                 for result in set(self.resolved_sids):
                     cursor.execute(f'''insert into SiteServers (Hostname, SiteCode, CAS, SigningStatus, SiteServer, Config, MSSQL) values (?,?,?,?,?,?,?)''',
                                 (result, '', '', '', 'True', '', ''))
-                    #self.add_computer_to_db(result) 
+                    self.add_computer_to_db(self.entry)
                     self.conn.commit()
                 cursor.execute('''SELECT COUNT (Hostname) FROM SiteServers''')
                 count = cursor.fetchone()[0]
@@ -221,7 +222,7 @@ class SCCMHUNTER:
                     self.mp_sitecodes.append(sitecode)
                     cursor.execute(f'''insert into ManagementPoints (Hostname, SiteCode, SigningStatus) values (?,?,?)''',
                                 (hostname, sitecode, ''))
-                    self.add_computer_to_db(hostname) 
+                    self.add_computer_to_db(entry)
                     self.conn.commit()
             cursor.close()
             self.check_sites()
@@ -442,7 +443,7 @@ class SCCMHUNTER:
         self.sid_resolver(sid)
 
 
-    def sid_resolver(self, sids):
+    def sid_resolver(self, sids, addEntryToSelf = False):
         for sid in sids:
             search_filter = "(objectSid={})".format(sid)
             self.ldap_session.extend.standard.paged_search(self.search_base, 
@@ -469,13 +470,15 @@ class SCCMHUNTER:
                             if attr == 'dNSHostName':
                                 dnsname = entry['dNSHostName'].value  
                                 self.resolved_sids.append(str(dnsname).lower())
+                                if addEntryToSelf:
+                                    self.entry = entry
 
             except ldap3.core.exceptions.LDAPKeyError as e:
                 logger.debug(e)
             except Exception as e:
                 logger.info(e)
 
-    def ace_parser(self, descriptor):
+    def ace_parser(self, descriptor, addEntryToSelf = False):
         sids = []
         for ace in descriptor.dacl.aces:
             if ace["TypeName"] == "ACCESS_ALLOWED_ACE" or ace["TypeName"] == "ACCESS_ALLOWED_OBJECT_ACE":
@@ -485,4 +488,4 @@ class SCCMHUNTER:
                 fullcontrol = 0xf01ff
                 if mask.hasPriv(fullcontrol):
                     sids.append(sid)
-        self.sid_resolver(sids)
+        self.sid_resolver(sids, addEntryToSelf)
