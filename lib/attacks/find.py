@@ -240,7 +240,6 @@ class SCCMHUNTER:
         logger.info(f'[*] Querying LDAP for potential PXE enabled distribution points')
         cursor = self.conn.cursor()
         potential_dps = []
-        resolved_dps = []
         try:
             self.ldap_session.extend.standard.paged_search(self.search_base, 
                                                         "(cn=*-Remote-Installation-Services)", 
@@ -269,22 +268,16 @@ class SCCMHUNTER:
                                                                 paged_size=500, 
                                                                 generator=False)  
                     if self.ldap_session.entries:
-                        logger.info(f"[+] Found {len(self.ldap_session.entries)} potential Distribution Points in LDAP.")
                         for entry in self.ldap_session.entries:
                             hostname =  str(entry['dNSHostname'])
                             cursor.execute(f'''insert into PXEDistributionPoints (Hostname, SigningStatus, SCCM, WDS) values (?,?,?,?)''',
                                 (hostname, '', '' , ''))
+                            self.add_computer_to_db(hostname)
+                            self.conn.commit()
+                    
                 except ldap3.core.exceptions.LDAPObjectClassError as e:
                     logger.info(f'[-] Could not find any Distribution Points published in LDAP')
-
-        
-        # self.add_computer_to_db(hostname) 
-        # self.conn.commit()
-        # cursor.close()
-        # self.check_sites()
-        print(potential_dps)
-        print(resolved_dps)
-
+        cursor.close()
 
     def check_strings(self):
         #now search for anything related to "SCCM" 
