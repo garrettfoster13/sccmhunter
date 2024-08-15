@@ -157,9 +157,10 @@ class SCCMHUNTER:
             if self.resolved_sids:
                 cursor = self.conn.cursor()
                 for result in set(self.resolved_sids):
+                    print(type(result))
                     cursor.execute(f'''insert into SiteServers (Hostname, SiteCode, CAS, SigningStatus, SiteServer, Config, MSSQL) values (?,?,?,?,?,?,?)''',
                                 (result, '', '', '', 'True', '', ''))
-                    #self.add_computer_to_db(result) 
+                    self.add_computer_to_db(result) 
                     self.conn.commit()
                 cursor.execute('''SELECT COUNT (Hostname) FROM SiteServers''')
                 count = cursor.fetchone()[0]
@@ -224,7 +225,8 @@ class SCCMHUNTER:
                     self.mp_sitecodes.append(sitecode)
                     cursor.execute(f'''insert into ManagementPoints (Hostname, SiteCode, SigningStatus) values (?,?,?)''',
                                 (hostname, sitecode, ''))
-                    self.add_computer_to_db(hostname) 
+                    if hostname:
+                        self.add_computer_to_db(hostname) 
                     self.conn.commit()
             cursor.close()
             self.check_sites()
@@ -272,7 +274,8 @@ class SCCMHUNTER:
                             hostname =  str(entry['dNSHostname'])
                             cursor.execute(f'''insert into PXEDistributionPoints (Hostname, SigningStatus, SCCM, WDS) values (?,?,?,?)''',
                                 (hostname, '', '' , ''))
-                            self.add_computer_to_db(hostname)
+                            if hostname:
+                                self.add_computer_to_db(hostname)
                             self.conn.commit()
                     
                 except ldap3.core.exceptions.LDAPObjectClassError as e:
@@ -305,7 +308,9 @@ class SCCMHUNTER:
                             self.add_user_to_db(entry)
                         #add computer to db
                         if (entry['sAMAccountType']) == 805306369:
-                            self.add_computer_to_db(entry)
+                            hostname =  str(entry['dNSHostname'])
+                            if hostname:
+                                self.add_computer_to_db(hostname)
                         #add group to db and then resolve members
                         if (entry['sAMAccountType']) == 268435456:
                             self.add_group_to_db(entry)
@@ -317,7 +322,9 @@ class SCCMHUNTER:
                                     if (result['sAMAccountType']) == 805306368:
                                         self.add_user_to_db(result)
                                     if (result['sAMAccountType']) == 805306369:
-                                        self.add_computer_to_db(result)
+                                        hostname =  str(result['dNSHostname'])
+                                        if hostname:
+                                            self.add_computer_to_db(result)
                                     if (result['sAMAccountType']) == 268435456:
                                         self.add_group_to_db(result)
                 except ldap3.core.exceptions.LDAPAttributeError as e:
@@ -341,7 +348,9 @@ class SCCMHUNTER:
             if self.ldap_session.entries:
                 logger.info(f"[+] Found {len(self.ldap_session.entries)} computers in LDAP.")
                 for entry in self.ldap_session.entries:
-                    self.add_computer_to_db(entry)
+                    hostname =  str(entry['dNSHostname'])
+                    if hostname:
+                        self.add_computer_to_db(hostname)
                     self.conn.commit()
             cursor.close()
 
@@ -387,13 +396,7 @@ class SCCMHUNTER:
     
     def add_computer_to_db(self, entry):
         cursor = self.conn.cursor()
-        if 'dNSHostName' in entry:
-            hostname = str(entry['dNSHostName']).lower()
-        elif ldap3.core.exceptions.LDAPKeyError:
-            # if no dnshostname attribute, skip it
-            return
-        else:
-            entry = entry
+        hostname = entry
         sitecode = ''
         signing = ''
         siteserver = ''
