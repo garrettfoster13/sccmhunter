@@ -3,6 +3,8 @@ from lib.logger import logger
 from impacket.ldap import ldaptypes
 import ldap3
 from getpass import getpass
+import json
+from ldap3.protocol.formatters.formatters import format_sid
 
 
 """
@@ -83,14 +85,19 @@ class MSSQL:
             exit()
         if self.ldap_session.entries:
             for entry in self.ldap_session.entries:
-                sid = str(entry['objectsid'])
-                logger.debug(f"[+] Found {self.target_user} SID: {sid}")
-                #abusing MSSQL requires the hex SID of the owned account
-                #REF: https://thehacker.recipes/ad/movement/sccm-mecm#1.-retreive-the-controlled-user-sid
-                hexsid = ldaptypes.LDAP_SID()
-                hexsid.fromCanonical(sid)
-                self.querysid = ('0x' + ''.join('{:02X}'.format(b) for b in hexsid.getData()))
-                logger.info(f'[*] Converted {self.target_user} SID to {self.querysid}')
+                json_entry = json.loads(entry.entry_to_json())
+                attributes = json_entry['attributes'].keys()
+                for attr in attributes:
+                    if attr == "objectSid":
+                        sid = format_sid(entry[attr].value)
+                        print(sid)
+                        logger.debug(f"[+] Found {self.target_user} SID: {sid}")
+                        #abusing MSSQL requires the hex SID of the owned account
+                        #REF: https://thehacker.recipes/ad/movement/sccm-mecm#1.-retreive-the-controlled-user-sid
+                        hexsid = ldaptypes.LDAP_SID()
+                        hexsid.fromCanonical(sid)
+                        self.querysid = ('0x' + ''.join('{:02X}'.format(b) for b in hexsid.getData()))
+                        logger.info(f'[*] Converted {self.target_user} SID to {self.querysid}')
 
         else:
             print("[-] Failed to resolve target SID.")
