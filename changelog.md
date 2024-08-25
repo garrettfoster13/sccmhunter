@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Fixed a bug where site servers weren't being added to the computers table causing further profiling to fail
+- Fixed a bug in `MSSQL` where SID translation failed when using Kerberos authentication
 
 
 ### Added
@@ -27,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed a bug where an arbitrary security group would get removed when running the `delete_admin` command in the Admin module
 - Fixed a bug where an existing admin account would not be located due to a displayname vs logonname conflict
+
 
 
 
