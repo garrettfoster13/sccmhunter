@@ -67,7 +67,7 @@ class SHOW:
         if self.computers or self.all:
             logger.info("[+] Showing COMPUTERS Table")
             tb_c = dp.read_sql("SELECT * FROM Computers", self.conn)
-            logger.info(tabulate(tb_c, showindex=False, headers=tb_c.columns, tablefmt='grid'))   
+            logger.info(tabulate(tb_c, showindex=False, headers=tb_c.columns, tablefmt='grid'))
             if self.csv:
                 tb_c.to_csv(f"{self.logs_dir}/csvs/computers.csv", encoding='utf-8')
             if self.json:
@@ -77,4 +77,4 @@ class SHOW:
         if self.json:
             logger.info(f"[*] JSON files saved to {self.logs_dir}/json/")
 
-        
+

@@ -19,11 +19,12 @@ class DATABASE():
         self.logs_dir = logs_dir
         self._dbname = f"{self.logs_dir}/db/sccmhunter.db"
         self.conn = sqlite3.connect(self._dbname, check_same_thread=False)
+        self.user_agent = user_agent
         self.headers = {}
 
         # If the user selected the User Agent rewrite option, attempt to overwrite the User Agent in the header dict
-        if user_agent:
-            self.headers['User-Agent'] = user_agent
+        if self.user_agent:
+            self.headers['User-Agent'] = self.user_agent
 
         self.run()
 

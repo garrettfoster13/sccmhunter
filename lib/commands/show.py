@@ -8,7 +8,7 @@ HELP = 'Show and/or recon table results.'
 
 @app.callback(no_args_is_help=True, invoke_without_command=True)
 
-def main(       
+def main(
     siteservers     : bool   = typer.Option(False, "-siteservers", help="Show SiteServers table"),
     mps             : bool   = typer.Option(False, "-mps", help="Show ManagementPoints table"),
     users           : bool   = typer.Option(False, "-users", help="Show SCCM related users."),
