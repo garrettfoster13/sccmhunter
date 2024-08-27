@@ -6,19 +6,25 @@ import requests
 from requests_ntlm import HttpNtlmAuth
 from urllib3.exceptions import InsecureRequestWarning
 
-
-headers = {'Content-Type': 'application/json'}
+#Overwrite of the global header file to remove application/json Content Type as only a GET request is used
+headers = {}
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
 
 class DATABASE():
-    def __init__(self, username=None, password=None, url=None, logs_dir=None):
+    def __init__(self, username=None, password=None, url=None, logs_dir=None, user_agent=None):
         self.url = f"https://{url}/AdminService/wmi"
         self.username = username
         self.password = password
         self.logs_dir = logs_dir
         self._dbname = f"{self.logs_dir}/db/sccmhunter.db"
         self.conn = sqlite3.connect(self._dbname, check_same_thread=False)
+        self.headers = {}
+
+        # If the user selected the User Agent rewrite option, attempt to overwrite the User Agent in the header dict
+        if user_agent:
+            self.headers['User-Agent'] = user_agent
+
         self.run()
 
     def run(self):
@@ -26,7 +32,7 @@ class DATABASE():
         if db_ready:
             logger.debug("[*] Database built.")
         return True
-    
+
     def validate_tables(self):
         table_names = ["Devices", "Users", "PUsers", "Collections", "lastlogon"]
         try:
@@ -42,19 +48,19 @@ class DATABASE():
             exit()
 
     def build_tables(self):
-        logger.debug("[*] First time run detected. Building local database.") 
+        logger.debug("[*] First time run detected. Building local database.")
         try:
-            self.conn.execute('''CREATE TABLE Devices(Active,Client, DistinguishedName, FullDomainName, 
-            IPAddresses,LastLogonUserDomain, LastLogonUserName, Name, OperatingSystemNameandVersion, 
+            self.conn.execute('''CREATE TABLE Devices(Active,Client, DistinguishedName, FullDomainName,
+            IPAddresses,LastLogonUserDomain, LastLogonUserName, Name, OperatingSystemNameandVersion,
             PrimaryGroupID, ResourceId, ResourceNames, SID, SMSInstalledSites, SMSUniqueIdentifier)''')
-            self.conn.execute('''CREATE TABLE Users(DistinguishedName, FullDomainName, FullUserName, Mail, NetworkOperatingSystem, 
+            self.conn.execute('''CREATE TABLE Users(DistinguishedName, FullDomainName, FullUserName, Mail, NetworkOperatingSystem,
             ResourceId, SID, UniqueUserName, UserAccountControl, UserName, UserPrincipalName)''')
             self.conn.execute('''CREATE TABLE PUsers(IsActive,RelationshipResourceID,ResourceID,ResourceName,UniqueUserName)''')
             self.conn.execute('''CREATE TABLE Collections(CollectionID,CollectionType,IsBuiltIn,LimitToCollectionName,MemberClassName,
             MemberCount,Name)''')
             self.conn.execute('''CREATE TABLE lastlogon(Active, Client, DistinguishedName, FullDomainName, IPAddresses,LastLogonUserDomain,
             LastLogonUserName, Name, OperatingSystemNameandVersion,
-            PrimaryGroupID, ResourceId, ResourceNames, SID, SMSInstalledSites, SMSUniqueIdentifier)''') 
+            PrimaryGroupID, ResourceId, ResourceNames, SID, SMSInstalledSites, SMSUniqueIdentifier)''')
         except Exception as e:
             logger.info(e)
         finally:
@@ -89,7 +95,7 @@ SMSInstalledSites: {tb['SMSInstalledSites'].to_string(index=False, header=False)
 SMSUniqueIdentifier: {tb['SMSUniqueIdentifier'].to_string(index=False, header=False)}
 ------------------------------------------''')
             return
-    
+
         except Exception as e:
             print(e)
 
@@ -101,6 +107,7 @@ SMSUniqueIdentifier: {tb['SMSUniqueIdentifier'].to_string(index=False, header=Fa
             r = requests.request("GET",
                                 f"{endpoint}",
                                 auth=HttpNtlmAuth(self.username, self.password),
+                                headers=self.headers,
                                 verify=False)
             results = r.json()
             for i in results["value"]:
@@ -121,9 +128,9 @@ SMSUniqueIdentifier: {tb['SMSUniqueIdentifier'].to_string(index=False, header=Fa
                     Sid = str(i["SID"])
                     SMSInstalledSites = str(i["SMSInstalledSites"]).replace("['", "").replace("']", "")
                     SMSUniqueIdentifier = str(i["SMSUniqueIdentifier"])
-                    cursor.execute('''insert into Devices (Active, Client, DistinguishedName, FullDomainName, IPAddresses,  
-                    LastLogonUserDomain, LastLogonUserName, Name, OperatingSystemNameandVersion, 
-                    PrimaryGroupID, ResourceId, ResourceNames, SID, SMSInstalledSites, SMSUniqueIdentifier) 
+                    cursor.execute('''insert into Devices (Active, Client, DistinguishedName, FullDomainName, IPAddresses,
+                    LastLogonUserDomain, LastLogonUserName, Name, OperatingSystemNameandVersion,
+                    PrimaryGroupID, ResourceId, ResourceNames, SID, SMSInstalledSites, SMSUniqueIdentifier)
                     values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (Active,Client,DistinguishedName,FullDomainName,
                                                                 IPAddresses,LastLogonUserDomain,LastLogonUserName,
                                                                 Name,OperatingSystemNameandVersion,PrimaryGroupID,
@@ -171,6 +178,7 @@ UserPrincipalName: {tb['UserPrincipalName'].to_string(index=False, header=False)
             r = requests.request("GET",
                                 f"{endpoint}",
                                 auth=HttpNtlmAuth(self.username, self.password),
+                                headers=self.headers,
                                 verify=False)
             results = r.json()
 
@@ -188,8 +196,8 @@ UserPrincipalName: {tb['UserPrincipalName'].to_string(index=False, header=False)
                     UserAccountControl = str(i["UserAccountControl"])
                     UserName = str(i["UserName"])
                     UserPrincipalName = str(i["UserPrincipalName"])
-                    
-                    cursor.execute('''insert into Users (DistinguishedName, FullDomainName, FullUserName, Mail, NetworkOperatingSystem, 
+
+                    cursor.execute('''insert into Users (DistinguishedName, FullDomainName, FullUserName, Mail, NetworkOperatingSystem,
                     ResourceId, SID, UniqueUserName, UserAccountControl, UserName, UserPrincipalName) values (?,?,?,?,?,?,?,?,?,?,?)''',(
                             DistinguishedName,FullDomainName,FullUserName,Mail,NetworkOperatingSystem,ResourceId,
                             sid,UniqueUserName,UserAccountControl,UserName,UserPrincipalName))
@@ -203,12 +211,13 @@ UserPrincipalName: {tb['UserPrincipalName'].to_string(index=False, header=False)
     def get_pusers(self, username):
         logger.info("[*] Collecting primary users...")
         cursor=self.conn.cursor()
-        endpoint = f'''{self.url}/SMS_UserMachineRelationship?$filter=endswith(UniqueUsername,'{username}') ''' 
+        endpoint = f'''{self.url}/SMS_UserMachineRelationship?$filter=endswith(UniqueUsername,'{username}') '''
 
-        try:  
+        try:
             r = requests.request("GET",
                                 f"{endpoint}",
                                 auth=HttpNtlmAuth(self.username, self.password),
+                                headers=self.headers,
                                 verify=False)
             results = r.json()
             for i in results["value"]:
@@ -217,7 +226,7 @@ UserPrincipalName: {tb['UserPrincipalName'].to_string(index=False, header=False)
                     RelationshipResourceID = str(i["RelationshipResourceID"])
                     ResourceID = str(i["ResourceID"])
                     ResourceName = str(i["ResourceName"])
-                    UniqueUserName = str(i["UniqueUserName"]) 
+                    UniqueUserName = str(i["UniqueUserName"])
                     cursor.execute('''insert into PUsers (IsActive,RelationshipResourceID,ResourceID,ResourceName,UniqueUserName) values (?,?,?,?,?)''',(
                         IsActive,RelationshipResourceID,ResourceID,ResourceName,UniqueUserName))
                 self.conn.commit()
@@ -240,10 +249,11 @@ UserPrincipalName: {tb['UserPrincipalName'].to_string(index=False, header=False)
     def get_collections(self):
         logger.info("[*] Collecting collections...")
         cursor=self.conn.cursor()
-        endpoint = f'''{self.url}/SMS_Collection?$select=CollectionID,CollectionType,IsBuiltIn,LimitToCollectionName,MemberClassName,MemberCount,Name'''   
+        endpoint = f'''{self.url}/SMS_Collection?$select=CollectionID,CollectionType,IsBuiltIn,LimitToCollectionName,MemberClassName,MemberCount,Name'''
         r = requests.request("GET",
                             f"{endpoint}",
                             auth=HttpNtlmAuth(self.username, self.password),
+                            headers=self.headers,
                             verify=False)
         results = r.json()
         for i in results["value"]:
@@ -300,11 +310,12 @@ UserPrincipalName: {tb['UserPrincipalName'].to_string(index=False, header=False)
         self.conn.execute('DROP TABLE IF EXISTS lastlogon;')
         self.conn.execute('''CREATE TABLE lastlogon(Active, Client, DistinguishedName, FullDomainName, IPAddresses,LastLogonUserDomain,
             LastLogonUserName, Name, OperatingSystemNameandVersion,
-            PrimaryGroupID, ResourceId, ResourceNames, SID, SMSInstalledSites, SMSUniqueIdentifier)''') 
+            PrimaryGroupID, ResourceId, ResourceNames, SID, SMSInstalledSites, SMSUniqueIdentifier)''')
         try:
             r = requests.request("GET",
                                 f"{endpoint}",
                                 auth=HttpNtlmAuth(self.username, self.password),
+                                headers=self.headers,
                                 verify=False)
             results = r.json()
 
@@ -324,10 +335,10 @@ UserPrincipalName: {tb['UserPrincipalName'].to_string(index=False, header=False)
                 Sid = str(i["SID"])
                 SMSInstalledSites = str(i["SMSInstalledSites"]).replace("['", "").replace("']", "")
                 SMSUniqueIdentifier = str(i["SMSUniqueIdentifier"])
-                
-                cursor.execute('''insert into lastlogon (Active, Client, DistinguishedName, FullDomainName, IPAddresses,  
-                LastLogonUserDomain, LastLogonUserName, Name, OperatingSystemNameandVersion, 
-                PrimaryGroupID, ResourceId, ResourceNames, SID, SMSInstalledSites, SMSUniqueIdentifier) 
+
+                cursor.execute('''insert into lastlogon (Active, Client, DistinguishedName, FullDomainName, IPAddresses,
+                LastLogonUserDomain, LastLogonUserName, Name, OperatingSystemNameandVersion,
+                PrimaryGroupID, ResourceId, ResourceNames, SID, SMSInstalledSites, SMSUniqueIdentifier)
                 values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (Active,Client,DistinguishedName,FullDomainName,
                                                             IPAddresses,LastLogonUserDomain,LastLogonUserName,
                                                             Name,OperatingSystemNameandVersion,PrimaryGroupID,
@@ -347,5 +358,5 @@ UserPrincipalName: {tb['UserPrincipalName'].to_string(index=False, header=False)
         logger.info((tabulate(tb, showindex=False, headers=tb.columns, tablefmt='grid')))
         return
 
-    
+
 
