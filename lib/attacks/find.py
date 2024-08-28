@@ -20,10 +20,10 @@ class DACLPARSE:
     @property
     def dacl(self):
         return self.security_descriptor["Dacl"]
-    
+
     @property
     def owner_sid(self):
-        return self.security_descriptor['OwnerSid'] 
+        return self.security_descriptor['OwnerSid']
 
 class DATABASE:
 
@@ -36,7 +36,7 @@ class DATABASE:
         if db_ready:
             logger.debug("[*] Database ready.")
             return True
-        
+
     def validate_tables(self):
         table_names = ["CAS", "SiteServers", "ManagementPoints", "Users", "Groups", "Computers", "Creds"]
         try:
@@ -64,7 +64,7 @@ class DATABASE:
             logger.info(f"{e}")
         finally:
             return True
-    
+
     def show_table(self, table_name):
         try:
             tb = dp.read_sql(f'select * from {table_name} COLLATE NOCASE', self.conn)
@@ -74,9 +74,9 @@ class DATABASE:
 
 
 class SCCMHUNTER:
-    
-    def __init__(self, username=None, password=None, domain=None, target_dom=None, 
-                dc_ip=None, resolve=False, ldaps=False, kerberos=False, no_pass=False, hashes=None, 
+
+    def __init__(self, username=None, password=None, domain=None, target_dom=None,
+                dc_ip=None, resolve=False, ldaps=False, kerberos=False, no_pass=False, hashes=None,
                 aes=None, debug=False, logs_dir = None, all_computers=False):
         self.username = username
         self.password= password
@@ -122,22 +122,22 @@ class SCCMHUNTER:
 
         if self.all_computers:
             self.check_all_computers()
-        
+
         if self.debug:
             self.results()
         self.conn.close()
 
     def check_schema(self):
         # Query the ACL Of the System Management container for FULL CONTROL permissions. This container
-        # is created during optional extension of the Active Directory schema to allow site servers to publish 
+        # is created during optional extension of the Active Directory schema to allow site servers to publish
         # to LDAP.
         logger.info(f'[*] Checking for System Management Container.')
         try:
-            self.ldap_session.extend.standard.paged_search(self.search_base, 
-                                                        search_filter=f"(distinguishedName=CN=System Management,CN=System,{self.search_base})", 
-                                                        attributes="nTSecurityDescriptor", 
+            self.ldap_session.extend.standard.paged_search(self.search_base,
+                                                        search_filter=f"(distinguishedName=CN=System Management,CN=System,{self.search_base})",
+                                                        attributes="nTSecurityDescriptor",
                                                         controls=self.controls,
-                                                        paged_size=500, 
+                                                        paged_size=500,
                                                         generator=False)
             #parse DACL
             if self.ldap_session.entries:
@@ -156,7 +156,7 @@ class SCCMHUNTER:
                 for result in set(self.resolved_sids):
                     cursor.execute(f'''insert into SiteServers (Hostname, SiteCode, CAS, SigningStatus, SiteServer, Config, MSSQL) values (?,?,?,?,?,?,?)''',
                                 (result, '', '', '', 'True', '', ''))
-                    #self.add_computer_to_db(result) 
+                    #self.add_computer_to_db(result)
                     self.conn.commit()
                 cursor.execute('''SELECT COUNT (Hostname) FROM SiteServers''')
                 count = cursor.fetchone()[0]
@@ -172,15 +172,15 @@ class SCCMHUNTER:
         except Exception as e:
             raise e
 
-                    
-                    
+
+
     def check_sites(self):
         try:
-            self.ldap_session.extend.standard.paged_search(self.search_base, 
-                                                search_filter="(objectclass=mssmssite)", 
-                                                attributes="mSSMSSiteCode", 
+            self.ldap_session.extend.standard.paged_search(self.search_base,
+                                                search_filter="(objectclass=mssmssite)",
+                                                attributes="mSSMSSiteCode",
                                                 controls=self.controls,
-                                                paged_size=500, 
+                                                paged_size=500,
                                                 generator=False)
             if self.ldap_session.entries:
                 for entry in self.ldap_session.entries:
@@ -192,14 +192,14 @@ class SCCMHUNTER:
                         cursor = self.conn.cursor()
                         cursor.execute(f'''insert into CAS (SiteCode) values (?)''', (sitecode))
 
-                
+
         except ldap3.core.exceptions.LDAPAttributeError as e:
             logger.info("[-] Did not find mSMSSite objectclass")
             return
         except Exception as e:
             logger.info(e)
 
-    
+
 
     def check_mps(self):
         # Now query for the mssmsmanagementpoint object class. If schema exists there should be at least one.
@@ -207,12 +207,12 @@ class SCCMHUNTER:
         logger.info(f'[*] Querying LDAP for published Sites and Management Points')
         cursor = self.conn.cursor()
         try:
-            self.ldap_session.extend.standard.paged_search(self.search_base, 
-                                                        "(objectclass=mssmsmanagementpoint)", 
-                                                        attributes="*", 
-                                                        controls=self.controls, 
-                                                        paged_size=500, 
-                                                        generator=False)  
+            self.ldap_session.extend.standard.paged_search(self.search_base,
+                                                        "(objectclass=mssmsmanagementpoint)",
+                                                        attributes="*",
+                                                        controls=self.controls,
+                                                        paged_size=500,
+                                                        generator=False)
             if self.ldap_session.entries:
                 logger.info(f"[+] Found {len(self.ldap_session.entries)} Management Points in LDAP.")
                 for entry in self.ldap_session.entries:
@@ -221,7 +221,7 @@ class SCCMHUNTER:
                     self.mp_sitecodes.append(sitecode)
                     cursor.execute(f'''insert into ManagementPoints (Hostname, SiteCode, SigningStatus) values (?,?,?)''',
                                 (hostname, sitecode, ''))
-                    self.add_computer_to_db(hostname) 
+                    self.add_computer_to_db(hostname)
                     self.conn.commit()
             cursor.close()
             self.check_sites()
@@ -230,20 +230,20 @@ class SCCMHUNTER:
             logger.info(f'[-] Could not find any Management Points published in LDAP')
 
     def check_strings(self):
-        #now search for anything related to "SCCM" 
+        #now search for anything related to "SCCM"
         yeet = '(|(samaccountname=*sccm*)(samaccountname=*mecm*)(description=*sccm*)(description=*mecm*)(name=*sccm*)(name=*mecm*))'
         logger.info("[*] Searching LDAP for anything containing the strings 'SCCM' or 'MECM'")
         try:
-            self.ldap_session.extend.standard.paged_search(self.search_base, 
-                                                        yeet, 
-                                                        attributes="*", 
-                                                        paged_size=500, 
-                                                        generator=False)  
+            self.ldap_session.extend.standard.paged_search(self.search_base,
+                                                        yeet,
+                                                        attributes="*",
+                                                        paged_size=500,
+                                                        generator=False)
         except ldap3.core.exceptions.LDAPAttributeError as e:
             logger.info(f'Error: {str(e)}')
         except Exception as e:
             logger.info(f"Error {e}")
-        
+
         if self.ldap_session.entries:
             logger.info(f"[+] Found {len(self.ldap_session.entries)} principals that contain the string 'SCCM' or 'MECM'.")
             for entry in self.ldap_session.entries:
@@ -282,12 +282,12 @@ class SCCMHUNTER:
         logger.info(f'[*] Querying LDAP for all computer objects')
         cursor = self.conn.cursor()
         try:
-            self.ldap_session.extend.standard.paged_search(self.search_base, 
-                                                        "(&(objectCategory=computer))", 
-                                                        attributes="dNSHostName", 
-                                                        controls=self.controls, 
-                                                        paged_size=500, 
-                                                        generator=False)  
+            self.ldap_session.extend.standard.paged_search(self.search_base,
+                                                        "(&(objectCategory=computer))",
+                                                        attributes="dNSHostName",
+                                                        controls=self.controls,
+                                                        paged_size=500,
+                                                        generator=False)
             if self.ldap_session.entries:
                 logger.info(f"[+] Found {len(self.ldap_session.entries)} computers in LDAP.")
                 for entry in self.ldap_session.entries:
@@ -296,7 +296,7 @@ class SCCMHUNTER:
             cursor.close()
 
         except ldap3.core.exceptions.LDAPObjectClassError as e:
-            logger.info(f'[-] Could not find any computer objects in LDAP')            
+            logger.info(f'[-] Could not find any computer objects in LDAP')
 
     #add entries to database, check if attributes exists on entry, check if row already exists, add if not
     def add_group_to_db(self,entry):
@@ -309,10 +309,10 @@ class SCCMHUNTER:
         cursor.execute('''select * from Groups where name = ?''', (name,))
         exists = cursor.fetchone()
         if exists:
-            logger.debug(f"[*] Skipping already group: {name}")        
+            logger.debug(f"[*] Skipping already group: {name}")
         if not exists:
             logger.debug(f"[+] Found group: {name}")
-            cursor.execute('''insert into Groups (cn, name, sAMAAccontName, member, description) values (?,?,?,?,?)''', 
+            cursor.execute('''insert into Groups (cn, name, sAMAAccontName, member, description) values (?,?,?,?,?)''',
                         (cn, name,sam,member,description))
             self.conn.commit()
         return
@@ -330,11 +330,11 @@ class SCCMHUNTER:
             logger.debug(f"[*] Skipping already known user: {name}")
         if not exists:
             logger.debug(f"[+] Found user: {name}")
-            cursor.execute('''insert into Users (cn, name, sAMAAccontName, servicePrincipalName, description) values (?,?,?,?,?)''', 
+            cursor.execute('''insert into Users (cn, name, sAMAAccontName, servicePrincipalName, description) values (?,?,?,?,?)''',
                         (cn, name,sam,spn,description))
             self.conn.commit()
         return
-    
+
     def add_computer_to_db(self, entry):
         cursor = self.conn.cursor()
         if 'dNSHostName' in entry:
@@ -357,7 +357,7 @@ class SCCMHUNTER:
             logger.debug(f"[*] Skipping already known host: {hostname}")
         if not exists:
             logger.debug(f"[+] Found host: {hostname}")
-            cursor.execute('''insert into Computers (Hostname, SiteCode, SigningStatus, SiteServer, ManagementPoint, DistributionPoint, WSUS, MSSQL) values (?,?,?,?,?,?,?,?)''', 
+            cursor.execute('''insert into Computers (Hostname, SiteCode, SigningStatus, SiteServer, ManagementPoint, DistributionPoint, WSUS, MSSQL) values (?,?,?,?,?,?,?,?)''',
                         (hostname, sitecode, signing, siteserver, mp, dp, wsus, mssql))
             self.conn.commit()
 
@@ -368,18 +368,18 @@ class SCCMHUNTER:
         dn = dn
         search_filter = f"(memberOf:1.2.840.113556.1.4.1941:={dn})"
         try:
-            self.ldap_session.extend.standard.paged_search(self.search_base, 
-                                                        search_filter, 
-                                                        attributes="*", 
-                                                        paged_size=500, 
-                                                        generator=False)  
+            self.ldap_session.extend.standard.paged_search(self.search_base,
+                                                        search_filter,
+                                                        attributes="*",
+                                                        paged_size=500,
+                                                        generator=False)
         except ldap3.core.exceptions.LDAPAttributeError as e:
             logger.info("Something went wrong. Use -debug to print a stack trace.")
             logger.debug(f'Error: {str(e)}')
         except Exception as e:
             logger.info("Something went wrong. Use -debug to print a stack trace.")
             logger.debug(f"[-] {e}")
-        
+
         results = self.ldap_session.entries
         return results
 
@@ -408,11 +408,11 @@ class SCCMHUNTER:
         if not (self.password or self.hashes or self.aes or self.no_pass):
                 self.password = getpass("Password:")
         try:
-            ldap_server, self.ldap_session = init_ldap_session(domain=self.domain, username=self.username, password=self.password, lmhash=lmhash, 
-                                                            nthash=nthash, kerberos=self.kerberos, domain_controller=self.dc_ip, 
+            ldap_server, self.ldap_session = init_ldap_session(domain=self.domain, username=self.username, password=self.password, lmhash=lmhash,
+                                                            nthash=nthash, kerberos=self.kerberos, domain_controller=self.dc_ip,
                                                             aesKey=self.aes, hashes=self.hashes, ldaps=self.ldaps)
             logger.debug(f'[+] Bind successful {ldap_server}')
-        except ldap3.core.exceptions.LDAPSocketOpenError as e: 
+        except ldap3.core.exceptions.LDAPSocketOpenError as e:
             if 'invalid server address' in str(e):
                 logger.info(f'Invalid server address - {self.domain}')
             else:
@@ -428,10 +428,10 @@ class SCCMHUNTER:
         sid = []
         member = escape_filter_chars(member)
         search_filter = f"(distinguishedName={member})"
-        self.ldap_session.extend.standard.paged_search(self.search_base, 
-                                                    search_filter, 
-                                                    attributes="*", 
-                                                    paged_size=500, 
+        self.ldap_session.extend.standard.paged_search(self.search_base,
+                                                    search_filter,
+                                                    attributes="*",
+                                                    paged_size=500,
                                                     generator=False)
         for entry in self.ldap_session.entries:
             json_entry = json.loads(entry.entry_to_json())
@@ -445,10 +445,10 @@ class SCCMHUNTER:
     def sid_resolver(self, sids):
         for sid in sids:
             search_filter = "(objectSid={})".format(sid)
-            self.ldap_session.extend.standard.paged_search(self.search_base, 
+            self.ldap_session.extend.standard.paged_search(self.search_base,
                                                         search_filter,
                                                         attributes="*",
-                                                        paged_size=500, 
+                                                        paged_size=500,
                                                         generator=False)
             try:
                 for entry in self.ldap_session.entries:
@@ -467,7 +467,7 @@ class SCCMHUNTER:
 
                         if entry['sAMAccountType'] == "805306369" or 805306369:
                             if attr == 'dNSHostName':
-                                dnsname = entry['dNSHostName'].value  
+                                dnsname = entry['dNSHostName'].value
                                 self.resolved_sids.append(str(dnsname).lower())
 
             except ldap3.core.exceptions.LDAPKeyError as e:

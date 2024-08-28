@@ -12,6 +12,7 @@ from lib.scripts.backdoor import BACKDOOR
 from lib.scripts.pivot import CMPIVOT
 from lib.scripts.add_admin import ADD_ADMIN
 from lib.attacks.admin import DATABASE
+from lib.constants import WELLKNOWN_USER_AGENTS
 import os
 
 
@@ -23,14 +24,15 @@ class SHELL(cmd2.Cmd):
     IN = "Interface Commands"
     hidden = ["alias", "help", "macro", "run_pyscript", "set", "shortcuts", "edit", "history", "quit", "run_script", "shell", "_relative_run_script", "eof"]
 
-    def __init__(self, username, password, target, logs_dir, auser, apassword):
+    def __init__(self, username, password, target, logs_dir, auser, apassword, user_agent):
         #initialize plugins
-        self.pivot = CMPIVOT(username=username, password=password, target = target, logs_dir = logs_dir)
-        self.script = SMSSCRIPTS(username=username, password=password, target = target, logs_dir = logs_dir, auser=auser, apassword=apassword)
-        self.backdoor = BACKDOOR(username=username, password=password, target = target, logs_dir = logs_dir, auser=auser, apassword=apassword)
-        self.admin = ADD_ADMIN(username=username, password=password,target_ip=target, logs_dir=logs_dir)
-        self.db = DATABASE(username=username, password=password,url=target, logs_dir=logs_dir)
-        
+        self.user_agent = user_agent
+        self.pivot = CMPIVOT(username=username, password=password, target = target, logs_dir = logs_dir, user_agent=self.user_agent)
+        self.script = SMSSCRIPTS(username=username, password=password, target = target, logs_dir = logs_dir, auser=auser, apassword=apassword, user_agent=self.user_agent)
+        self.backdoor = BACKDOOR(username=username, password=password, target = target, logs_dir = logs_dir, auser=auser, apassword=apassword, user_agent=self.user_agent)
+        self.admin = ADD_ADMIN(username=username, password=password,target_ip=target, logs_dir=logs_dir, user_agent=self.user_agent)
+        self.db = DATABASE(username=username, password=password,url=target, logs_dir=logs_dir, user_agent=self.user_agent)
+
         #initialize cmd
         super().__init__(allow_cli_args=False)
         self.hidden_commands = self.hidden
@@ -46,6 +48,9 @@ class SHELL(cmd2.Cmd):
         self.hostname = ""
         self.approve_user = auser
         self.approve_password = apassword
+        self.user_agent = user_agent
+        if (self.user_agent):
+            self.headers['User-Agent'] = self.user_agent
 
 
 # ############
@@ -68,13 +73,13 @@ class SHELL(cmd2.Cmd):
     @cmd2.with_category(IN)
     def do_exit(self, arg):
         """Exit the console."""
-        return True 
-    
+        return True
+
     @cmd2.with_category(SA)
     def do_cd(self, arg):
         """Change current working directory."""
         #path needs to end with \ or all file system queries will fail
-        if not arg.endswith("\\"): 
+        if not arg.endswith("\\"):
             arg = arg + "\\"
         option = arg.split(' ')
         self.cwd = option[0]
@@ -87,7 +92,7 @@ class SHELL(cmd2.Cmd):
     def do_get_device(self, arg):
         """Query specific device information"""
         self.db.devices(arg)
-    
+
     @cmd2.with_category(DB)
     def do_get_user(self, arg):
         """Query specific user information"""
@@ -99,7 +104,7 @@ class SHELL(cmd2.Cmd):
         option = arg.split(' ')
         collection_id = option[0]
         self.db.collections(collection_id)
-    
+
     @cmd2.with_category(DB)
     def do_get_puser(self, arg):
         """Query for devices the target is a primary user"""
@@ -110,14 +115,14 @@ class SHELL(cmd2.Cmd):
         """Query for devices the target recently signed in"""
         self.db.last_logon(arg)
 
-    
+
 
 # ############
 # PowerShell Script Section
 # All modules will call and execute script from the lib.scripts directory
 # ############
 
-    @cmd2.with_category(SA)    
+    @cmd2.with_category(SA)
     def do_cat(self, arg):
         """Read file contents.                      cat (filename)"""
         option = arg.split(' ')
@@ -125,7 +130,7 @@ class SHELL(cmd2.Cmd):
         logger.info(f"Tasked SCCM to show {arg}")
         fullpath = self.cwd + filename
         self.script.cat(fullpath, device=self.device)
-    
+
     @cmd2.with_category(PE)
     def do_script(self, arg):
         """Run script on target                     script (/path/to/script) """
@@ -137,7 +142,7 @@ class SHELL(cmd2.Cmd):
 # CMPivot Backdoor Section
 # Backdoor existing CMPivot script with your own
 # ############
-    
+
     @cmd2.with_category(PE)
     def do_backdoor(self, arg):
         """Backdoor CMPivot Script                  backdoor (/path/to/script)"""
@@ -150,7 +155,7 @@ class SHELL(cmd2.Cmd):
 
         else:
             return
-    
+
     @cmd2.with_category(PE)
     def do_restore(self, arg):
         """Restore original CMPivot Script"""
@@ -175,7 +180,7 @@ class SHELL(cmd2.Cmd):
         """Query local administrators on target"""
         logger.info("Tasked SCCM to run Administrators.")
         self.pivot.administrators(device=self.device)
-    
+
     @cmd2.with_category(SA)
     def do_ipconfig(self, arg):
         """Run ipconfig on target"""
@@ -193,7 +198,7 @@ class SHELL(cmd2.Cmd):
         """List running services on target."""
         logger.info("Tasked SCCM to list services.")
         self.pivot.services(device=self.device)
-    
+
     @cmd2.with_category(SA)
     def do_ps(self, arg):
         """List running processes on target."""
@@ -223,13 +228,13 @@ class SHELL(cmd2.Cmd):
     def do_software(self, arg):
         """Show installed software on the target system."""
         logger.info(f"Tasked SCCM to list software installed {self.device}.")
-        self.pivot.installed_software(device=self.device)   
+        self.pivot.installed_software(device=self.device)
 
     @cmd2.with_category(SA)
     def do_sessions(self, arg):
         """Show users with an active session on the target system."""
         logger.info(f"Tasked SCCM to show users currently signed in to {self.device}.")
-        self.pivot.user(device=self.device)   
+        self.pivot.user(device=self.device)
 
     @cmd2.with_category(SA)
     def do_osinfo(self, arg):
@@ -261,7 +266,7 @@ class SHELL(cmd2.Cmd):
         targetsid = option[1]
         logger.info(f"Tasked SCCM to add {targetuser} as an administrative user.")
         self.admin.add(targetuser=targetuser, targetsid=targetsid)
-    
+
     @cmd2.with_category(PE)
     def do_delete_admin(self, arg):
         """Remove SCCM Admin                        delete_admin (user)"""
@@ -281,10 +286,10 @@ class SHELL(cmd2.Cmd):
         self.admin.show_admins()
 
 
-    
+
 
 class CONSOLE:
-    def __init__(self, username=None, password=None, ip=None, debug=False, logs_dir=None, auser=None, apassword=None):
+    def __init__(self, username=None, password=None, ip=None, debug=False, logs_dir=None, auser=None, apassword=None, user_agent_rewrite=None):
         self.username = username
         self.password = password
         self.url = ip
@@ -292,13 +297,25 @@ class CONSOLE:
         self.logs_dir = logs_dir
         self.approve_user = auser
         self.approve_password = apassword
-    
+        self.user_agent_rewrite = user_agent_rewrite
+        self.user_agent = None
+        self.headers = {}
+
     def run(self):
+        # Overwrite User Agent if option is selected
+        if self.user_agent_rewrite:
+            try:
+                self.user_agent = WELLKNOWN_USER_AGENTS[self.user_agent_rewrite]
+                self.headers = {'User-Agent' : self.user_agent}
+            except Exception as e:
+                logger.info("User Agent rewrite failed, please select a valid User Agent or remove the -uar argument")
+
         try:
             endpoint = f"https://{self.url}/AdminService/wmi/"
             r = requests.request("GET",
                                 endpoint,
                                 auth=HttpNtlmAuth(self.username, self.password),
+                                headers=self.headers,
                                 verify=False)
             if r.status_code == 200:
                 self.cli()
@@ -311,14 +328,14 @@ class CONSOLE:
             logger.info(e)
 
     def cli(self):
-        cli = SHELL(self.username, self.password, self.url, self.logs_dir, self.approve_user, self.approve_password)
+        cli = SHELL(self.username, self.password, self.url, self.logs_dir, self.approve_user, self.approve_password, self.user_agent)
         cli.cmdloop()
 
 if __name__ == '__main__':
     import sys
     c = CMD()
-    sys.exit(c.cmdloop())                                                                                                                                                                                                                            
+    sys.exit(c.cmdloop())
 
 
-    
-                                                                                                                                                                                                                           
+
+

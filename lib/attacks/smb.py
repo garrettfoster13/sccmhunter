@@ -2,6 +2,7 @@
 
 from impacket.smbconnection import SMBConnection, SessionError
 from lib.logger import logger, printlog
+from lib.constants import WELLKNOWN_USER_AGENTS
 from requests.exceptions import RequestException
 from tabulate import tabulate
 from getpass import getpass
@@ -13,11 +14,11 @@ import socket
 import sqlite3
 
 class SMB:
-    
-    def __init__(self, username=None, password=None, domain=None, target_dom=None, 
-                    dc_ip=None,ldaps=False, kerberos=False, no_pass=False, hashes=None, 
+
+    def __init__(self, username=None, password=None, domain=None, target_dom=None,
+                    dc_ip=None,ldaps=False, kerberos=False, no_pass=False, hashes=None,
                     aes=None, debug=False, save=False,
-                    logs_dir=None):
+                    logs_dir=None, user_agent_rewrite=None):
         self.username = username
         self.password = password
         self.domain = domain
@@ -40,8 +41,19 @@ class SMB:
             self.lmhash, self.nthash = self.hashes.split(':')
         self.database = f"{logs_dir}/db/find.db"
         self.conn = sqlite3.connect(self.database, check_same_thread=False)
+        self.user_agent_rewrite = user_agent_rewrite
+        self.user_agent = ""
+        self.headers = {}
 
     def run(self):
+        # Overwrite User Agent if option is selected
+        if self.user_agent_rewrite:
+            try:
+                self.user_agent = WELLKNOWN_USER_AGENTS[self.user_agent_rewrite]
+                self.headers = {'User-Agent' : self.user_agent}
+            except Exception as e:
+                logger.info("User Agent rewrite failed, please select a valid User Agent or remove the -uar argument")
+
         #TODO add check to be sure FIND module was run
         self.check_siteservers()
         self.check_managementpoints()
@@ -72,9 +84,9 @@ class SMB:
                     mssql = self.mssql_check(hostname)
                     #check for SMS provider roles
                     provider = self.provider_check(hostname)
-                    #check if fileshares are on 
+                    #check if fileshares are on
                     if siteserv:
-                        status = "Active" 
+                        status = "Active"
                     else:
                         status = "Passive"
 
@@ -121,7 +133,7 @@ class SMB:
             return
         else:
             logger.info("[-] No Management Points found in database.")
-    
+
     #read from computers table created from strings check in LDAP module
     def check_computers(self):
         cursor = self.conn.cursor()
@@ -157,7 +169,7 @@ class SMB:
             return
         else:
             logger.info("[-] No computers found in database.")
-    
+
     def smb_connection(self, server):
         try:
             if not (self.password or self.hashes or self.aes or self.no_pass):
@@ -190,11 +202,11 @@ class SMB:
             shares = conn.listShares()
             sharenames = [share['shi1_netname'][:-1] for share in shares]
             remarks = [share['shi1_remark'][:-1] for share in shares]
-            shares_dict = dict(zip(sharenames, remarks)) 
+            shares_dict = dict(zip(sharenames, remarks))
 
             if "SMS_SITE" in shares_dict:
                 try:
-                    remark = shares_dict.get('SMS_DP$', '')  
+                    remark = shares_dict.get('SMS_DP$', '')
                     if 'ConfigMgr Site Server' in remark:
                         siteserv = True
                     sc = shares_dict.get("SMS_SITE", '')
@@ -218,7 +230,7 @@ class SMB:
                         pxe_boot_servers.append(server)
             if "WsusContent" in shares_dict:
                 wsus = True
-        
+
             if pxe_boot_servers:
                 self.smb_spider(conn, pxe_boot_servers)
             return signing, site_code, siteserv, distp, wsus
@@ -261,7 +273,7 @@ class SMB:
             except Exception as e:
                 logger.debug(e)
         conn.logoff()
-        
+
         #these logs should stay
         if len(downloaded) > 0:
             logger.info("[+] Variables files downloaded!")
@@ -270,10 +282,10 @@ class SMB:
         if vars_files:
             filename = "smbhunter.log"
             printlog(vars_files, self.logs_dir, filename)
-        
+
 
 #check if the target host is running MSSQL
-#intention here is to help find the site database location or at least narrow it down    
+#intention here is to help find the site database location or at least narrow it down
     def mssql_check(self, server):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(5)
@@ -284,7 +296,7 @@ class SMB:
         except Exception as e:
             logger.debug(f"[-] {e}")
         return False
-    
+
 #check if the target host is hosting the SMS_MP directory
 #intention here is to return whether the host has the Management Point role
     def http_check(self, server):
@@ -292,13 +304,15 @@ class SMB:
             endpoint = f"http://{server}/ccm_system_windowsauth/"
             r = requests.request("GET",
                                 endpoint,
+                                headers=self.headers,
                                 verify=False)
             if r.status_code == 401:
                 return True
-            
+
             endpoint = f"https://{server}/ccm_system_windowsauth/"
             r = requests.request("GET",
                                 endpoint,
+                                headers=self.headers,
                                 verify=False)
             if r.status_code == 401:
                 return True
@@ -311,14 +325,15 @@ class SMB:
             logger.debug("An unknown error occurred")
             logger.debug(e)
 
-#check if the target host is hosting the adminservice api 
-#intention here is to return whether the host is hosting the SMS 
+#check if the target host is hosting the adminservice api
+#intention here is to return whether the host is hosting the SMS
 #Provider role
     def provider_check(self, server):
         try:
             endpoint = f"https://{server}/adminservice/wmi/"
             r = requests.request("GET",
                                 endpoint,
+                                headers=self.headers,
                                 verify=False)
             if r.status_code == 401:
                 return True
