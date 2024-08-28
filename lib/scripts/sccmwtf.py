@@ -140,7 +140,7 @@ class CryptoTools:
 
 class SCCMTools():
 
-    def __init__(self, target_name, target_fqdn, target_sccm, target_username, target_password, sleep, logs_dir):
+    def __init__(self, target_name, target_fqdn, target_sccm, target_username, target_password, sleep, logs_dir, user_agent):
         self._server = target_sccm
         self._serverURI = f"http://{self._server}"
         self._target_name = target_name
@@ -149,11 +149,14 @@ class SCCMTools():
         self.target_password = target_password
         self.sleep = sleep
         self.logs_dir = logs_dir
+        self.user_agent = "ConfigMgr Messaging HTTP Sender"
+        if user_agent:
+            self.user_agent = user_agent
 
     def sendCCMPostRequest(self, data, auth=False, username="", password="", mp = ""):
         headers = {
             "Connection": "close",
-            "User-Agent": "ConfigMgr Messaging HTTP Sender",
+            "User-Agent": self.user_agent,
             "Content-Type": "multipart/mixed; boundary=\"aAbBcCdDv1234567890VxXyYzZ\""
         }
 
@@ -199,7 +202,7 @@ class SCCMTools():
     def requestPolicy(self, url, clientID="", authHeaders=False, retcontent=False, key=""):
         headers = {
             "Connection": "close",
-            "User-Agent": "ConfigMgr Messaging HTTP Sender"
+            "User-Agent": self.user_agent
         }
 
         if authHeaders == True:

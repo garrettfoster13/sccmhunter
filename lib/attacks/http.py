@@ -47,7 +47,7 @@ class HTTP:
         self.database = f"{logs_dir}/db/find.db"
         self.conn = sqlite3.connect(self.database, check_same_thread=False)
         self.user_agent_rewrite = user_agent_rewrite
-        self.user_agent = ""
+        self.user_agent = None
         self.headers = {}
 
     def run(self):
@@ -90,7 +90,7 @@ class HTTP:
             #      Need better error handling
             #      Add User Agent rewrite, however currently User-Agents are specified here so sanity check is needed first
             target_mp_url = f"http://{self.mp}"
-            sccmwtf = SCCMTools(target_name="", target_fqdn="", target_sccm=target_mp_url, target_username="", target_password="", sleep=self.sleep, logs_dir=self.logs_dir)
+            sccmwtf = SCCMTools(target_name="", target_fqdn="", target_sccm=target_mp_url, target_username="", target_password="", sleep=self.sleep, logs_dir=self.logs_dir, user_agent=self.user_agent)
             with open (f"{self.logs_dir}/{self.uuid}.data", "rb") as f:
                 data = f.read()
             with open (f"{self.logs_dir}/{self.uuid}.pem", "rb") as g:
@@ -145,7 +145,7 @@ class HTTP:
             target_fqdn = f'{target_name}.{self.domain}'
             try:
                 logger.info(f"[*] Attempting to grab policy from {target}")
-                SCCMWTF=SCCMTools(target_name, target_fqdn, target, self.computer_name, self.computer_pass, self.sleep, self.logs_dir)
+                SCCMWTF=SCCMTools(target_name, target_fqdn, target, self.computer_name, self.computer_pass, self.sleep, self.logs_dir, self.user_agent)
                 SCCMWTF.sccmwtf_run()
             except Exception as e:
                 logger.info(e)

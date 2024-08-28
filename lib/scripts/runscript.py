@@ -15,7 +15,7 @@ from datetime import datetime
 
 class SMSSCRIPTS:
 
-    def __init__(self, username, password, target, logs_dir, auser, apassword):
+    def __init__(self, username, password, target, logs_dir, auser, apassword, user_agent):
         self.username = username
         self.password = password
         self.target = target
@@ -23,6 +23,9 @@ class SMSSCRIPTS:
         self.approve_user = auser
         self.approve_password = apassword
         self.headers = {'Content-Type': 'application/json; odata=verbose'}
+        self.user_agent = user_agent
+        if (self.user_agent):
+            self.headers['User-Agent'] = self.user_agent
         self.cwd = os.getcwd()
         self.appended = ""
         self.opid = ""
@@ -53,7 +56,7 @@ Do-Delete
             return script_body
         except Exception as e:
             logger.info(e)
-        
+
     def get_results(self):
         url = f"https://{self.target}/AdminService/v1.0/Device({self.device})/AdminService.ScriptResult(OperationId={self.opid})"
         while True:
@@ -64,7 +67,7 @@ Do-Delete
                 r = requests.request("GET",
                                     f"{url}",
                                     auth=HttpNtlmAuth(self.username, self.password),
-                                    verify=False, json=body)
+                                    verify=False, headers=self.headers, json=body)
                 if r.status_code == 404:
                     time.sleep(15)
                     continue
@@ -85,13 +88,13 @@ Do-Delete
             except Exception as e:
                 logger.info(e)
             return False
-    
+
     def add_script(self, script_body=None):
         if script_body == None:
              script_body = self.read_script()
         self.guid = str(uuid.uuid4())
         body = {"ApprovalState": 3,
-        "ParamsDefinition": "", 
+        "ParamsDefinition": "",
         "ScriptName": "Updates",
         "Author": "",
         "Script": f"{script_body}",
@@ -117,7 +120,7 @@ Do-Delete
                 "ApprovalState": "3",
                 "Comment": ""
                 }
-        
+
         url = f"https://{self.target}/AdminService/wmi/SMS_Scripts/{self.guid}/AdminService.UpdateApprovalState"
 
         try:
@@ -146,9 +149,9 @@ Do-Delete
 
     def run_script(self):
         body = {"ScriptGuid": f"{self.guid}"}
-        
+
         url = f"https://{self.target}/AdminService/v1.0/Device({self.device})/AdminService.RunScript"
-        
+
         try:
             r = requests.post(f"{url}",
                                 auth=HttpNtlmAuth(self.username, self.password),
@@ -170,7 +173,7 @@ Do-Delete
             logger.info(text)
         except ValueError:
             return
-        
+
     def delete_script(self):
         url = f"https://{self.target}/AdminService/wmi/SMS_Scripts/{self.guid}"
 
@@ -196,13 +199,13 @@ function Do-Delete {
 }
 do-cat
 Do-Delete
-''' %file 
+''' %file
         bom = codecs.BOM_UTF16_LE
         byte_array = bom + script.encode('utf-16-le')
         script_body = base64.b64encode(byte_array).decode('utf-8')
         self.device = device
         self.add_script(script_body)
-        
+
 
     def printlog(self, result):
         filename = (f'{self.logs_dir}/console.log')

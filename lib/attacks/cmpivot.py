@@ -24,13 +24,14 @@ class SHELL(cmd2.Cmd):
     IN = "Interface Commands"
     hidden = ["alias", "help", "macro", "run_pyscript", "set", "shortcuts", "edit", "history", "quit", "run_script", "shell", "_relative_run_script", "eof"]
 
-    def __init__(self, username, password, target, logs_dir, auser, apassword):
+    def __init__(self, username, password, target, logs_dir, auser, apassword, user_agent):
         #initialize plugins
-        self.pivot = CMPIVOT(username=username, password=password, target = target, logs_dir = logs_dir)
-        self.script = SMSSCRIPTS(username=username, password=password, target = target, logs_dir = logs_dir, auser=auser, apassword=apassword)
-        self.backdoor = BACKDOOR(username=username, password=password, target = target, logs_dir = logs_dir, auser=auser, apassword=apassword)
-        self.admin = ADD_ADMIN(username=username, password=password,target_ip=target, logs_dir=logs_dir)
-        self.db = DATABASE(username=username, password=password,url=target, logs_dir=logs_dir)
+        self.user_agent = user_agent
+        self.pivot = CMPIVOT(username=username, password=password, target = target, logs_dir = logs_dir, user_agent=self.user_agent)
+        self.script = SMSSCRIPTS(username=username, password=password, target = target, logs_dir = logs_dir, auser=auser, apassword=apassword, user_agent=self.user_agent)
+        self.backdoor = BACKDOOR(username=username, password=password, target = target, logs_dir = logs_dir, auser=auser, apassword=apassword, user_agent=self.user_agent)
+        self.admin = ADD_ADMIN(username=username, password=password,target_ip=target, logs_dir=logs_dir, user_agent=self.user_agent)
+        self.db = DATABASE(username=username, password=password,url=target, logs_dir=logs_dir, user_agent=self.user_agent)
 
         #initialize cmd
         super().__init__(allow_cli_args=False)
@@ -47,6 +48,9 @@ class SHELL(cmd2.Cmd):
         self.hostname = ""
         self.approve_user = auser
         self.approve_password = apassword
+        self.user_agent = user_agent
+        if (self.user_agent):
+            self.headers['User-Agent'] = self.user_agent
 
 
 # ############
@@ -294,7 +298,7 @@ class CONSOLE:
         self.approve_user = auser
         self.approve_password = apassword
         self.user_agent_rewrite = user_agent_rewrite
-        self.user_agent = ""
+        self.user_agent = None
         self.headers = {}
 
     def run(self):
@@ -324,7 +328,7 @@ class CONSOLE:
             logger.info(e)
 
     def cli(self):
-        cli = SHELL(self.username, self.password, self.url, self.logs_dir, self.approve_user, self.approve_password)
+        cli = SHELL(self.username, self.password, self.url, self.logs_dir, self.approve_user, self.approve_password, self.user_agent)
         cli.cmdloop()
 
 if __name__ == '__main__':
