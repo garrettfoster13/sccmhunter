@@ -296,6 +296,14 @@ class CONSOLE:
     def run(self):
         try:
             endpoint = f"https://{self.url}/AdminService/wmi/"
+            if self.approve_user:
+                r = requests.request("GET",
+                                endpoint,
+                                auth=HttpNtlmAuth(self.approve_user, self.approve_password),
+                                verify=False)
+                if r.status_code == 401:
+                    logger.info("Got error code 401: Access Denied. Check your approver credentials.")
+                    logger.info("Script execution will fail if approval is required.")
             r = requests.request("GET",
                                 endpoint,
                                 auth=HttpNtlmAuth(self.username, self.password),

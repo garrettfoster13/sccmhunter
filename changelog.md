@@ -5,12 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [1.0.6] - 2024-08-15
+
+### Fixed
+
+- Fixed a bug where site servers weren't being added to the computers table causing further profiling to fail
+- Fixed a bug in `MSSQL` where SID translation failed when using Kerberos authentication
+
+
+### Added
+- Find module
+    - Added distribution point check in LDAP
+- SMB module
+    - Added distribution point profiling to determine if the found host is SCCM or WDS related
+- Admin module
+    - Added "approver credentials" check to ensure credentials are valid when script approval is required for the hierarchy
+
 ## [1.0.5] - 2024-06-9
 
 ### Fixed
 
 - Fixed a bug where an arbitrary security group would get removed when running the `delete_admin` command in the Admin module
 - Fixed a bug where an existing admin account would not be located due to a displayname vs logonname conflict
+
 
 
 

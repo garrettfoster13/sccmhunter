@@ -45,6 +45,7 @@ class SMB:
         #TODO add check to be sure FIND module was run
         self.check_siteservers()
         self.check_managementpoints()
+        self.check_distributionpoints()
         self.check_computers()
         self.conn.close()
 
@@ -67,7 +68,7 @@ class SMB:
                 #only enumerate if the host is reachable
                 conn = self.smb_connection(hostname)
                 if conn:
-                    signing, site_code, siteserv, distp, wsus = self.smb_hunter(hostname, conn)
+                    signing, site_code, siteserv, distp, wsus, wdspxe, sccmpxe = self.smb_hunter(hostname, conn)
                     #check if mssql is self hosted
                     mssql = self.mssql_check(hostname)
                     #check for SMS provider roles
@@ -109,7 +110,7 @@ class SMB:
                 hostname = i[0]
                 conn = self.smb_connection(hostname)
                 if conn:
-                    signing, site_code, siteserv, distp, wsus = self.smb_hunter(hostname, conn)
+                    signing, site_code, siteserv, distp, wsus, wdspxe, sccmpxe = self.smb_hunter(hostname, conn)
                     cursor.execute(f'''Update ManagementPoints SET SigningStatus=? WHERE Hostname=?''',
                                 (str(signing), hostname))
                 self.conn.commit()
@@ -118,6 +119,30 @@ class SMB:
             cursor.close()
             tb_mp = dp.read_sql("SELECT * FROM ManagementPoints WHERE Hostname IS NOT 'Unknown' ", self.conn)
             logger.info(tabulate(tb_mp, showindex=False, headers=tb_mp.columns, tablefmt='grid'))
+            return
+        else:
+            logger.info("[-] No Management Points found in database.")
+
+    def check_distributionpoints(self):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT Hostname FROM PXEDistributionPoints WHERE Hostname IS NOT 'Unknown'")
+        hostnames = cursor.fetchall()
+        if hostnames:
+            logger.info (f"Profiling {len(hostnames)} distribution points.")
+            for i in hostnames:
+                hostname = i[0]
+                conn = self.smb_connection(hostname)
+                if conn:
+                    signing, site_code, siteserv, distp, wsus, wdspxe, sccmpxe = self.smb_hunter(hostname, conn)
+                    #Hostname, SigningStatus, SCCM, WDS
+                    cursor.execute(f'''Update PXEDistributionPoints SET SigningStatus=?, SCCM=?, WDS=? WHERE Hostname=?''',
+                                (str(signing), str(sccmpxe), str(wdspxe), hostname))
+                self.conn.commit()
+
+            logger.info("[+] Finished profiling Distribution Points.")
+            cursor.close()
+            tb_dp = dp.read_sql("SELECT * FROM PXEDistributionPoints WHERE Hostname IS NOT 'Unknown' ", self.conn)
+            logger.info(tabulate(tb_dp, showindex=False, headers=tb_dp.columns, tablefmt='grid'))
             return
         else:
             logger.info("[-] No Management Points found in database.")
@@ -136,7 +161,7 @@ class SMB:
                     mssql = self.mssql_check(hostname)
                     mp = self.http_check(hostname)
                     provider = self.provider_check(hostname)
-                    signing, site_code, siteserv, distp, wsus = self.smb_hunter(hostname, conn)
+                    signing, site_code, siteserv, distp, wsus, wdspxe, sccmpxe = self.smb_hunter(hostname, conn)
                     if site_code == 'None':
                         try:
                             cursor.execute(f"SELECT SiteCode FROM ManagementPoints WHERE Hostname IS '{hostname}'")
@@ -185,6 +210,8 @@ class SMB:
             siteserv = False
             distp = False
             wsus = False
+            wdspxe = False
+            sccmpxe = False
 
             signing = conn.isSigningRequired()
             shares = conn.listShares()
@@ -212,16 +239,24 @@ class SMB:
                     distp = False
             if "REMINST" in shares_dict:
                 #list REMINST contents to check if the SMSTemp dir actually exists
+                remark = shares_dict.get("REMINST", '')
+                if "Windows Deployment Services Share" in remark:
+                    wdspxe = True
+                if "RemoteInstallation" in remark:
+                    sccmpxe = True
                 check = conn.listPath(shareName="REMINST", path="//*")
                 for i in check:
                     if i.get_longname() == "SMSTemp":
                         pxe_boot_servers.append(server)
+
             if "WsusContent" in shares_dict:
                 wsus = True
+
+
         
             if pxe_boot_servers:
                 self.smb_spider(conn, pxe_boot_servers)
-            return signing, site_code, siteserv, distp, wsus
+            return signing, site_code, siteserv, distp, wsus, wdspxe, sccmpxe
         except socket.error:
             logger.info(socket.error)
             return

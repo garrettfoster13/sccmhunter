@@ -38,7 +38,7 @@ class DATABASE:
             return True
         
     def validate_tables(self):
-        table_names = ["CAS", "SiteServers", "ManagementPoints", "Users", "Groups", "Computers", "Creds"]
+        table_names = ["CAS", "SiteServers", "ManagementPoints", "DistributionPoints", "Users", "Groups", "Computers", "Creds"]
         try:
             for table_name in table_names:
                 validated = self.conn.execute(f'''select name FROM sqlite_master WHERE type=\'table\' and name =\'{table_name}\'
@@ -56,6 +56,7 @@ class DATABASE:
             self.conn.execute('''CREATE TABLE CAS(SiteCode)''')
             self.conn.execute('''CREATE TABLE SiteServers(Hostname, SiteCode, CAS, SigningStatus, SiteServer, SMSProvider, Config, MSSQL)''')
             self.conn.execute('''CREATE TABLE ManagementPoints(Hostname, SiteCode, SigningStatus)''')
+            self.conn.execute('''CREATE TABLE PXEDistributionPoints(Hostname, SigningStatus, SCCM, WDS)''')
             self.conn.execute('''CREATE TABLE Users(cn, name, sAMAAccontName, servicePrincipalName, description)''')
             self.conn.execute('''CREATE TABLE Groups(cn, name, sAMAAccontName, member, description)''')
             self.conn.execute('''CREATE TABLE Computers(Hostname, SiteCode, SigningStatus, SiteServer, ManagementPoint, DistributionPoint, SMSProvider, WSUS, MSSQL)''')
@@ -117,6 +118,8 @@ class SCCMHUNTER:
             self.search_base = get_dn(self.domain)
         #check for AD extension info
         self.check_schema()
+        #check for potential DPs
+        self.check_dps()
         #if they're using DNS only: thoughts and prayers
         self.check_strings()
 
@@ -154,9 +157,10 @@ class SCCMHUNTER:
             if self.resolved_sids:
                 cursor = self.conn.cursor()
                 for result in set(self.resolved_sids):
+                    print(type(result))
                     cursor.execute(f'''insert into SiteServers (Hostname, SiteCode, CAS, SigningStatus, SiteServer, Config, MSSQL) values (?,?,?,?,?,?,?)''',
                                 (result, '', '', '', 'True', '', ''))
-                    #self.add_computer_to_db(result) 
+                    self.add_computer_to_db(result) 
                     self.conn.commit()
                 cursor.execute('''SELECT COUNT (Hostname) FROM SiteServers''')
                 count = cursor.fetchone()[0]
@@ -221,13 +225,62 @@ class SCCMHUNTER:
                     self.mp_sitecodes.append(sitecode)
                     cursor.execute(f'''insert into ManagementPoints (Hostname, SiteCode, SigningStatus) values (?,?,?)''',
                                 (hostname, sitecode, ''))
-                    self.add_computer_to_db(hostname) 
+                    if hostname:
+                        self.add_computer_to_db(hostname) 
                     self.conn.commit()
             cursor.close()
             self.check_sites()
 
         except ldap3.core.exceptions.LDAPObjectClassError as e:
             logger.info(f'[-] Could not find any Management Points published in LDAP')
+
+
+    def check_dps(self):
+        #query for PXE enabled distribution points that are using Windows Deployment Services
+        #if the DP is using WDS a child intellimirror-scp class will be published under the computer object
+        #find all cases, parse the DN, then resolve the DN's hostname
+        logger.info(f'[*] Querying LDAP for potential PXE enabled distribution points')
+        cursor = self.conn.cursor()
+        potential_dps = []
+        try:
+            self.ldap_session.extend.standard.paged_search(self.search_base, 
+                                                        "(cn=*-Remote-Installation-Services)", 
+                                                        attributes="distinguishedName", 
+                                                        controls=self.controls, 
+                                                        paged_size=500, 
+                                                        generator=False)  
+            if self.ldap_session.entries:
+                logger.info(f"[+] Found {len(self.ldap_session.entries)} potential Distribution Points in LDAP.")
+                for entry in self.ldap_session.entries:
+                    dn =  str(entry['distinguishedName'])
+                    if dn:
+                        trim = dn.find(",")
+                        trimmed = dn[trim + 1:]
+                        potential_dps.append(trimmed)
+
+        except ldap3.core.exceptions.LDAPObjectClassError as e:
+            logger.info(f'[-] Could not find any Distribution Points published in LDAP')
+        if potential_dps:
+            for dn in potential_dps:
+                try:
+                    self.ldap_session.extend.standard.paged_search(self.search_base, 
+                                                                f"(distinguishedName={dn})", 
+                                                                attributes="dNSHostName", 
+                                                                controls=self.controls, 
+                                                                paged_size=500, 
+                                                                generator=False)  
+                    if self.ldap_session.entries:
+                        for entry in self.ldap_session.entries:
+                            hostname =  str(entry['dNSHostname'])
+                            cursor.execute(f'''insert into PXEDistributionPoints (Hostname, SigningStatus, SCCM, WDS) values (?,?,?,?)''',
+                                (hostname, '', '' , ''))
+                            if hostname:
+                                self.add_computer_to_db(hostname)
+                            self.conn.commit()
+                    
+                except ldap3.core.exceptions.LDAPObjectClassError as e:
+                    logger.info(f'[-] Could not find any Distribution Points published in LDAP')
+        cursor.close()
 
     def check_strings(self):
         #now search for anything related to "SCCM" 
@@ -255,7 +308,9 @@ class SCCMHUNTER:
                             self.add_user_to_db(entry)
                         #add computer to db
                         if (entry['sAMAccountType']) == 805306369:
-                            self.add_computer_to_db(entry)
+                            hostname =  str(entry['dNSHostname'])
+                            if hostname:
+                                self.add_computer_to_db(hostname)
                         #add group to db and then resolve members
                         if (entry['sAMAccountType']) == 268435456:
                             self.add_group_to_db(entry)
@@ -267,7 +322,9 @@ class SCCMHUNTER:
                                     if (result['sAMAccountType']) == 805306368:
                                         self.add_user_to_db(result)
                                     if (result['sAMAccountType']) == 805306369:
-                                        self.add_computer_to_db(result)
+                                        hostname =  str(result['dNSHostname'])
+                                        if hostname:
+                                            self.add_computer_to_db(result)
                                     if (result['sAMAccountType']) == 268435456:
                                         self.add_group_to_db(result)
                 except ldap3.core.exceptions.LDAPAttributeError as e:
@@ -291,7 +348,9 @@ class SCCMHUNTER:
             if self.ldap_session.entries:
                 logger.info(f"[+] Found {len(self.ldap_session.entries)} computers in LDAP.")
                 for entry in self.ldap_session.entries:
-                    self.add_computer_to_db(entry)
+                    hostname =  str(entry['dNSHostname'])
+                    if hostname:
+                        self.add_computer_to_db(hostname)
                     self.conn.commit()
             cursor.close()
 
@@ -337,13 +396,7 @@ class SCCMHUNTER:
     
     def add_computer_to_db(self, entry):
         cursor = self.conn.cursor()
-        if 'dNSHostName' in entry:
-            hostname = str(entry['dNSHostName']).lower()
-        elif ldap3.core.exceptions.LDAPKeyError:
-            # if no dnshostname attribute, skip it
-            return
-        else:
-            entry = entry
+        hostname = entry
         sitecode = ''
         signing = ''
         siteserver = ''
@@ -386,6 +439,7 @@ class SCCMHUNTER:
     def results(self):
         tb_ss = dp.read_sql("SELECT * FROM SiteServers WHERE Hostname IS NOT 'Unknown' ", self.conn)
         tb_mp = dp.read_sql("SELECT * FROM ManagementPoints WHERE Hostname IS NOT 'Unknown' ", self.conn)
+        tb_dp = dp.read_sql("SELECT * FROM PXEDistributionPoints WHERE Hostname IS NOT 'Unknown' ", self.conn)
         tb_c = dp.read_sql("SELECT * FROM Computers WHERE Hostname IS NOT 'Unknown' ", self.conn)
         tb_u = dp.read_sql("SELECT * FROM Users", self.conn)
         tb_g = dp.read_sql("SELECT * FROM Groups", self.conn)
@@ -393,6 +447,8 @@ class SCCMHUNTER:
         logger.info(tabulate(tb_ss, showindex=False, headers=tb_ss.columns, tablefmt='grid'))
         logger.info("Management Points Table")
         logger.info(tabulate(tb_mp, showindex=False, headers=tb_mp.columns, tablefmt='grid'))
+        logger.info("Potential PXE Distribution Points")
+        logger.info(tabulate(tb_dp, showindex=False, headers=tb_dp.columns, tablefmt='grid'))
         logger.info('Computers Table')
         logger.info(tabulate(tb_c, showindex=False, headers=tb_c.columns, tablefmt='grid'))
         logger.info("Users Table")
