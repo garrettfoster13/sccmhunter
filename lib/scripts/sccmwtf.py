@@ -27,6 +27,7 @@ from requests_ntlm import HttpNtlmAuth
 import xml.etree.ElementTree as ET
 import sqlite3
 import csv
+import shutil
 
 
 # Who needs just 1 date format :/
@@ -312,7 +313,7 @@ class SCCMTools():
         #     key = g.read()
        newkey = f"{self.logs_dir}/{uuid}.pem"
        if uuid:
-          os.rename(key, newkey)
+          shutil.copy(key, newkey)
 
 
 #### Huge shoutout to @SkelSec for this code
