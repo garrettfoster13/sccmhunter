@@ -90,7 +90,6 @@ class MSSQL:
                 for attr in attributes:
                     if attr == "objectSid":
                         sid = format_sid(entry[attr].value)
-                        print(sid)
                         logger.debug(f"[+] Found {self.target_user} SID: {sid}")
                         #abusing MSSQL requires the hex SID of the owned account
                         #REF: https://thehacker.recipes/ad/movement/sccm-mecm#1.-retreive-the-controlled-user-sid
