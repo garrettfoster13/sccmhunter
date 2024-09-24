@@ -157,7 +157,6 @@ class SCCMHUNTER:
             if self.resolved_sids:
                 cursor = self.conn.cursor()
                 for result in set(self.resolved_sids):
-                    print(type(result))
                     cursor.execute(f'''insert into SiteServers (Hostname, SiteCode, CAS, SigningStatus, SiteServer, Config, MSSQL) values (?,?,?,?,?,?,?)''',
                                 (result, '', '', '', 'True', '', ''))
                     self.add_computer_to_db(result) 
