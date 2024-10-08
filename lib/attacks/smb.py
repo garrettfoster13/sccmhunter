@@ -286,13 +286,13 @@ class SMB:
                         logger.debug(f"[+] Found {full_path}")
                         if self.save:
                             file_name = shared_file.get_longname()
-                            fh = open(ntpath.basename(file_name), 'wb')
-                            path = f"SMSTemp//{file_name}"
-                            try:
-                                conn.getFile(shareName="REMINST",pathName = path, callback=fh.write)
-                                downloaded.append(file_name)
-                            except Exception as e:
-                                logger.info(f"[-] {e}")
+                            with open(ntpath.basename(file_name), 'wb') as fh:
+                                path = f"SMSTemp//{file_name}"
+                                try:
+                                    conn.getFile(shareName="REMINST",pathName = path, callback=fh.write)
+                                    downloaded.append(file_name)
+                                except Exception as e:
+                                    logger.info(f"[-] {e}")
             except Exception as e:
                 logger.debug(e)
         conn.logoff()
