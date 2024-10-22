@@ -218,6 +218,7 @@ class SCCMHUNTER:
                                                         generator=False)  
             if self.ldap_session.entries:
                 logger.info(f"[+] Found {len(self.ldap_session.entries)} Management Points in LDAP.")
+            try:
                 for entry in self.ldap_session.entries:
                     hostname =  str(entry['dNSHostname']).lower()
                     sitecode = str(entry['msSMSSitecode'])
@@ -227,6 +228,8 @@ class SCCMHUNTER:
                     if hostname:
                         self.add_computer_to_db(hostname) 
                     self.conn.commit()
+            except:
+                pass
             cursor.close()
             self.check_sites()
 
