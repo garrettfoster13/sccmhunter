@@ -279,6 +279,11 @@ class SHELL(cmd2.Cmd):
         """List admin users                        show_admins"""
         logger.info(f"Tasked SCCM to list current SMS Admins.")
         self.admin.show_admins()
+    @cmd2.with_category(PE)
+    def do_show_rbac(self, arg):
+        """List RBAC users                         show_rbac"""
+        logger.info(f"Tasked SCCM to list all RBAC")
+        self.admin.show_rbac()
 
 
     

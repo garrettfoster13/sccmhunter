@@ -3,6 +3,8 @@ from requests_ntlm import HttpNtlmAuth
 from lib.logger import logger
 from urllib3.exceptions import InsecureRequestWarning
 import json
+from tabulate import tabulate
+import pandas as dp
 
 
 class ADD_ADMIN:
@@ -125,6 +127,32 @@ class ADD_ADMIN:
         except Exception as e:
                 print(e)  
         
+
+    def show_rbac(self):
+        url = f"https://{self.target_ip}/AdminService/wmi/SMS_Admin?$select=LogonName,RoleNames"
+        try:
+            r = requests.get(f"{url}",
+                                auth=HttpNtlmAuth(self.username, self.password),
+                                verify=False,headers=self.headers)
+            if r.status_code == 200:
+                data = r.json()
+                if isinstance(data['value'], list):
+                    tb = dp.DataFrame(data['value'])
+                    result = tabulate(tb, showindex=False, headers=tb.columns, tablefmt='grid')
+                    logger.info(result)
+                    #self.printlog(result)
+                else:
+                    tb = dp.DataFrame(data['value']['Result'])
+                    result = tabulate(tb, showindex=False, headers=tb.columns, tablefmt='grid')
+                    logger.info(result)
+                    #self.printlog(result)
+                return
+            else:
+                logger.info("[*] Something went wrong")
+                logger.info(r.text)
+                logger.info(r.status_code)
+        except Exception as e:
+                print(e)  
         
          # adminid = value[adminid]
          #lookup sccm admin with provided args
