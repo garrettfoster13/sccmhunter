@@ -105,7 +105,7 @@ class ADD_ADMIN:
                 print(e)
         
     def show_admins(self):
-        url = f"https://{self.target_ip}/AdminService/wmi/SMS_Admin?$select=LogonName"
+        url = f"https://{self.target_ip}/AdminService/wmi/SMS_Admin?$filter=RoleNames/any(role: role eq 'Full Administrator')&$select=LogonName"
         try:
             r = requests.get(f"{url}",
                                 auth=HttpNtlmAuth(self.username, self.password),
