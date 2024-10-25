@@ -127,6 +127,11 @@ class CMPIVOT:
         body = {"InputQuery":"Disk"}
         self.do_request(body)
         return
+    
+    def sessionhunter(self, device, user):
+        self.device=device
+        body = {"InputQuery":f"User| where UserName contains '{user}'"}
+        self.do_request(body)
     ### Not implemented yet
 
         

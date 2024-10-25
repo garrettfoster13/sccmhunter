@@ -110,7 +110,8 @@ class SHELL(cmd2.Cmd):
         """Query for devices the target recently signed in"""
         self.db.last_logon(arg)
 
-    
+
+
 
 # ############
 # PowerShell Script Section
@@ -249,6 +250,12 @@ class SHELL(cmd2.Cmd):
         logger.info(f"Tasked SCCM to show disk information of {self.device}.")
         self.pivot.disk(device=self.device)
 
+    @cmd2.with_category(SA)
+    def do_sessionhunter(self, arg):
+        user = arg.split(' ')[0]
+        """Search for all systems a target user has a current session on"""
+        self.pivot.sessionhunter(self.device, user)
+
 # ############
 # Add Admin Section
 # ############
@@ -286,12 +293,19 @@ class SHELL(cmd2.Cmd):
         logger.info(f"Tasked SCCM to list all RBAC")
         self.admin.show_rbac()
 
+
+    
+
+# ############
+# Other PostEx that doens't fit anywhere else
+# ############
+
     @cmd2.with_category(PE)
     def do_show_consoleconnections(self, arg):
         """List console sessions and source         show_consoleconnections"""
         logger.info(f"Tasked SCCM to list all SCCM console connections")
         self.admin.show_consoleconnections()
-    
+
 
 
     
