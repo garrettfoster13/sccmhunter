@@ -5,6 +5,7 @@ from tabulate import tabulate
 import requests
 from requests_ntlm import HttpNtlmAuth
 from urllib3.exceptions import InsecureRequestWarning
+from requests_kerberos import HTTPKerberosAuth
 
 
 headers = {'Content-Type': 'application/json'}
@@ -347,5 +348,30 @@ UserPrincipalName: {tb['UserPrincipalName'].to_string(index=False, header=False)
         logger.info((tabulate(tb, showindex=False, headers=tb.columns, tablefmt='grid')))
         return
 
-    
 
+    def collection_member(self, collectionid):
+        endpoint = f"{self.url}/SMS_CollectionMember_a?$filter=CollectionID eq '{collectionid}'"
+        try:
+            r = requests.get(f"{endpoint}",
+                                auth=HttpNtlmAuth(self.username, self.password),
+                                verify=False,headers=headers)
+            if r.status_code == 200:
+                data = r.json()
+                if isinstance(data['value'], list):
+                    name_data = [{'Name': item['Name']} for item in data['value']]
+                    tb = dp.DataFrame(name_data)
+                    result = tabulate(tb, showindex=False, headers=tb.columns, tablefmt='grid')
+                    logger.info(result)
+                    #self.printlog(result)
+                else:
+                    tb = dp.DataFrame(data['value']['Result'])
+                    result = tabulate(tb, showindex=False, headers=tb.columns, tablefmt='grid')
+                    logger.info(result)
+                    #self.printlog(result)
+                return
+            else:
+                logger.info("[*] Something went wrong")
+                logger.info(r.text)
+                logger.info(r.status_code)
+        except Exception as e:
+                print(e)  

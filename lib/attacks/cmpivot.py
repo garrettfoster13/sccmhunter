@@ -99,6 +99,13 @@ class SHELL(cmd2.Cmd):
         option = arg.split(' ')
         collection_id = option[0]
         self.db.collections(collection_id)
+
+    @cmd2.with_category(DB)
+    def do_get_collectionmembers(self, arg):
+        """Query for all members of a colection. Warning: could be heavy"""
+        option = arg.split(' ')
+        collection_id = option[0]
+        self.db.collection_member(collection_id)
     
     @cmd2.with_category(DB)
     def do_get_puser(self, arg):
