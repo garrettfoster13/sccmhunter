@@ -155,7 +155,7 @@ class ADD_ADMIN:
                 print(e)  
         
     def show_consoleconnections(self):
-        url = f"https://{self.target_ip}/AdminService/wmi/SMS_ConsoleAdminsData?$select=UserName,MachineName,Source"
+        url = f"https://{self.target_ip}/AdminService/wmi/SMS_ConsoleAdminsData?$select=UserName,MachineName,Source,ConsoleVersion"
         try:
             r = requests.get(f"{url}",
                                 auth=HttpNtlmAuth(self.username, self.password),
