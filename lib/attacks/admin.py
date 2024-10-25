@@ -5,7 +5,7 @@ from tabulate import tabulate
 import requests
 from requests_ntlm import HttpNtlmAuth
 from urllib3.exceptions import InsecureRequestWarning
-from requests_kerberos import HTTPKerberosAuth
+
 
 
 headers = {'Content-Type': 'application/json'}
