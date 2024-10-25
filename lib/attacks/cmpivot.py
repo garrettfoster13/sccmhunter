@@ -273,17 +273,25 @@ class SHELL(cmd2.Cmd):
         else:
             logger.info("A target user or group is required.")
             return
-
+        
     @cmd2.with_category(PE)
     def do_show_admins(self, arg):
-        """List admin users                        show_admins"""
+        """List admin users                         show_admins"""
         logger.info(f"Tasked SCCM to list current SMS Admins.")
         self.admin.show_admins()
+
     @cmd2.with_category(PE)
     def do_show_rbac(self, arg):
-        """List RBAC users                         show_rbac"""
+        """List users and their roles               show_rbac"""
         logger.info(f"Tasked SCCM to list all RBAC")
         self.admin.show_rbac()
+
+    @cmd2.with_category(PE)
+    def do_show_consoleconnections(self, arg):
+        """List console sessions and source         show_consoleconnections"""
+        logger.info(f"Tasked SCCM to list all SCCM console connections")
+        self.admin.show_consoleconnections()
+    
 
 
     

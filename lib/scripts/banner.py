@@ -12,13 +12,13 @@ C88b  d888  '8 d888  '8 888 888 88b 888 88b 8888 8888 888 88b d88888 d88 88b 888
 d,dP   "88,e8'  "88,e8' 888 888 888 888 888  "88 88"  888 888  888    "YeeP" 888          /
                                                                                          (
                                                                  v{__version__}                   
-                                                                 @garrfoster                    
+                                                                 @unsigned_sh0rt                   
     
     
     '''
     print(banner)
 
 def small_banner():
-    banner = f'''SCCMHunter v{__version__} by @garrfoster'''
+    banner = f'''SCCMHunter v{__version__} by @unsigned_sh0rt'''
 
     print(banner)
