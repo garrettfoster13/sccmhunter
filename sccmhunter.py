@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import typer
 from lib.commands import find, mssql, smb, http, show, admin, dpapi
 from lib.scripts.banner import small_banner
