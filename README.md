@@ -29,6 +29,12 @@ pip3 install -r requirements.txt
 python3 sccmhunter.py -h
 ```
 
+`pipx` can also be used to install globally
+```
+
+pipx install git+https://github.com/garrettfoster13/sccmhunter/
+```
+
 # References
 Huge thanks to the below for all their research and hard work and 
 <br>
