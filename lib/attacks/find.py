@@ -261,6 +261,7 @@ class SCCMHUNTER:
             logger.info(f'[-] Could not find any Distribution Points published in LDAP')
         if potential_dps:
             for dn in potential_dps:
+                dn = escape_filter_chars(dn)
                 try:
                     self.ldap_session.extend.standard.paged_search(self.search_base, 
                                                                 f"(distinguishedName={dn})", 
