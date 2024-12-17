@@ -1,7 +1,7 @@
 # fix debug output, not seeing enough info "or any info"
 
 from impacket.smbconnection import SMBConnection, SessionError
-from lib.logger import logger, printlog
+from lib.logger import logger
 from requests.exceptions import RequestException
 from tabulate import tabulate
 from getpass import getpass
@@ -48,6 +48,15 @@ class SMB:
         self.check_distributionpoints()
         self.check_computers()
         self.conn.close()
+
+    def printlog(self, servers):
+        filename = (f'{self.logs_dir}/smbhunter.log')
+        logger.info(f'[+] Results saved to {filename}')
+        for server in servers:
+            with open(filename, 'a') as f:
+                f.write("{}\n".format(server))
+                f.close
+        return
 
 
     #treat all computers with full control as siteservers and active
@@ -187,7 +196,7 @@ class SMB:
         try:
             if not (self.password or self.hashes or self.aes or self.no_pass):
                 self.password = getpass("Password:")
-            timeout = 10
+            timeout = 2
             conn = SMBConnection(server, server, None, timeout=timeout)
             if self.kerberos:
                 conn.kerberosLogin(user=self.username, password=self.password, domain=self.domain, kdcHost=self.dc_ip)
@@ -269,7 +278,7 @@ class SMB:
     def smb_spider(self, conn, targets):
         vars_files = []
         downloaded = []
-        timeout = 10
+        timeout = 2
         for target in targets:
             try:
                 logger.info(f'[*] Searching {target} for PXEBoot variables files.')
@@ -303,15 +312,14 @@ class SMB:
             for i in (downloaded):
                 os.replace(f'{os.getcwd()}/{i}', f'{self.logs_dir}/loot/{i}')
         if vars_files:
-            filename = "smbhunter.log"
-            printlog(vars_files, self.logs_dir, filename)
+            self.printlog(vars_files)
         
 
 #check if the target host is running MSSQL
 #intention here is to help find the site database location or at least narrow it down    
     def mssql_check(self, server):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(5)
+        sock.settimeout(2)
         try:
             sock.connect((f'{server}', 1433))
             if sock:
@@ -367,11 +375,5 @@ class SMB:
             logger.debug(e)
         return
 
-    def printlog(self, servers):
-        filename = (f'{self.logs_dir}/smbhunter.log')
-        logger.info(f'[+] Results saved to {filename}')
-        for server in servers:
-            with open(filename, 'a') as f:
-                f.write("{}\n".format(server))
-                f.close
+
 
