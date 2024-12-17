@@ -243,7 +243,7 @@ class SCCMHUNTER:
         potential_dps = []
         try:
             self.ldap_session.extend.standard.paged_search(self.search_base, 
-                                                        "(cn=*-Remote-Installation-Services)", 
+                                                        "(&(objectclass=connectionPoint)(netbootserver=*))", 
                                                         attributes="distinguishedName", 
                                                         controls=self.controls, 
                                                         paged_size=500, 
