@@ -219,14 +219,17 @@ class SCCMHUNTER:
             if self.ldap_session.entries:
                 logger.info(f"[+] Found {len(self.ldap_session.entries)} Management Points in LDAP.")
                 for entry in self.ldap_session.entries:
-                    hostname =  str(entry['dNSHostname']).lower()
-                    sitecode = str(entry['msSMSSitecode'])
-                    self.mp_sitecodes.append(sitecode)
-                    cursor.execute(f'''insert into ManagementPoints (Hostname, SiteCode, SigningStatus) values (?,?,?)''',
-                                (hostname, sitecode, ''))
-                    if hostname:
-                        self.add_computer_to_db(hostname) 
-                    self.conn.commit()
+                    try: 
+                        hostname =  str(entry['dNSHostname']).lower()
+                        sitecode = str(entry['msSMSSitecode'])
+                        self.mp_sitecodes.append(sitecode)
+                        cursor.execute(f'''insert into ManagementPoints (Hostname, SiteCode, SigningStatus) values (?,?,?)''',
+                                    (hostname, sitecode, ''))
+                        if hostname:
+                            self.add_computer_to_db(hostname) 
+                        self.conn.commit()
+                    except ldap3.core.exceptions.LDAPKeyError as e:
+                        logger.debug(f"[-] {e}")
             cursor.close()
             self.check_sites()
 
