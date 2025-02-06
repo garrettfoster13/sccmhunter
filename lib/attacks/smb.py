@@ -230,7 +230,7 @@ class SMB:
 
             if "SMS_SITE" in shares_dict:
                 try:
-                    remark = shares_dict.get('SMS_DP$', '')  
+                    remark = shares_dict.get('SMS_DP$', '')
                     if 'ConfigMgr Site Server' in remark:
                         siteserv = True
                     sc = shares_dict.get("SMS_SITE", '')
@@ -253,10 +253,17 @@ class SMB:
                     wdspxe = True
                 if "RemoteInstallation" in remark:
                     sccmpxe = True
-                check = conn.listPath(shareName="REMINST", path="//*")
-                for i in check:
-                    if i.get_longname() == "SMSTemp":
-                        pxe_boot_servers.append(server)
+                try:
+                    check = conn.listPath(shareName="REMINST", path="//*")
+                    for i in check:
+                        if i.get_longname() == "SMSTemp":
+                            pxe_boot_servers.append(server)
+
+                except SessionError as e:
+                    if "STATUS_ACCESS_DENIED" in str(e):
+                        logger.info("[!] Access Denied to the REMINST share.")
+                    else:
+                        logger.info("[!] SMB session error: {e}")
 
             if "WsusContent" in shares_dict:
                 wsus = True
