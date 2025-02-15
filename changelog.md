@@ -5,7 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.7] - 2025-02-14
 
+### Added
+
+- Admin Module
+    - Added `get_creds` command to pull credential blobs from SCCM
+    - Added `decrypt` command to decrypt passed credential blob 
+        - You've got to be "interactive" with the SCCM primary site server for decryption to work 
+        - This means the site server must be a client 
+        - Uses script execution
+    
+    
 ## [1.0.6] - 2024-08-15
 
 ### Fixed

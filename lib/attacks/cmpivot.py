@@ -313,9 +313,21 @@ class SHELL(cmd2.Cmd):
         logger.info(f"Tasked SCCM to list all SCCM console connections")
         self.admin.show_consoleconnections()
 
+    @cmd2.with_category(PE)
+    def do_get_creds(self, arg):
+        """Extract encrypted cred blobs             get_creds"""
+        logger.info("Tasked SCCM to extract all encrypted credential blobs")
+        self.admin.get_creds()
+
+    @cmd2.with_category(PE)
+    def do_decrypt(self, arg):
+        """Decrypt provided encrypted blob             decrypt"""
+        logger.info("Tasked SCCM to decrypt credential blob")
+        option = arg.split(' ')
+        blob = option[0]
+        self.script.decrypt(blob=blob, device=self.device)
 
 
-    
 
 class CONSOLE:
     def __init__(self, username=None, password=None, ip=None, debug=False, logs_dir=None, auser=None, apassword=None):

