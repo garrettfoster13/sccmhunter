@@ -76,8 +76,7 @@ class SHELL(cmd2.Cmd):
         #path needs to end with \ or all file system queries will fail
         if not arg.endswith("\\"): 
             arg = arg + "\\"
-        option = arg.split(' ')
-        self.cwd = option[0]
+        self.cwd = arg
 
 # ############
 # Database Section
