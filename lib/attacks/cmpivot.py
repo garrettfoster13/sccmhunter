@@ -76,8 +76,7 @@ class SHELL(cmd2.Cmd):
         #path needs to end with \ or all file system queries will fail
         if not arg.endswith("\\"): 
             arg = arg + "\\"
-        option = arg.split(' ')
-        self.cwd = option[0]
+        self.cwd = arg
 
 # ############
 # Database Section
@@ -128,8 +127,7 @@ class SHELL(cmd2.Cmd):
     @cmd2.with_category(SA)    
     def do_cat(self, arg):
         """Read file contents.                      cat (filename)"""
-        option = arg.split(' ')
-        filename = option[0]
+        filename = arg
         logger.info(f"Tasked SCCM to show {arg}")
         fullpath = self.cwd + filename
         self.script.cat(fullpath, device=self.device)

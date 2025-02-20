@@ -188,7 +188,7 @@ Do-Delete
         #filecontent cmpivot module doesn't work so here's the bandaid
         script = '''
 function do-cat{
-    $contents = (Get-Content -Path %s) -replace 111,222
+    $contents = (Get-Content -Path "%s") -replace 111,222
     return $contents
 }
 function Do-Delete {
