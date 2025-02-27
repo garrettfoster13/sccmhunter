@@ -139,6 +139,19 @@ class SHELL(cmd2.Cmd):
         scriptpath = option[0]
         self.script.run(device=self.device, optional_target=scriptpath)
 
+    @cmd2.with_category(PE)
+    def do_list_scripts(self, arg):
+        """List scripts. """
+        self.script.list_scripts()
+
+    @cmd2.with_category(PE)
+    def do_delete_script(self, arg):
+        """Delete a script from the SCCM server.    delete_script (GUID)"""
+        option = arg.split(' ')
+        guid = option[0]
+        self.script.delete_script(guid)
+
+
 # ############
 # CMPivot Backdoor Section
 # Backdoor existing CMPivot script with your own
