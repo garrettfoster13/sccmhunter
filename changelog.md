@@ -15,7 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Find module
     - Channel binding is now supported when using NTLM auth
-
+- MSSQL module
+    - Channel binding is now supported when using NTLM auth
 
 ## [1.0.6] - 2024-08-15
 
