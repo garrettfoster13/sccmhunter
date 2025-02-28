@@ -62,7 +62,7 @@ class DATABASE:
             self.conn.execute('''CREATE TABLE Computers(Hostname, SiteCode, SigningStatus, SiteServer, ManagementPoint, DistributionPoint, SMSProvider, WSUS, MSSQL)''')
             self.conn.execute('''CREATE TABLE Creds(Username, Password, Source)''')
         except Exception as e:
-            logger.info(f"{e}")
+            pass
         finally:
             return True
     
@@ -78,7 +78,7 @@ class SCCMHUNTER:
     
     def __init__(self, username=None, password=None, domain=None, target_dom=None, 
                 dc_ip=None, resolve=False, ldaps=False, kerberos=False, no_pass=False, hashes=None, 
-                aes=None, debug=False, logs_dir = None, all_computers=False):
+                aes=None, channel_binding=False, debug=False, logs_dir = None, all_computers=False):
         self.username = username
         self.password= password
         self.domain = domain
@@ -91,6 +91,7 @@ class SCCMHUNTER:
         self.hashes=hashes
         self.aes = aes
         self.debug = debug
+        self.channel_binding = channel_binding
         self.ldap_session = None
         self.search_base = None
         self.logs_dir = logs_dir
@@ -105,27 +106,19 @@ class SCCMHUNTER:
         self.all_computers = all_computers
 
     def run(self):
-        #make sure the DB is built
-        db = DATABASE(self.logs_dir)
+        db = DATABASE(self.logs_dir)  #make sure the DB is built
         db.run()
-        #bind to ldap
-        if not self.ldap_session:
-            self.ldapsession()
-        # set search base to query
+        if not self.ldap_session:     #bind to ldap
+            self.ldapsession()        #set search base to query
         if self.target_dom:
             self.search_base = get_dn(self.target_dom)
         else:
             self.search_base = get_dn(self.domain)
-        #check for AD extension info
-        self.check_schema()
-        #check for potential DPs
-        self.check_dps()
-        #if they're using DNS only: thoughts and prayers
-        self.check_strings()
-
+        self.check_schema()           #check for AD extension info
+        self.check_dps()              #check for potential DPs
+        self.check_strings()          #if they're using DNS only: thoughts and prayers
         if self.all_computers:
             self.check_all_computers()
-        
         if self.debug:
             self.results()
         self.conn.close()
@@ -371,7 +364,7 @@ class SCCMHUNTER:
         cursor.execute('''select * from Groups where name = ?''', (name,))
         exists = cursor.fetchone()
         if exists:
-            logger.debug(f"[*] Skipping already group: {name}")        
+            logger.debug(f"[*] Skipping group that already exists: {name}")        
         if not exists:
             logger.debug(f"[+] Found group: {name}")
             cursor.execute('''insert into Groups (cn, name, sAMAAccontName, member, description) values (?,?,?,?,?)''', 
@@ -469,7 +462,7 @@ class SCCMHUNTER:
         try:
             ldap_server, self.ldap_session = init_ldap_session(domain=self.domain, username=self.username, password=self.password, lmhash=lmhash, 
                                                             nthash=nthash, kerberos=self.kerberos, domain_controller=self.dc_ip, 
-                                                            aesKey=self.aes, hashes=self.hashes, ldaps=self.ldaps)
+                                                            aesKey=self.aes, hashes=self.hashes, ldaps=self.ldaps, channel_binding=self.channel_binding)
             logger.debug(f'[+] Bind successful {ldap_server}')
         except ldap3.core.exceptions.LDAPSocketOpenError as e: 
             if 'invalid server address' in str(e):
@@ -481,6 +474,9 @@ class SCCMHUNTER:
             exit()
         except ldap3.core.exceptions.LDAPBindError as e:
             logger.info(f'Error: {str(e)}')
+            exit()
+        except ldap3.core.exceptions.LDAPInvalidValueError as e:
+            logger.info('Channel binding only available over LDAPS')
             exit()
 
     def member_sid_resolver(self, member):
