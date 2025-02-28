@@ -21,12 +21,13 @@ def main(
     debug           : bool  = typer.Option(False, '-debug',help='Enable Verbose Logging'),
     target_user     : str   = typer.Option(..., '-tu', help="Controlled user to grant permissions to."),
     stacked         : bool  = typer.Option(False, '-stacked', help="Provide a single stacked query for relaying."),
+    channel_binding : bool   = typer.Option(None, '-binding', help='Use LDAP channel binding'),
     site_code       : str   = typer.Option(..., '-sc', help="Target site code to add user to.")):
 
 
     mssqlhunter = MSSQL(username=username, password=password, domain=domain, dc_ip=dc_ip,ldaps=ldaps,
                             kerberos=kerberos, no_pass=no_pass, hashes=hashes, aes=aes, debug=debug, 
-                            target_user=target_user, stacked=stacked, site_code=site_code)
+                            target_user=target_user, stacked=stacked, site_code=site_code, channel_binding=channel_binding)
     init_logger(debug)
     mssqlhunter.run()
 
