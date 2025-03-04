@@ -332,7 +332,7 @@ class SHELL(cmd2.Cmd):
 
     @cmd2.with_category(CE)
     def do_get_creds(self, arg):
-        """Extract encrypted cred blobs             get_creds"""
+        """Extract encrypted cred blobs                     get_creds"""
         logger.info("Tasked SCCM to extract all encrypted credential blobs")
         self.admin.get_creds()
 
@@ -344,25 +344,25 @@ class SHELL(cmd2.Cmd):
     
     @cmd2.with_category(CE)
     def do_get_forestkey(self, arg):
-        """Extract forest discovery session key blobs             get_forestkey"""
+        """Extract forest discovery session key blobs       get_forestkey"""
         logger.info("Tasked SCCM to extract forest session key blobs")
         self.admin.get_forestkey()
 
     @cmd2.with_category(CE)
     def do_get_azurecreds(self, arg):
-        """Extract Azure co management encrypted cred blobs             get_azurecreds"""
+        """Extract Azure application cred blobs             get_azurecreds"""
         logger.info("Tasked SCCM to extract Azure app credential blobs")
         self.admin.get_azurecreds()
 
     @cmd2.with_category(CE)
     def do_get_azuretenant(self, arg):
-        """Get Azure Tenant INfo             get_azuretenant"""
-        logger.info("Tasked SCCM to extract tenant info.    get_azuretenant")
+        """Get Azure Tenant Info                            get_azuretenant"""
+        logger.info("Tasked SCCM to extract tenant info.")
         self.admin.get_azuretenant()
     
     @cmd2.with_category(CE)
     def do_decrypt(self, arg):
-        """Decrypt provided encrypted blob             decrypt"""
+        """Decrypt provided encrypted blob                  decrypt [blob]"""
         logger.info("Tasked SCCM to decrypt credential blob")
         option = arg.split(' ')
         blob = option[0]
@@ -370,12 +370,11 @@ class SHELL(cmd2.Cmd):
 
     @cmd2.with_category(CE)
     def do_decryptEx(self, arg):
-        """Decrypt provided encrypted blob with session key            decryptEx"""
+        """Decrypt provided blob with session key           decryptEx [session key] [blob]"""
         logger.info("Tasked SCCM to decrypt credential with session key blob")
         option = arg.split(' ')
         skey = option[0]
-        blob = option[1]
-        #if len(skey) != 
+        blob = option[1] 
         self.script.decryptEx(session_key=skey,encrypted_blob=blob,device=self.device)
 
 
