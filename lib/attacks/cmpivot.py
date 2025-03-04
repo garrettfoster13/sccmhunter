@@ -366,7 +366,11 @@ class SHELL(cmd2.Cmd):
         logger.info("Tasked SCCM to decrypt credential blob")
         option = arg.split(' ')
         blob = option[0]
-        self.script.decrypt(blob=blob, device=self.device)
+        if self.device == "":
+            logger.info("Device ID not found. Decryptiong requires site server device ID")
+        else:
+            self.script.decrypt(blob=blob, device=self.device)
+
 
     @cmd2.with_category(CE)
     def do_decryptEx(self, arg):
@@ -374,8 +378,11 @@ class SHELL(cmd2.Cmd):
         logger.info("Tasked SCCM to decrypt credential with session key blob")
         option = arg.split(' ')
         skey = option[0]
-        blob = option[1] 
-        self.script.decryptEx(session_key=skey,encrypted_blob=blob,device=self.device)
+        blob = option[1]
+        if self.device == "":
+            logger.info("Device ID not found. Decryptiong requires site server device ID")
+        else:
+            self.script.decryptEx(session_key=skey,encrypted_blob=blob,device=self.device)
 
 
 

