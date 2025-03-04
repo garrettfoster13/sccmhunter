@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Admin Module
     - Added `get_creds` command to pull credential blobs from SCCM
+    - Added `get_azurecreds` command to pull Azure co-management application blobs
+    - Added `get_azuretenant` commant to pull Azure tenant info
+    - Added `get_pxepassword` command to pull PXE boot blobs if configured
     - Added `decrypt` command to decrypt passed credential blob 
         - You've got to be "interactive" with the SCCM primary site server for decryption to work 
         - This means the site server must be a client 
