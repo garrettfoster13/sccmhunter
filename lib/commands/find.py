@@ -20,6 +20,7 @@ def main(
     no_pass         : bool  = typer.Option(False, "-no-pass", help="don't ask for password (useful for -k)"),
     hashes          : str   = typer.Option(None, "-hashes",metavar="LMHASH:NTHASH", help="LM and NT hashes, format is LMHASH:NTHASH"),
     aes             : str   = typer.Option(None, '-aes', metavar="HEX KEY", help='AES key to use for Kerberos Authentication (128 or 256 bits)'), 
+    channel_binding : bool   = typer.Option(None, '-binding', help='Use LDAP channel binding'),
     debug           : bool  = typer.Option(False, '-debug',help='Enable Verbose Logging'),
     all_computers   : bool  = typer.Option(False, '-all',help='Profile every computer in the domain to identify those hosting site system roles (WARNING: HEAVY)'),
 ):
@@ -28,5 +29,5 @@ def main(
 
     logs_dir = init_logger(debug)
     sccmhunter = SCCMHUNTER(username=username, password=password, domain=domain, target_dom=target_dom, dc_ip=dc_ip, resolve=resolve, ldaps=ldaps,
-                            kerberos=kerberos, no_pass=no_pass, hashes=hashes, aes=aes, debug=debug, logs_dir=logs_dir, all_computers=all_computers)
+                            kerberos=kerberos, no_pass=no_pass, hashes=hashes, aes=aes, channel_binding=channel_binding, debug=debug, logs_dir=logs_dir, all_computers=all_computers)
     sccmhunter.run()

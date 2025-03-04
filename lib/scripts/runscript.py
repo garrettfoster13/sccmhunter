@@ -171,15 +171,34 @@ Do-Delete
         except ValueError:
             return
         
-    def delete_script(self):
-        url = f"https://{self.target}/AdminService/wmi/SMS_Scripts/{self.guid}"
+    def delete_script(self, guid=None):
+        if guid == None:
+            guid = self.guid
+        url = f"https://{self.target}/AdminService/wmi/SMS_Scripts/{guid}"
 
         try:
             r = requests.delete(f"{url}",
                                 auth=HttpNtlmAuth(self.username, self.password),
                                 verify=False,headers=self.headers)
             if r.status_code == 204:
-                logger.info(f"[+] Script with GUID {self.guid} deleted.")
+                logger.info(f"[+] Script with GUID {guid} deleted.")
+        except Exception as e:
+                logger.info(e)
+
+    def list_scripts(self):
+        url = f"https://{self.target}/AdminService/wmi/SMS_Scripts?$select=ScriptName,ScriptDescription,ScriptGuid,Author,ApprovalState,Approver"
+
+        try:
+            r = requests.get(f"{url}",
+                                auth=HttpNtlmAuth(self.username, self.password),
+                                verify=False,headers=self.headers)
+            if r.status_code == 200:
+                logger.info(f"[+] Retrieved existing scripts.")
+                data = r.json()
+                if isinstance(data['value'], list):
+                    tb = dp.DataFrame(data['value'])
+                    result = tabulate(tb, showindex=False, headers=tb.columns, tablefmt='grid')
+                    logger.info(result)
         except Exception as e:
                 logger.info(e)
 
@@ -188,7 +207,7 @@ Do-Delete
         #filecontent cmpivot module doesn't work so here's the bandaid
         script = '''
 function do-cat{
-    $contents = (Get-Content -Path %s) -replace 111,222
+    $contents = (Get-Content -Path "%s") -replace 111,222
     return $contents
 }
 function Do-Delete {

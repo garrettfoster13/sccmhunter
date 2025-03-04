@@ -18,7 +18,7 @@ class MSSQL:
 
     def __init__(self, username=None, password=None, domain=None, target_dom=None, 
                         dc_ip=None,ldaps=False, kerberos=False, no_pass=False, hashes=None, 
-                        aes=None, debug=False, target_user=None, stacked=False, site_code=None):
+                        aes=None, debug=False, target_user=None, stacked=False, channel_binding=False, site_code=None):
             self.username = username
             self.password = password
             self.domain = domain
@@ -32,6 +32,7 @@ class MSSQL:
             self.debug = debug
             self.target_user = target_user
             self.stacked = stacked
+            self.channel_binding = channel_binding
             self.site_code = site_code
             self.netbiosname = ""
             self.query_sid = ""
@@ -55,7 +56,7 @@ class MSSQL:
         try:
             ldap_server, self.ldap_session = init_ldap_session(domain=self.domain, username=self.username, password=self.password,
                                                            lmhash=lmhash, nthash=nthash, kerberos=self.kerberos, domain_controller=self.dc_ip, 
-                                                           aesKey=self.aes, hashes=self.hashes, ldaps=self.ldaps)
+                                                           aesKey=self.aes, hashes=self.hashes, ldaps=self.ldaps, channel_binding=self.channel_binding)
             logger.debug(f'[+] Bind successful {ldap_server}')
 
         except ldap3.core.exceptions.LDAPSocketOpenError as e: 

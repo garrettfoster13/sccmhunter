@@ -51,6 +51,8 @@ class HTTP:
         if self.uuid:
             self.manual_request()
             return
+        if self.mp:
+            self.autopwn()
         if os.path.exists(self.database):
             try:
                 logger.info("[*] Searching for Management Points from database.")
