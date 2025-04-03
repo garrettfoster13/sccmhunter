@@ -14,6 +14,7 @@ def main(
     domain          : str   = typer.Option(None, '-d',  help="Target domain"),
     dc_ip           : str   = typer.Option(None, '-dc-ip',  help = "IP address or FQDN of domain controller"),
     ldaps           : bool  = typer.Option(False, '-ldaps', help='Use LDAPS instead of LDAP'),
+    channel_binding : bool   = typer.Option(None, '-binding', help='Use LDAP channel binding'),
     kerberos        : bool  = typer.Option(False, "-k", help='Use Kerberos authentication'),
     no_pass         : bool  = typer.Option(False, "-no-pass", help="don't ask for password (useful for -k)"),
     hashes          : str   = typer.Option(None, "-hashes",metavar="LMHASH:NTHASH", help="LM and NT hashes, format is LMHASH:NTHASH"),
@@ -28,7 +29,7 @@ def main(
 
     logs_dir = init_logger(debug)
     httphunter = HTTP(username=username, password=password, domain=domain, dc_ip=dc_ip,ldaps=ldaps,
-                            kerberos=kerberos, no_pass=no_pass, hashes=hashes, aes=aes, debug=debug, auto=auto,
+                            kerberos=kerberos, no_pass=no_pass, hashes=hashes, aes=aes, debug=debug, auto=auto, channel_binding=channel_binding,
                             computer_pass=computer_pass, computer_name=computer_name, uuid=uuid, mp=mp, sleep=sleep, logs_dir=logs_dir)
     httphunter.run()
 
