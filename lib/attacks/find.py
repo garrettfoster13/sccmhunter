@@ -38,7 +38,7 @@ class DATABASE:
             return True
         
     def validate_tables(self):
-        table_names = ["CAS", "SiteServers", "ManagementPoints", "DistributionPoints", "Users", "Groups", "Computers", "Creds"]
+        table_names = ["CAS", "SiteServers", "ManagementPoints", "SiteDatabases", "DistributionPoints", "Users", "Groups", "Computers", "Creds"]
         try:
             for table_name in table_names:
                 validated = self.conn.execute(f'''select name FROM sqlite_master WHERE type=\'table\' and name =\'{table_name}\'
@@ -56,6 +56,7 @@ class DATABASE:
             self.conn.execute('''CREATE TABLE CAS(SiteCode)''')
             self.conn.execute('''CREATE TABLE SiteServers(Hostname, SiteCode, CAS, SigningStatus, SiteServer, SMSProvider, Config, MSSQL)''')
             self.conn.execute('''CREATE TABLE ManagementPoints(Hostname, SiteCode, SigningStatus)''')
+            self.conn.execute('''CREATE TABLE SiteDatabases(Hostname, MSSQL)''')
             self.conn.execute('''CREATE TABLE PXEDistributionPoints(Hostname, SigningStatus, SCCM, WDS)''')
             self.conn.execute('''CREATE TABLE Users(cn, name, sAMAAccontName, servicePrincipalName, description)''')
             self.conn.execute('''CREATE TABLE Groups(cn, name, sAMAAccontName, member, description)''')
@@ -434,6 +435,7 @@ class SCCMHUNTER:
 
     def results(self):
         tb_ss = dp.read_sql("SELECT * FROM SiteServers WHERE Hostname IS NOT 'Unknown' ", self.conn)
+        tb_db = dp.read_sql("SELECT * FROM SiteDatabases WHERE Hostname IS NOT 'Unknown' ", self.conn)
         tb_mp = dp.read_sql("SELECT * FROM ManagementPoints WHERE Hostname IS NOT 'Unknown' ", self.conn)
         tb_dp = dp.read_sql("SELECT * FROM PXEDistributionPoints WHERE Hostname IS NOT 'Unknown' ", self.conn)
         tb_c = dp.read_sql("SELECT * FROM Computers WHERE Hostname IS NOT 'Unknown' ", self.conn)
@@ -441,6 +443,8 @@ class SCCMHUNTER:
         tb_g = dp.read_sql("SELECT * FROM Groups", self.conn)
         logger.info("Site Servers Table")
         logger.info(tabulate(tb_ss, showindex=False, headers=tb_ss.columns, tablefmt='grid'))
+        logger.info("Potential Site Databases")
+        logger.info(tabulate(tb_db, showindex=False, headers=tb_db.columns, tablefmt='grid'))
         logger.info("Management Points Table")
         logger.info(tabulate(tb_mp, showindex=False, headers=tb_mp.columns, tablefmt='grid'))
         logger.info("Potential PXE Distribution Points")
