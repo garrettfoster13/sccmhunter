@@ -1,6 +1,8 @@
 # fix debug output, not seeing enough info "or any info"
 
 from impacket.smbconnection import SMBConnection, SessionError
+from impacket.dcerpc.v5 import transport, rrp
+from lib.scripts.reg import RemoteOperations
 from lib.logger import logger
 from requests.exceptions import RequestException
 from tabulate import tabulate
@@ -59,6 +61,68 @@ class SMB:
         return
 
 
+
+    def check_remote_dbs(self, db_servers):
+        cursor = self.conn.cursor()
+        for db in db_servers:
+            mssql = self.mssql_check(db)
+            cursor.execute('''select * from SiteDatabases where Hostname = ?''', (db,))
+            exists = cursor.fetchone()
+            if not exists:
+                cursor.execute('''insert into SiteDatabases (Hostname, MSSQL) values (?,?)''', 
+                            (db, str(mssql)))
+            else:
+                logger.debug(f"[*] Skipping already known host: {db}")
+
+        return
+        
+        
+
+    def remote_reg_find_db(self, hostname, conn):
+        #  Manuel Porto (@manuporto)
+        #  Alberto Solino (@agsolino)
+        #  thanks to ^ for reg.py
+        db_servers = []
+        keyName = r"HKLM\SOFTWARE\Microsoft\SMS\components\SMS_SITE_COMPONENT_MANAGER\Multisite Component Servers"
+        logger.info(f"[*] Querying remote registry of {hostname}")
+        self.__remoteOps = RemoteOperations(conn, self.kerberos, self.dc_ip)
+        try:
+            self.__remoteOps.enableRegistry()
+        except Exception as e:
+            logger.debug(str(e))
+            logger.debug('Cannot check RemoteRegistry status. Triggering start trough named pipe...')
+            self.__remoteOps.triggerWinReg()
+            self.__remoteOps.connectWinReg()
+        try:
+            dce = self.__remoteOps.getRRP()
+            hRootKey, subKey = self.__remoteOps.strip_root_key(dce, keyName)
+            ans2 = rrp.hBaseRegOpenKey(dce, hRootKey, subKey,
+                                    samDesired=rrp.MAXIMUM_ALLOWED | rrp.KEY_ENUMERATE_SUB_KEYS | rrp.KEY_QUERY_VALUE)
+            
+            #self.__remoteOps.print_key_values(dce, ans2['phkResult'])
+            i = 0
+            while True:
+                try:
+                    key = rrp.hBaseRegEnumKey(dce, ans2['phkResult'], i)
+                    db = (key['lpNameOut'][:-1])
+                    logger.info(f"[*] Found potential remote database server: {db}")
+                    db_servers.append(db)
+                    i += 1
+                except Exception as e:
+                    break
+        except (Exception, KeyboardInterrupt) as e:
+            #import traceback
+            #traceback.print_exc()
+            logger.info(e)
+        finally:
+            if self.__remoteOps:
+                self.__remoteOps.finish()
+        if db_servers:
+            self.check_remote_dbs(db_servers)
+        #done with remote registry stuff
+        return 
+
+
     #treat all computers with full control as siteservers and active
     #if default file shares are missing implies the use of high availability
     #which means it's possibly a passive site server that still retains the same
@@ -77,6 +141,8 @@ class SMB:
                 #only enumerate if the host is reachable
                 conn = self.smb_connection(hostname)
                 if conn:
+                    #see if we can query remote registry for the site database
+                    potential_dbs = self.remote_reg_find_db(hostname, conn)
                     signing, site_code, siteserv, distp, wsus, wdspxe, sccmpxe = self.smb_hunter(hostname, conn)
                     #check if mssql is self hosted
                     mssql = self.mssql_check(hostname)
@@ -102,7 +168,10 @@ class SMB:
             logger.info("[+] Finished profiling Site Servers.")
             cursor.close()
             tb_ss = dp.read_sql("SELECT * FROM SiteServers WHERE Hostname IS NOT 'Unknown' ", self.conn)
+            tb_db = dp.read_sql("SELECT * FROM SiteDatabases WHERE Hostname IS NOT 'Unknown' ", self.conn)
             logger.info(tabulate(tb_ss, showindex=False, headers=tb_ss.columns, tablefmt='grid'))
+            logger.info("[+] Finished profiling potential Site Databases.")
+            logger.info(tabulate(tb_db, showindex=False, headers=tb_db.columns, tablefmt='grid'))
         else:
             logger.info("[-] No SiteServers found in database.")
         return
