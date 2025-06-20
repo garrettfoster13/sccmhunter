@@ -7,13 +7,14 @@ import sqlite3
 class SHOW:
 
     def __init__(self, users=False, computers=False, groups=False, creds=False, all=False,logs_dir=None,site_servers=False, mps=False,
-                 csv=False, js=False, debug=False):
+                 site_dbs=False, csv=False, js=False, debug=False):
         self.users = users
         self.computers = computers
         self.groups = groups
         self.creds = creds
         self.all = all
         self.site_servers = site_servers
+        self.site_dbs = site_dbs
         self.management_points = mps
         self.logs_dir = logs_dir
         self.debug = debug
@@ -67,6 +68,14 @@ class SHOW:
         if self.computers or self.all:
             logger.info("[+] Showing COMPUTERS Table")
             tb_c = dp.read_sql("SELECT * FROM Computers", self.conn)
+            logger.info(tabulate(tb_c, showindex=False, headers=tb_c.columns, tablefmt='grid'))   
+            if self.csv:
+                tb_c.to_csv(f"{self.logs_dir}/csvs/computers.csv", encoding='utf-8')
+            if self.json:
+                tb_c.to_json(f"{self.logs_dir}/json/computers.json")
+        if self.site_dbs or self.all:
+            logger.info("[+] Showing SiteDatabases Table")
+            tb_c = dp.read_sql("SELECT * FROM SiteDatabases", self.conn)
             logger.info(tabulate(tb_c, showindex=False, headers=tb_c.columns, tablefmt='grid'))   
             if self.csv:
                 tb_c.to_csv(f"{self.logs_dir}/csvs/computers.csv", encoding='utf-8')

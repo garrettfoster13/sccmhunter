@@ -10,6 +10,7 @@ HELP = 'Show and/or recon table results.'
 
 def main(       
     siteservers     : bool   = typer.Option(False, "-siteservers", help="Show SiteServers table"),
+    dbs             : bool   = typer.Option(False, "-dbs", help="Show SiteDatabases table"),
     mps             : bool   = typer.Option(False, "-mps", help="Show ManagementPoints table"),
     users           : bool   = typer.Option(False, "-users", help="Show SCCM related users."),
     computers       : bool   = typer.Option(False, "-computers", help="Show SCCM related computers."),
@@ -22,5 +23,5 @@ def main(
 
 
     logs_dir = init_logger(debug)
-    show  = SHOW(users=users, computers=computers, groups=groups, creds=creds, all=all, logs_dir=logs_dir, site_servers=siteservers, mps=mps, csv=csv, js=json, debug=debug)
+    show  = SHOW(users=users, computers=computers, groups=groups, creds=creds, all=all, logs_dir=logs_dir, site_servers=siteservers, site_dbs=dbs, mps=mps, csv=csv, js=json, debug=debug)
     show.run()
