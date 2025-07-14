@@ -1,5 +1,6 @@
 [![Sponsored by SpecterOps](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fspecterops%2F.github%2Fmain%2Fconfig%2Fshield.json)](https://github.com/garrettfoster13/sccmhunter)
-[![Black Hat USA Arsenal 2024](https://img.shields.io/badge/Black%20Hat%20USA%20Arsenal-2024-brightgreen?style=plastic)](https://www.blackhat.com/us-24/arsenal/schedule/index.html#sccmhunter-38141)
+[![BlackHat USA Arsenal 2024](https://img.shields.io/badge/Black%20Hat%20USA%20Arsenal-2024-brightgreen?style=plastic)](https://www.blackhat.com/us-24/arsenal/schedule/index.html#sccmhunter-38141)
+[![BlackHat USA Arsenal 2025](https://img.shields.io/badge/Black%20Hat%20USA%20Arsenal-2025-brightgreen?style=plastic)](https://www.blackhat.com/us-25/arsenal/schedule/presenters.html#garrett-foster-47543)
 [![@unsigned_sh0rt on Twitter](https://img.shields.io/twitter/follow/unsigned_sh0rt?style=social)](https://x.com/unsigned_sh0rt)
 
 
