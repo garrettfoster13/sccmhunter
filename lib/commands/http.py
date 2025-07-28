@@ -22,15 +22,23 @@ def main(
     debug           : bool  = typer.Option(False, '-debug',help='Enable Verbose Logging'),
     auto            : bool  = typer.Option(False, '-auto', help='Attempt to create a machine and recover policies with provided credentials.'),
     computer_pass   : str   = typer.Option(None, '-cp', help='Machine account password'),
+    computer_hash   : str   = typer.Option(None, '-ch', help='Machine account NTLM hash. (can be used *only* for sccm push attack)'),
     computer_name   : str   = typer.Option(None, '-cn', help='Machine account name.'),
     uuid            : str   = typer.Option(None, '-uuid', help='UUID for manual request.'),
     mp              : str   = typer.Option(None, '-mp', help='Management Point to manually request from'),
-    sleep           : str   = typer.Option(10, '-sleep', help='Time to wait between registering and requesting policies')):
+    sleep           : str   = typer.Option(10, '-sleep', help='Time to wait between registering and requesting policies'),
+    sccmpush        : bool  = typer.Option(False, "--sccm-push", "-sp", help="[Optional] Try to trigger sccm push on specified client"),
+    sccmpush_client : str   = typer.Option(None, "--sccm-push-cn", "-spcn", help="[Mandatory with --sccm-push] client name to be registerd when performing sccm push attack which should be a controlled & reachable IP/FQDN)"),
+    sccmpush_anon   : bool   = typer.Option(False, "--sccm-push-anonymous", "-spanon", help="try to perform sccm push without credentials"),
+    platform_id     : str   = typer.Option("Microsoft Windows NT Workstation 2010.0","--sccm-push-plid", "-sppid", help="[Optional] Specify the plateformID when performing sccm push attack (ex: Microsoft Windows NT Server 10.0)")
+    ):
+
 
     logs_dir = init_logger(debug)
     httphunter = HTTP(username=username, password=password, domain=domain, dc_ip=dc_ip,ldaps=ldaps,
                             kerberos=kerberos, no_pass=no_pass, hashes=hashes, aes=aes, debug=debug, auto=auto, channel_binding=channel_binding,
-                            computer_pass=computer_pass, computer_name=computer_name, uuid=uuid, mp=mp, sleep=sleep, logs_dir=logs_dir)
+                            computer_pass=computer_pass, computer_name=computer_name, computer_hash=computer_hash, uuid=uuid, mp=mp, 
+                            sp=sccmpush, spcn=sccmpush_client,sppid=platform_id, spanon=sccmpush_anon,sleep=sleep, logs_dir=logs_dir)
     httphunter.run()
 
 
