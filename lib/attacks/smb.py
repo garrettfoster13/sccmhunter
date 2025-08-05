@@ -357,12 +357,13 @@ class SMB:
         timeout = 2
         for target in targets:
             try:
-                logger.info(f'[*] Searching {target} for PXEBoot variables files.')
+                logger.debug(f"Connecting to {target} distribution point")
                 conn = SMBConnection(target, target, None, timeout=timeout)
                 if self.kerberos:
                     conn.kerberosLogin(user=self.username, password=self.password, domain=self.domain, kdcHost=self.dc_ip)
                 else:
                     conn.login(user=self.username, password=self.password, domain=self.domain, lmhash=self.lmhash, nthash=self.nthash)
+                logger.info(f'[*] Searching {target} for PXEBoot variables files.')
                 for shared_file in conn.listPath(shareName="REMINST", path="SMSTemp//*"):
                     if shared_file.get_longname().endswith('.var'):
                         # store full path for easy reporting
@@ -378,6 +379,8 @@ class SMB:
                                     downloaded.append(file_name)
                                 except Exception as e:
                                     logger.info(f"[-] {e}")
+                    else:
+                        return
             except Exception as e:
                 logger.debug(e)
         conn.logoff()

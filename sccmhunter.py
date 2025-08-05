@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import typer
-from lib.commands import find, mssql, smb, http, show, admin, dpapi
+from lib.commands import find, mssql, smb, http, show, admin, dpapi, relay
 from lib.scripts.banner import small_banner
 
 
@@ -37,6 +37,12 @@ app.add_typer(
     smb.app,
     name=smb.COMMAND_NAME,
     help=smb.HELP
+)
+
+app.add_typer(
+    relay.app,
+    name=relay.COMMAND_NAME,
+    help=relay.HELP
 )
 
 app.add_typer(
