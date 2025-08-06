@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [1.1.10] - 2025-08-06
+
+## Added
+- Relay Module
+    - Added a new module to support [TAKEOVER-5](https://github.com/subat0mik/Misconfiguration-Manager/blob/main/attack-techniques/TAKEOVER/TAKEOVER-5/takeover-5_description.md). Operators can relay coerced authentication to the SMS Provider role to compromise SCCM. 
+
+- HTTP Module
+    - Thanks to @MrFey for adding client push functionality to the HTTP in #93. SCCMHunter now supports abusing [ELEVATE-2](https://github.com/subat0mik/Misconfiguration-Manager/blob/main/attack-techniques/ELEVATE/ELEVATE-2/ELEVATE-2_description.md) from Linux.
+
 ## [1.0.10] - 2025-04-03
 
 ## Added
