@@ -4,19 +4,15 @@ import requests
 import re
 import time
 import os
-import pandas as pd
-from tabulate import tabulate
 from lib.logger import logger
 from pyasn1.codec.der.decoder import decode
 from pyasn1_modules import rfc5652
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.serialization import PublicFormat
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes, ciphers, serialization
+from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography import x509
 from cryptography.x509.oid import NameOID
@@ -24,6 +20,11 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.x509 import ObjectIdentifier
 from requests_toolbelt.multipart import decoder
 from requests_ntlm import HttpNtlmAuth
+
+try:
+    from cryptography.hazmat.decrepit.ciphers.algorithms import TripleDES
+except ImportError:
+    from cryptography.hazmat.primitives.ciphers.algorithms import TripleDES
 import xml.etree.ElementTree as ET
 import sqlite3
 import csv
@@ -144,7 +145,7 @@ class CryptoTools:
     def decrypt3Des(key, encryptedKey, iv, data):
         desKey = key.decrypt(encryptedKey, PKCS1v15())
 
-        cipher = Cipher(algorithms.TripleDES(desKey), modes.CBC(iv))
+        cipher = Cipher(TripleDES(desKey), modes.CBC(iv))
         decryptor = cipher.decryptor()
         return decryptor.update(data) + decryptor.finalize()
 
@@ -429,7 +430,7 @@ class SCCMTools():
         derived_key = hash1 + hash2[:4]
         return derived_key
 
-    def deobfuscate_policysecret(self, output:str or bytes):
+    def deobfuscate_policysecret_3des(self, output:str or bytes):
         if isinstance(output, str):
             output = bytes.fromhex(output)
 
@@ -438,12 +439,67 @@ class SCCMTools():
 
         key = self.mscrypt_derive_key_sha1(output[4:4+0x28])
         iv = bytes([0] * 8)
-        cipher = Cipher(algorithms.TripleDES(key), modes.CBC(iv), backend=default_backend())
+        cipher = Cipher(TripleDES(key), modes.CBC(iv), backend=default_backend())
         decryptor = cipher.decryptor()
         decrypted_data = decryptor.update(buffer) + decryptor.finalize()
 
         padder = padding.PKCS7(64).unpadder() # 64 is the block size in bits for DES3
         decrypted_data = padder.update(decrypted_data) + padder.finalize()
+        return decrypted_data
+    
+    
+    def mscrypt_derive_key_sha1_aes256(self, secret: bytes):
+        buf1 = bytearray([0x36] * 64)
+        buf2 = bytearray([0x5C] * 64)
+        
+        digest = hashes.Hash(hashes.SHA1(), backend=default_backend())
+        digest.update(secret)
+        hash_ = digest.finalize()
+        
+        for i in range(len(hash_)):
+            buf1[i] ^= hash_[i]
+            buf2[i] ^= hash_[i]
+        
+        digest1 = hashes.Hash(hashes.SHA1(), backend=default_backend())
+        digest1.update(buf1)
+        hash1 = digest1.finalize()
+        
+        digest2 = hashes.Hash(hashes.SHA1(), backend=default_backend())
+        digest2.update(buf2)
+        hash2 = digest2.finalize()
+        
+        derived_key = (hash1 + hash2)[:32]
+        
+        return derived_key
+
+    def deobfuscate_policysecret_aes256(self, output: str or bytes):
+        if isinstance(output, str):
+            output = bytes.fromhex(output)
+        
+        data_length = int.from_bytes(output[52:56], 'little')
+        buffer = output[64:64+data_length]
+        
+        key = self.mscrypt_derive_key_sha1_aes256(output[4:4+0x28])
+        iv = bytes([0] * 16)
+        
+        cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+        decryptor = cipher.decryptor()
+        decrypted_data = decryptor.update(buffer) + decryptor.finalize()
+        
+        padder = padding.PKCS7(128).unpadder()
+        decrypted_data = padder.update(decrypted_data) + padder.finalize()
+        
+        return decrypted_data
+    
+    def deobfuscate_policysecret(self, encrypted_string):
+        blob = encrypted_string.strip() # bunch of leading space idk
+        algo_bytes = blob[112:116]
+        if algo_bytes == "1066":
+            #handle AES encryption
+            decrypted_data = self.deobfuscate_policysecret_aes256(blob)
+        elif algo_bytes == "0366":
+            #handle DES //deprecated now but need b/w compatibility
+            decrypted_data = self.deobfuscate_policysecret_3des(blob)
         return decrypted_data
 
 

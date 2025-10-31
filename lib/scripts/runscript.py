@@ -274,7 +274,7 @@ Do-Delete
     def decryptEx(self, device, session_key, encrypted_blob):
         script = '''
 # Load the DLL
-Add-Type -Path "C:\Program Files\Microsoft Configuration Manager\\bin\X64\microsoft.configurationmanager.commonbase.dll"
+Add-Type -Path "C:\\Program Files\\Microsoft Configuration Manager\\bin\\X64\\microsoft.configurationmanager.commonbase.dll"
 
 function Invoke-DecryptEx {
     [CmdletBinding()]
