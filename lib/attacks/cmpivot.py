@@ -324,6 +324,17 @@ class SHELL(cmd2.Cmd):
         """List console sessions and source         show_consoleconnections"""
         logger.info(f"Tasked SCCM to list all SCCM console connections")
         self.admin.show_consoleconnections()
+        
+    @cmd2.with_category(PE)
+    def do_get_sccmversion(self, arg):
+        """Show current version of SCCM         get_sccmversion"""
+        logger.info(f"Tasked SCCM to show console version")
+        self.admin.get_sccmversion()
+    @cmd2.with_category(PE)
+    def do_get_consoleinstaller(self, arg):
+        """Show current version of SCCM         get_consoleinstaller"""
+        logger.info(f"Downloading adminconsole installation files")
+        self.admin.get_consoleinstaller()
 
 
 # ############

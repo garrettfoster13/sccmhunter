@@ -5,6 +5,7 @@ from urllib3.exceptions import InsecureRequestWarning
 import json
 from tabulate import tabulate
 import pandas as dp
+import base64
 
 
 class ADD_ADMIN:
@@ -267,3 +268,66 @@ class ADD_ADMIN:
                 logger.info(r.status_code)
         except Exception as e:
                 print(e)
+                
+    def get_sccmversion(self):
+        url = f"https://{self.target_ip}/AdminService/wmi/SMS_Identification.GetProviderVersion"
+        try:
+            r = requests.get(f"{url}",
+                                auth=HttpNtlmAuth(self.username, self.password),
+                                verify=False,headers=self.headers)
+            if r.status_code == 201:
+                data = r.json()
+                print((self.jprint(data)))
+                return
+            else:
+                logger.info("[*] Something went wrong")
+                logger.info(r.text)
+                logger.info(r.status_code)
+        except Exception as e:
+                print(e)
+
+
+    def get_consoleinstaller(self):
+        url = f"https://{self.target_ip}/AdminService/wmi/SMS_Identification.GetFileBinary"
+        
+        block_number = 1
+        binary_chunks = []
+        
+        while True:
+            body = {
+                "blockNumber": block_number,
+                "FileName": "adminconsole.msi"
+            }
+            
+            try:
+                r = requests.post(url,
+                                auth=HttpNtlmAuth(self.username, self.password),
+                                verify=False,headers=self.headers,
+                                json=body)
+                r.raise_for_status()
+                
+                data = r.json()
+                
+                b64_chunk = data.get('binary64Encoded', '').replace('\r\n', '')
+                binary_chunk = base64.b64decode(b64_chunk)
+                binary_chunks.append(binary_chunk)
+                
+                print(f"[+] Block {block_number}: {len(binary_chunk)} bytes")
+                
+                if data.get('isTheLastBlock', False):
+                    break
+                
+                block_number += 1
+                
+            except Exception as e:
+                print(f"[-] Error on block {block_number}: {e}")
+                return None
+        
+
+        binary_data =  b''.join(binary_chunks)
+        if binary_data:
+            with open("adminconsole.msi", 'wb') as f:
+                f.write(binary_data)
+            print(f"[+] Saved {len(binary_data)} bytes to adminconsole.msi")
+            
+
