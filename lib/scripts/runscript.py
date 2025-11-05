@@ -184,7 +184,69 @@ Do-Delete
                 logger.info(f"[+] Script with GUID {guid} deleted.")
         except Exception as e:
                 logger.info(e)
+               
+    # read script contents    
+    def get_script(self, guid=None):
+        if guid == None:
+            guid = self.guid
+        url = f"https://{self.target}/AdminService/v1.0/Script/{guid}"
 
+        try:
+            r = requests.get(f"{url}",
+                                auth=HttpNtlmAuth(self.username, self.password),
+                                verify=False,headers=self.headers)
+            if r.status_code == 200:
+                logger.info(f"[+] Got script with GUID {guid}.")
+                response = r.json()
+                
+                script_content = response.get("ScriptContent", "")
+                script_guid = response.get("ScriptGuid", "") 
+                script_name = response.get("ScriptName", "")
+                file_name = "%s/loot/%s_%s.ps1" % (self.logs_dir, script_name, script_guid)
+                
+                script = self.handle_decode(script_content) # CMPivot is utf16-le, who knows if others will get encoded like this too
+                
+                line_count = len(script.splitlines())# dont blow up the user's terminal
+                if line_count >= 500: 
+                    user_response = self.get_user_response(line_count)
+                    if user_response == "y":
+                        pass
+                    else:
+                        self.save_script(file_name, script)
+                        return
+                print(script)
+                self.save_script(file_name, script)
+            if r.status_code == 404:
+                logger.info(f"[-] Script with GUID {guid} wasn't found.")
+                
+        except Exception as e:
+                logger.info(e)
+                
+                
+    def get_user_response(self, line_count):
+        user_response = input(f"[!] Script body length is {line_count} lines. Do you want to print the script to console? Enter y/n: ").lower()
+        if user_response not in ["y", "n"]:
+            logger.info("[-] Invalid input. Please enter y or n ")
+            self.get_user_response(line_count)
+        else:
+            return user_response
+            
+                
+    def save_script(self, file_name, script):
+        with open(file_name, 'w', encoding='utf-8') as f:
+            f.write(script)
+            logger.info(f"[*] Script contents saved to {file_name}")
+            
+                
+    def handle_decode(self, script_content):
+        bomcheck = script_content.encode('utf-16-le')
+        if bomcheck.startswith(b'\xef\xbb\xbf'):
+            decoded = bomcheck.decode('utf-8')
+            return decoded
+        else:
+            return script_content
+                               
+    
     def list_scripts(self):
         url = f"https://{self.target}/AdminService/wmi/SMS_Scripts?$select=ScriptName,ScriptDescription,ScriptGuid,Author,ApprovalState,Approver"
 

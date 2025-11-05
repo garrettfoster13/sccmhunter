@@ -152,6 +152,13 @@ class SHELL(cmd2.Cmd):
         guid = option[0]
         self.script.delete_script(guid)
 
+    @cmd2.with_category(PE)
+    def do_get_script(self, arg):
+        """Get a script from the SCCM server.       get_script (GUID)"""
+        option = arg.split(' ')
+        guid = option[0]
+        self.script.get_script(guid)
+
 
 # ############
 # CMPivot Backdoor Section
@@ -327,12 +334,12 @@ class SHELL(cmd2.Cmd):
         
     @cmd2.with_category(PE)
     def do_get_sccmversion(self, arg):
-        """Show current version of SCCM         get_sccmversion"""
+        """Show current version of SCCM             get_sccmversion"""
         logger.info(f"Tasked SCCM to show console version")
         self.admin.get_sccmversion()
     @cmd2.with_category(PE)
     def do_get_consoleinstaller(self, arg):
-        """Show current version of SCCM         get_consoleinstaller"""
+        """Show current version of SCCM             get_consoleinstaller"""
         logger.info(f"Downloading adminconsole installation files")
         self.admin.get_consoleinstaller()
 
