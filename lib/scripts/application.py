@@ -1,22 +1,15 @@
 import requests
-from requests_ntlm import HttpNtlmAuth
-from urllib3.exceptions import InsecureRequestWarning
 import json
-import base64
 import uuid
-import codecs
-import time
-from tabulate import tabulate
-import pandas as dp
-import os
-from lib.logger import logger
-from datetime import datetime, timezone
-import sys
 import time
 
-#things to finish: getting the site-code done
-#triggering an update 
-#cleanup
+from datetime import datetime
+from requests_ntlm import HttpNtlmAuth
+from urllib3.exceptions import InsecureRequestWarning
+
+from lib.logger import logger
+
+
 
 
 #everything here was converted from SharpSCCM...ily @_Mayyhem
@@ -262,10 +255,8 @@ class SMSAPPLICATION:
         url = f"https://{self.target}/AdminService/wmi/SMS_Application"
 
         body = {"SDMPackageXML": xml,
+                "IsHidden": True
         }
-        # body = {"SDMPackageXML": xml, use this when everything's working confidently
-        #         "IsHidden": True
-        # }
         
         r = self.adminservice_post(url, body)   
         if r.status_code == 201:
@@ -390,10 +381,6 @@ class SMSAPPLICATION:
         
         r = self.adminservice_get(url)
         if r.status_code == 200:
-            response = r.json()
-            #self.resource_name = response['value'][0]['UniqueUserName']
-            #logger.info(f"[+] Found resource named {self.resource_name} with ResourceID {self.target_resource}")
-            #try both? check isinstance()
             self.class_name = class_name
             return True
         elif r.status_code == 404:
@@ -525,7 +512,6 @@ class SMSAPPLICATION:
         r = self.adminservice_delete(delete_collection_url)
         if r.status_code == 204:
             logger.info(f"[+] Deleted the {self.collection_name} collection")
-            time.sleep(5)
         
         logger.info("[+] Completed execution")
         return
