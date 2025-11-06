@@ -460,7 +460,7 @@ class SMSAPPLICATION:
     
     def force_policy_update(self):
         url = f"https://{self.target}/AdminService/wmi/SMS_ClientOperation.InitiateClientOperation"
-        logger.info(f"[*] Forcing all members of {self.deployment_name} ({self.deployment_ID}) to retrieve machine policy and execute any new applications available")
+        logger.info(f"[*] Forcing all members of {self.deployment_name} to retrieve machine policy and execute any new applications available")
         if not self.is_deployment_ready():
             return False
         
