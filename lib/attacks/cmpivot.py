@@ -14,6 +14,7 @@ from lib.scripts.pivot import CMPIVOT
 from lib.scripts.add_admin import ADD_ADMIN
 from lib.scripts.application import SMSAPPLICATION
 from lib.attacks.admin import DATABASE
+from lib.scripts.themanager import SPEAKTOTHEMANAGER
 import os
 
 
@@ -42,6 +43,7 @@ class SHELL(cmd2.Cmd):
         self.admin = ADD_ADMIN(username=username, password=password,target_ip=target, logs_dir=logs_dir)
         self.db = DATABASE(username=username, password=password,url=target, logs_dir=logs_dir)
         self.application = SMSAPPLICATION(username=username, password=password,target=target, logs_dir=logs_dir)
+        self.karen = SPEAKTOTHEMANAGER(username=username, password=password, target=target)
         
         #initialize cmd
         super().__init__(allow_cli_args=False)
@@ -361,12 +363,12 @@ class SHELL(cmd2.Cmd):
         
     @cmd2.with_category(PE)
     def do_get_sccmversion(self, arg):
-        """Show current version of SCCM             get_sccmversion"""
+        """Show current version of SCCM                     get_sccmversion"""
         logger.info(f"Tasked SCCM to show console version")
         self.admin.get_sccmversion()
     @cmd2.with_category(PE)
     def do_get_consoleinstaller(self, arg):
-        """Show current version of SCCM             get_consoleinstaller"""
+        """Show current version of SCCM                    get_consoleinstaller"""
         logger.info(f"Downloading adminconsole installation files")
         self.admin.get_consoleinstaller()
 
@@ -415,6 +417,12 @@ class SHELL(cmd2.Cmd):
             logger.info("Device ID not found. Decryptiong requires site server device ID")
         else:
             self.script.decrypt(blob=blob, device=self.device)
+    
+    @cmd2.with_category(CE)
+    def do_speak_to_the_manager(self, arg):
+        """Dump policy credentials                          speak_to_the_manager"""
+        logger.info("Tasked SCCM to find a manager.")
+        self.karen.run()
 
 
     @cmd2.with_category(CE)
@@ -457,10 +465,13 @@ class CONSOLE:
                                 endpoint,
                                 auth=HttpNtlmAuth(self.username, self.password),
                                 verify=False)
+            
             if r.status_code == 200:
                 self.cli()
             elif r.status_code == 401:
                 logger.info("Got error code 401: Access Denied. Check your credentials.")
+                logger.info(r.content)
+                logger.info(r)
             else:
                 logger.info(r.text)
         except Exception as e:
