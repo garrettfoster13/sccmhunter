@@ -14,6 +14,12 @@ import argparse
 
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
+def pretty_print_xml(xml_string):
+    root = ET.fromstring(xml_string)
+    ET.indent(root, space='  ')
+    formatted = (ET.tostring(root, encoding='unicode'))
+    return formatted
+
 def aes_des_key_derivation(password):
     
     key_sha1 = sha1(password).digest()
@@ -126,9 +132,10 @@ class SPEAKTOTHEMANAGER:
                             logger.info("[+] Found Task Sequence policy")
                             # idk what the deal is but there's weird chars at the end so accept the jank
                             stripped_task_sequence = ts_sequence.split('</sequence>')[0] + '</sequence>'
+                            pretty_xml = pretty_print_xml(stripped_task_sequence)
                             logger.info("[!] successfully deobfuscated task sequence")
                             with open (f"ts_sequence_{ts_hash}.xml", 'w', encoding='utf-8') as f:
-                                f.write(stripped_task_sequence)
+                                f.write(pretty_xml)
                                 logger.info(f"[+] task sequence policy saved to ts_sequence_{ts_hash}.xml")
                             seen_ts_hashes.add(ts_hash)
                     except Exception as e:
