@@ -78,9 +78,9 @@ class SHOW:
             tb_c = dp.read_sql("SELECT * FROM SiteDatabases", self.conn)
             logger.info(tabulate(tb_c, showindex=False, headers=tb_c.columns, tablefmt='grid'))   
             if self.csv:
-                tb_c.to_csv(f"{self.logs_dir}/csvs/computers.csv", encoding='utf-8')
+                tb_c.to_csv(f"{self.logs_dir}/csvs/dbs.csv", encoding='utf-8')
             if self.json:
-                tb_c.to_json(f"{self.logs_dir}/json/computers.json")
+                tb_c.to_json(f"{self.logs_dir}/json/dbs.json")
         if self.csv:
             logger.info(f"[*] CSV files saved to {self.logs_dir}/csvs/")
         if self.json:
