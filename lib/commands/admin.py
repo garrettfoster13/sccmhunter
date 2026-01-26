@@ -1,5 +1,5 @@
 import typer
-from lib.attacks.cmpivot import CONSOLE
+from lib.attacks.admin import CONSOLE
 from lib.logger import init_logger
 
 app = typer.Typer()
