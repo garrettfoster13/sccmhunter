@@ -271,7 +271,7 @@ class SHELL(cmd2.Cmd):
 # ############
 
 
-    @cmd2.with_argparser(PARSERS.do_add_admin_parser)
+    
     @cmd2.with_category(PE)
     def do_add_admin(self, args):
         """Add SCCM Admin                               add_admin (user) (sid)"""
@@ -281,6 +281,7 @@ class SHELL(cmd2.Cmd):
         logger.info(f"Tasked SCCM to add {targetuser} as an administrative user.")
         self.admin.add(targetuser=targetuser, targetsid=targetsid)
     
+    @cmd2.with_argparser(PARSERS.do_delete_admin_parser)
     @cmd2.with_category(PE)
     def do_delete_admin(self, args):
         """Remove SCCM Admin                            delete_admin (user)"""
