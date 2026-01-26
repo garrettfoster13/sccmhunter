@@ -53,6 +53,7 @@ class CMPIVOT:
         self.device = device
         self.do_request(query)
         return
+
     
     # this function doesn't work no matter how hard I try
     # used a script instead open a PR please!!

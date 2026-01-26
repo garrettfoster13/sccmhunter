@@ -1,13 +1,11 @@
 import cmd2
-import pandas as dp
 import requests
-import traceback
-import argparse
 from requests_ntlm import HttpNtlmAuth
 from urllib3.exceptions import InsecureRequestWarning
 from tabulate import tabulate
-from lib.scripts.banner import show_banner
+
 from lib.logger import logger
+from lib.parsers.parsers import PARSERS
 from lib.scripts.runscript import SMSSCRIPTS
 from lib.scripts.backdoor import BACKDOOR
 from lib.scripts.pivot import CMPIVOT
@@ -15,7 +13,6 @@ from lib.scripts.add_admin import ADD_ADMIN
 from lib.scripts.application import SMSAPPLICATION
 from lib.attacks.admin import DATABASE
 from lib.scripts.themanager import SPEAKTOTHEMANAGER
-import os
 
 
 # #add debugging
@@ -27,13 +24,6 @@ class SHELL(cmd2.Cmd):
     CE = "Credential Extraction Commands"
     hidden = ["alias", "help", "macro", "run_pyscript", "set", "shortcuts", "edit", "history", "quit", "run_script", "shell", "_relative_run_script", "eof"]
     
-    
-    application_parser = argparse.ArgumentParser()
-    application_parser.add_argument('-t', '--target', action='store', help="ResourceID to target for application deployment")
-    application_parser.add_argument('-c', '--collection-type', action='store', help='Collection type to create for application deployment', choices=['user', 'device'])
-    application_parser.add_argument('-p', '--path', action="store", help='Command or UNC path of the binary/script to execute. Ex: \\\\10.10.10.10\\payload.exe')
-    application_parser.add_argument('-s', '--system', action="store_true", help='Run the application as NT AUTHORITY\\SYSTEM', default=False)
-    application_parser.add_argument('-n', '--name', action="store", help="Name of the application")
 
     def __init__(self, username, password, target, logs_dir, auser, apassword):
         #initialize plugins
@@ -73,120 +63,122 @@ class SHELL(cmd2.Cmd):
         self.prompt = f"({self.device}) ({self.cwd}) >> "
         return stop
 
+    @cmd2.with_argparser(PARSERS.interact_parser)
     @cmd2.with_category(IN)
-    def do_interact(self, arg):
+    def do_interact(self, args):
         """Target Device/Collection to Query         interact (device code)"""
-        option = arg.split(' ')
-        self.device = option[0]
+
+        self.device = args.device
 
     @cmd2.with_category(IN)
     def do_exit(self, arg):
         """Exit the console."""
         return True 
     
+
+    @cmd2.with_argparser(PARSERS.cd_parser)
     @cmd2.with_category(SA)
-    def do_cd(self, arg):
+    def do_cd(self, args):
         """Change current working directory."""
         #path needs to end with \ or all file system queries will fail
-        if not arg.endswith("\\"): 
-            arg = arg + "\\"
-        self.cwd = arg
+        if not args.path.endswith("\\"): 
+            self.cwd = args.path + "\\"
+        else:
+            self.cwd = args.path
 
 # ############
 # Database Section
 # ############
 
+    @cmd2.with_argparser(PARSERS.get_device_parser)
     @cmd2.with_category(DB)
-    def do_get_device(self, arg):
+    def do_get_device(self, args):
         """Query specific device information"""
-        self.db.devices(arg)
+        self.db.devices(args.device)
     
+    
+    @cmd2.with_argparser(PARSERS.get_device_parser)
     @cmd2.with_category(DB)
     def do_get_user(self, arg):
         """Query specific user information"""
         self.db.users(arg)
 
+    @cmd2.with_argparser(PARSERS.get_collection_parser)
     @cmd2.with_category(DB)
-    def do_get_collection(self, arg):
+    def do_get_collection(self, args):
         """Query for all (*) or single (id) collection(s)"""
-        option = arg.split(' ')
-        collection_id = option[0]
-        self.db.collections(collection_id)
+        self.db.collections(args.collection_id)
 
+
+    @cmd2.with_argparser(PARSERS.get_collection_members_parser)
     @cmd2.with_category(DB)
-    def do_get_collectionmembers(self, arg):
+    def do_get_collectionmembers(self, args):
         """Query for all members of a colection. Warning: could be heavy"""
-        option = arg.split(' ')
-        collection_id = option[0]
-        self.db.collection_member(collection_id)
+        self.db.collection_member(args.collection_id)
     
+    @cmd2.with_argparser(PARSERS.get_puser_parser)
     @cmd2.with_category(DB)
-    def do_get_puser(self, arg):
+    def do_get_puser(self, args):
         """Query for devices the target is a primary user"""
-        self.db.pusers(arg)
+        self.db.pusers(args.user)
 
+    @cmd2.with_argparser(PARSERS.get_lastlogon_parser)
     @cmd2.with_category(DB)
-    def do_get_lastlogon(self, arg):
+    def do_get_lastlogon(self, args):
         """Query for devices the target recently signed in"""
-        self.db.last_logon(arg)
+        self.db.last_logon(args.user)
 
 
 # ############
 # Application Section
 # ############
 
-
-
-
     @cmd2.with_category(PE)
-    @cmd2.with_argparser(application_parser)
+    @cmd2.with_argparser(PARSERS.application_parser)
     def do_application(self, args):
         """Run application on target                     script (/path/to/script) """
         self.application.run(path=args.path, runas_user=args.system, name=args.name, collection_type=args.collection_type, target_resource=args.target)
-
-    # @cmd2.with_argparser(movegroup_parser)   
-    # def do_movegroup(self, args):
-    #     """Move a group to a node"""
-    #     group_name, node_name = args.group, args.node
 
 # ############
 # PowerShell Script Section
 # All modules will call and execute script from the lib.scripts directory
 # ############
 
-    @cmd2.with_category(SA)    
-    def do_cat(self, arg):
-        """Read file contents.                      cat (filename)"""
-        filename = arg
-        logger.info(f"Tasked SCCM to show {arg}")
-        fullpath = self.cwd + filename
-        self.script.cat(fullpath, device=self.device)
     
+    @cmd2.with_argparser(PARSERS.cat_parser)
+    @cmd2.with_category(SA)    
+    def do_cat(self, args):
+        """Read file contents.                      cat (filename)"""
+        filename = self.cwd + args.filename
+        fullpath = self.cwd + filename
+        logger.info(f"Tasked SCCM to show {filename}")
+        self.script.cat(fullpath, device=self.device)
+        
+    @cmd2.with_argparser(PARSERS.script_parser)
     @cmd2.with_category(PE)
-    def do_script(self, arg):
+    def do_script(self, args):
         """Run script on target                     script (/path/to/script) """
-        option = arg.split(' ')
-        scriptpath = option[0]
-        self.script.run(device=self.device, optional_target=scriptpath)
+        self.script.run(device=self.device, optional_target=args.script)
 
+
+    #didn't add a parser to this one s
     @cmd2.with_category(PE)
     def do_list_scripts(self, arg):
         """List scripts. """
         self.script.list_scripts()
 
+    @cmd2.with_argparser(PARSERS.delete_script_parser)
     @cmd2.with_category(PE)
-    def do_delete_script(self, arg):
+    def do_delete_script(self, args):
         """Delete a script from the SCCM server.    delete_script (GUID)"""
-        option = arg.split(' ')
-        guid = option[0]
-        self.script.delete_script(guid)
+        self.script.delete_script(args.script_guid)
+    
+
 
     @cmd2.with_category(PE)
-    def do_get_script(self, arg):
+    def do_get_script(self, args):
         """Get a script from the SCCM server.       get_script (GUID)"""
-        option = arg.split(' ')
-        guid = option[0]
-        self.script.get_script(guid)
+        self.script.get_script(args.script_guid)
 
 
 # ############
@@ -226,7 +218,7 @@ class SHELL(cmd2.Cmd):
 # All modules will call built-in CMPivot queries
 # ############
 
-    @cmd2.with_category(SA)
+    @cmd2.with_category(SA) 
     def do_administrators(self, arg):
         """Query local administrators on target"""
         logger.info("Tasked SCCM to run Administrators.")
@@ -305,9 +297,11 @@ class SHELL(cmd2.Cmd):
         logger.info(f"Tasked SCCM to show disk information of {self.device}.")
         self.pivot.disk(device=self.device)
 
+
+    @cmd2.with_argparser(PARSERS.delete_script_parser)
     @cmd2.with_category(SA)
-    def do_sessionhunter(self, arg):
-        user = arg.split(' ')[0]
+    def do_sessionhunter(self, args):
+        user = args.user
         """Search for all systems a target user has a current session on"""
         self.pivot.sessionhunter(self.device, user)
 
@@ -315,27 +309,24 @@ class SHELL(cmd2.Cmd):
 # Add Admin Section
 # ############
 
+
+    @cmd2.with_argparser(PARSERS.do_add_admin_parser)
     @cmd2.with_category(PE)
-    def do_add_admin(self, arg):
+    def do_add_admin(self, args):
         """Add SCCM Admin                           add_admin (user) (sid)"""
-        option = arg.split(' ')
-        targetuser = option[0]
-        targetsid = option[1]
+
+        targetuser = args.user
+        targetsid = args.sid
         logger.info(f"Tasked SCCM to add {targetuser} as an administrative user.")
         self.admin.add(targetuser=targetuser, targetsid=targetsid)
     
     @cmd2.with_category(PE)
-    def do_delete_admin(self, arg):
+    def do_delete_admin(self, args):
         """Remove SCCM Admin                        delete_admin (user)"""
-        option = arg.split(' ')
-        targetuser = option[0]
-        if len(targetuser) >= 1:
-            logger.info(f"Tasked SCCM to remove {targetuser} as an administrative user.")
-            self.admin.delete(targetuser=targetuser)
-        else:
-            logger.info("A target user or group is required.")
-            return
-        
+        targetuser = args.user
+        logger.info(f"Tasked SCCM to remove {targetuser} as an administrative user.")
+        self.admin.delete(targetuser=targetuser)
+
     @cmd2.with_category(PE)
     def do_show_admins(self, arg):
         """List admin users                         show_admins"""
@@ -406,6 +397,7 @@ class SHELL(cmd2.Cmd):
         """Get Azure Tenant Info                            get_azuretenant"""
         logger.info("Tasked SCCM to extract tenant info.")
         self.admin.get_azuretenant()
+    
     
     @cmd2.with_category(CE)
     def do_decrypt(self, arg):
