@@ -270,7 +270,6 @@ class SHELL(cmd2.Cmd):
 # Add Admin Section
 # ############
 
-
     
     @cmd2.with_category(PE)
     def do_add_admin(self, args):
@@ -405,20 +404,21 @@ class CONSOLE:
         self.approve_password = apassword
     
     def run(self):
+        headers = {'Content-Type': 'application/json; odata=verbose', 'User-Agent': 'Device action simulation'}
         try:
             endpoint = f"https://{self.url}/AdminService/wmi/"
             if self.approve_user:
                 r = requests.request("GET",
                                 endpoint,
                                 auth=HttpNtlmAuth(self.approve_user, self.approve_password),
-                                verify=False)
+                                verify=False, headers=headers)
                 if r.status_code == 401:
                     logger.info("Got error code 401: Access Denied. Check your approver credentials.")
                     logger.info("Script execution will fail if approval is required.")
             r = requests.request("GET",
                                 endpoint,
                                 auth=HttpNtlmAuth(self.username, self.password),
-                                verify=False)
+                                verify=False, headers=headers)
             
             if r.status_code == 200:
                 self.cli()

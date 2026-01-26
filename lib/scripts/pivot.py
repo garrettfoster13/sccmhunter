@@ -33,7 +33,8 @@ class AdminServiceClient:
         self.password = password
         self.target = target
         self.logs_dir = logs_dir
-        self.headers = {'Content-Type': 'application/json; odata=verbose'}
+        #the user-agent was stolen from the AdminService log file and showed up repeatedly, seems like the best one to show up in the logs for evasion
+        self.headers = {'Content-Type': 'application/json; odata=verbose', 'User-Agent': 'Device action simulation'}
 
     def _make_request(self, method, url, json_data=None, headers=None):
         """
