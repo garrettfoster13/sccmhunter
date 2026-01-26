@@ -66,7 +66,7 @@ class SHELL(cmd2.Cmd):
     @cmd2.with_argparser(PARSERS.interact_parser)
     @cmd2.with_category(IN)
     def do_interact(self, args):
-        """Target Device/Collection to Query         interact (device code)"""
+        """Target Device/Collection to Query               interact (device code)"""
 
         self.device = args.device
 
@@ -113,7 +113,7 @@ class SHELL(cmd2.Cmd):
     @cmd2.with_argparser(PARSERS.get_collection_members_parser)
     @cmd2.with_category(DB)
     def do_get_collectionmembers(self, args):
-        """Query for all members of a colection. Warning: could be heavy"""
+        """Query for all members of a colection."""
         self.db.collection_member(args.collection_id)
     
     @cmd2.with_argparser(PARSERS.get_puser_parser)
@@ -136,7 +136,7 @@ class SHELL(cmd2.Cmd):
     @cmd2.with_category(PE)
     @cmd2.with_argparser(PARSERS.application_parser)
     def do_application(self, args):
-        """Run application on target                     script (/path/to/script) """
+        """Run application on target                    """
         self.application.run(path=args.path, runas_user=args.system, name=args.name, collection_type=args.collection_type, target_resource=args.target)
 
 # ############
@@ -148,7 +148,7 @@ class SHELL(cmd2.Cmd):
     @cmd2.with_argparser(PARSERS.cat_parser)
     @cmd2.with_category(SA)    
     def do_cat(self, args):
-        """Read file contents.                      cat (filename)"""
+        """Read file contents.                             cat (filename)"""
         filename = self.cwd + args.filename
         fullpath = self.cwd + filename
         logger.info(f"Tasked SCCM to show {filename}")
@@ -157,7 +157,7 @@ class SHELL(cmd2.Cmd):
     @cmd2.with_argparser(PARSERS.script_parser)
     @cmd2.with_category(PE)
     def do_script(self, args):
-        """Run script on target                     script (/path/to/script) """
+        """Run script on target                         script (/path/to/script) """
         self.script.run(device=self.device, optional_target=args.script)
 
 
@@ -170,14 +170,14 @@ class SHELL(cmd2.Cmd):
     @cmd2.with_argparser(PARSERS.delete_script_parser)
     @cmd2.with_category(PE)
     def do_delete_script(self, args):
-        """Delete a script from the SCCM server.    delete_script (GUID)"""
+        """Delete a script from the SCCM server.        delete_script (GUID)"""
         self.script.delete_script(args.script_guid)
     
 
 
     @cmd2.with_category(PE)
     def do_get_script(self, args):
-        """Get a script from the SCCM server.       get_script (GUID)"""
+        """Get a script from the SCCM server.           get_script (GUID)"""
         self.script.get_script(args.script_guid)
 
 
@@ -188,7 +188,7 @@ class SHELL(cmd2.Cmd):
     
     @cmd2.with_category(PE)
     def do_backdoor(self, arg):
-        """Backdoor CMPivot Script                  backdoor (/path/to/script)"""
+        """Backdoor CMPivot Script                      backdoor (/path/to/script)"""
         logger.info("Tasked SCCM to backdoor CMPivot with provided script")
         check = input("IMPORTANT: Did you backup the script first? There is no going back without it. Y/N?")
         if check.lower() == "y":
@@ -313,7 +313,7 @@ class SHELL(cmd2.Cmd):
     @cmd2.with_argparser(PARSERS.do_add_admin_parser)
     @cmd2.with_category(PE)
     def do_add_admin(self, args):
-        """Add SCCM Admin                           add_admin (user) (sid)"""
+        """Add SCCM Admin                               add_admin (user) (sid)"""
 
         targetuser = args.user
         targetsid = args.sid
@@ -322,20 +322,20 @@ class SHELL(cmd2.Cmd):
     
     @cmd2.with_category(PE)
     def do_delete_admin(self, args):
-        """Remove SCCM Admin                        delete_admin (user)"""
+        """Remove SCCM Admin                            delete_admin (user)"""
         targetuser = args.user
         logger.info(f"Tasked SCCM to remove {targetuser} as an administrative user.")
         self.admin.delete(targetuser=targetuser)
 
     @cmd2.with_category(PE)
     def do_show_admins(self, arg):
-        """List admin users                         show_admins"""
+        """List admin users                             show_admins"""
         logger.info(f"Tasked SCCM to list current SMS Admins.")
         self.admin.show_admins()
 
     @cmd2.with_category(PE)
     def do_show_rbac(self, arg):
-        """List users and their roles               show_rbac"""
+        """List users and their roles                   show_rbac"""
         logger.info(f"Tasked SCCM to list all RBAC")
         self.admin.show_rbac()
 
@@ -348,18 +348,18 @@ class SHELL(cmd2.Cmd):
 
     @cmd2.with_category(PE)
     def do_show_consoleconnections(self, arg):
-        """List console sessions and source         show_consoleconnections"""
+        """List console sessions and source             show_consoleconnections"""
         logger.info(f"Tasked SCCM to list all SCCM console connections")
         self.admin.show_consoleconnections()
         
     @cmd2.with_category(PE)
     def do_get_sccmversion(self, arg):
-        """Show current version of SCCM                     get_sccmversion"""
+        """Show current version of SCCM                 get_sccmversion"""
         logger.info(f"Tasked SCCM to show console version")
         self.admin.get_sccmversion()
     @cmd2.with_category(PE)
     def do_get_consoleinstaller(self, arg):
-        """Show current version of SCCM                    get_consoleinstaller"""
+        """Show current version of SCCM                 get_consoleinstaller"""
         logger.info(f"Downloading adminconsole installation files")
         self.admin.get_consoleinstaller()
 
