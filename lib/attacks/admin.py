@@ -5,6 +5,7 @@ from urllib3.exceptions import InsecureRequestWarning
 from tabulate import tabulate
 
 from lib.logger import logger
+from lib.ldap import ldap3_kerberos_login
 from lib.parsers.parsers import PARSERS
 from lib.scripts.pivot import CMPIVOT, ADD_ADMIN, SMSAPPLICATION, SPEAKTOTHEMANAGER, DATABASE, SMSSCRIPTS
 
@@ -18,14 +19,14 @@ class SHELL(cmd2.Cmd):
     hidden = ["alias", "help", "macro", "run_pyscript", "set", "shortcuts", "edit", "history", "quit", "run_script", "shell", "_relative_run_script", "eof"]
     
 
-    def __init__(self, username, password, target, logs_dir, auser, apassword):
+    def __init__(self, username, password, kerberos, domain, kdc, target, logs_dir, auser, apassword):
         #initialize plugins
-        self.pivot = CMPIVOT(username=username, password=password, target = target, logs_dir = logs_dir)
-        self.script = SMSSCRIPTS(username=username, password=password, target = target, logs_dir = logs_dir, auser=auser, apassword=apassword)
-        self.admin = ADD_ADMIN(username=username, password=password,target_ip=target, logs_dir=logs_dir)
-        self.db = DATABASE(username=username, password=password,url=target, logs_dir=logs_dir)
-        self.application = SMSAPPLICATION(username=username, password=password,target=target, logs_dir=logs_dir)
-        self.karen = SPEAKTOTHEMANAGER(username=username, password=password, target=target)
+        self.pivot = CMPIVOT(username=username, password=password, target = target,  kerberos=kerberos, domain=domain, kdcHost=kdc, logs_dir = logs_dir)
+        self.script = SMSSCRIPTS(username=username, password=password, target = target, kerberos=kerberos, domain=domain, kdcHost=kdc, logs_dir = logs_dir, auser=auser, apassword=apassword)
+        self.admin = ADD_ADMIN(username=username, password=password,target_ip=target, kerberos=kerberos, domain=domain, kdcHost=kdc, logs_dir=logs_dir)
+        self.db = DATABASE(username=username, password=password,url=target, kerberos=kerberos, domain=domain, kdcHost=kdc, logs_dir=logs_dir)
+        self.application = SMSAPPLICATION(username=username, password=password,target=target, kerberos=kerberos, domain=domain, kdcHost=kdc, logs_dir=logs_dir)
+        self.karen = SPEAKTOTHEMANAGER(username=username, password=password, target=target, kerberos=kerberos, domain=domain, kdcHost=kdc )
         
         #initialize cmd
         super().__init__(allow_cli_args=False)
@@ -33,6 +34,9 @@ class SHELL(cmd2.Cmd):
         self.username = username
         self.password = password
         self.target = target
+        self.kerberos = kerberos
+        self.kdc = kdc
+        self.domain = domain
         self.logs_dir = logs_dir
         self.headers = {'Content-Type': 'application/json; odata=verbose'} # modify useragent? currently shows python useragent in logs
         self.intro = logger.info('[!] Enter help for extra shell commands')
@@ -394,31 +398,59 @@ class SHELL(cmd2.Cmd):
 
 
 class CONSOLE:
-    def __init__(self, username=None, password=None, ip=None, debug=False, logs_dir=None, auser=None, apassword=None):
+    def __init__(self, username=None, password=None, kerberos=False, domain=None, kdc=None, ip=None, debug=False, logs_dir=None, auser=None, apassword=None):
         self.username = username
         self.password = password
         self.url = ip
+        self.kerberos = kerberos
+        self.domain = domain
+        self.kdc_host = kdc
         self.debug = debug
         self.logs_dir = logs_dir
         self.approve_user = auser
         self.approve_password = apassword
-    
+        
+
     def run(self):
-        headers = {'Content-Type': 'application/json; odata=verbose', 'User-Agent': 'Device action simulation'}
+        endpoint = f"https://{self.url}/AdminService/wmi/"
         try:
-            endpoint = f"https://{self.url}/AdminService/wmi/"
-            if self.approve_user:
+            if self.kerberos:
+                
+                token = ldap3_kerberos_login(
+                    connection=None,
+                    target=self.url,  # Extract hostname
+                    user=self.username,
+                    password=self.password,
+                    domain=self.domain,
+                    kdcHost=self.kdc_host,
+                    admin_service=True
+                )
+                headers = {'Content-Type': 'application/json; odata=verbose', 
+                        'User-Agent': 'Device action simulation',
+                        'Authorization': token}
+                
+                r = requests.request("GET", 
+                                    endpoint,
+                                    verify=False,
+                                    headers=headers)  
+            else:
+                headers = {'Content-Type': 'application/json; odata=verbose', 
+                        'User-Agent': 'Device action simulation'}
                 r = requests.request("GET",
-                                endpoint,
-                                auth=HttpNtlmAuth(self.approve_user, self.approve_password),
-                                verify=False, headers=headers)
-                if r.status_code == 401:
-                    logger.info("Got error code 401: Access Denied. Check your approver credentials.")
-                    logger.info("Script execution will fail if approval is required.")
-            r = requests.request("GET",
-                                endpoint,
-                                auth=HttpNtlmAuth(self.username, self.password),
-                                verify=False, headers=headers)
+                            endpoint,
+                            auth=HttpNtlmAuth(self.username, self.password),
+                            verify=False, headers=headers)
+
+
+            # if self.approve_user:
+            #     r = requests.request("GET",
+            #                     endpoint,
+            #                     auth=HttpNtlmAuth(self.approve_user, self.approve_password),
+            #                     verify=False, headers=headers)
+            #     if r.status_code == 401:
+            #         logger.info("Got error code 401: Access Denied. Check your approver credentials.")
+            #         logger.info("Script execution will fail if approval is required.")
+
             
             if r.status_code == 200:
                 self.cli()
@@ -430,10 +462,12 @@ class CONSOLE:
                 logger.info(r.text)
         except Exception as e:
             logger.info("An unknown error occurred, use -debug to print the response")
+            raise e
             logger.info(e)
 
     def cli(self):
-        cli = SHELL(self.username, self.password, self.url, self.logs_dir, self.approve_user, self.approve_password)
+        #username, password, kerberos, domain, kdc, target, logs_dir, auser, apassword
+        cli = SHELL(self.username, self.password, self.kerberos, self.domain, self.kdc_host, self.url, self.logs_dir, self.approve_user, self.approve_password)
         cli.cmdloop()
 
 if __name__ == '__main__':

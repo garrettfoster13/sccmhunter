@@ -1,3 +1,4 @@
+import base64
 from impacket.smbconnection import SMBConnection
 from impacket.spnego import SPNEGO_NegTokenInit, TypesMech
 from binascii import unhexlify
@@ -89,7 +90,7 @@ def init_ldap_session(domain, username, password, lmhash, nthash, kerberos, doma
     else:
         return init_ldap_connection(target, None, domain, username, password, lmhash, nthash, domain_controller, kerberos, hashes, aesKey, channel_binding)
 
-def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='', nthash='', aesKey='', kdcHost=None, TGT=None, TGS=None, useCache=True):
+def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='', nthash='', aesKey='', kdcHost=None, TGT=None, TGS=None, useCache=True, admin_service=False):
     from pyasn1.codec.ber import encoder, decoder
     from pyasn1.type.univ import noValue
     """
@@ -145,21 +146,28 @@ def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='
                 print ('Domain retrieved from CCache: %s' % domain)
 
             logger.debug('Using Kerberos Cache: %s' % os.getenv('KRB5CCNAME'))
-            principal = 'ldap/%s@%s' % (target.upper(), domain.upper())
 
-            creds = ccache.getCredential(principal)
+            # Build the service principal name
+            if admin_service:
+                service_principal = 'HTTP/%s@%s' % (target.upper(), domain.upper())
+            else:
+                service_principal = 'ldap/%s@%s' % (target.upper(), domain.upper())
+
+            # First, try to get the TGS (service ticket) from cache
+            creds = ccache.getCredential(service_principal)
             if creds is None:
-                # Let's try for the TGT and go from there
-                principal = 'krbtgt/%s@%s' % (domain.upper(), domain.upper())
-                creds = ccache.getCredential(principal)
+                # No TGS in cache, try to get TGT instead
+                tgt_principal = 'krbtgt/%s@%s' % (domain.upper(), domain.upper())
+                creds = ccache.getCredential(tgt_principal)
                 if creds is not None:
                     TGT = creds.toTGT()
                     logger.debug('Using TGT from cache')
                 else:
                     logger.debug('No valid credentials found in cache')
             else:
-                TGS = creds.toTGS(principal)
-                logger.debug('Using TGS from cache')
+                # Found TGS in cache - we can reuse it!
+                TGS = creds.toTGS(service_principal)
+                logger.debug('Using TGS from cache for principal: %s' % service_principal)
 
             # retrieve user information from CCache file if needed
             if user == '' and creds is not None:
@@ -180,9 +188,16 @@ def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='
         sessionKey = TGT['sessionKey']
 
     if TGS is None:
-        serverName = Principal('ldap/%s' % target, type=constants.PrincipalNameType.NT_SRV_INST.value)
+        # No TGS in cache, need to request one from KDC
+        if admin_service:
+            serverName = Principal('HTTP/%s' % target, type=constants.PrincipalNameType.NT_SRV_INST.value)
+        else:
+            serverName = Principal('ldap/%s' % target, type=constants.PrincipalNameType.NT_SRV_INST.value)
+        logger.debug('Requesting TGS from KDC for service: %s' % serverName)
         tgs, cipher, oldSessionKey, sessionKey = getKerberosTGS(serverName, domain, kdcHost, tgt, cipher, sessionKey)
     else:
+        # Reuse cached TGS - no KDC call needed!
+        logger.debug('Reusing cached TGS - skipping KDC request')
         tgs = TGS['KDC_REP']
         cipher = TGS['cipher']
         sessionKey = TGS['sessionKey']
@@ -231,19 +246,24 @@ def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='
 
     blob['MechToken'] = encoder.encode(apReq)
 
-    request = ldap3.operation.bind.bind_operation(connection.version, ldap3.SASL, user, None, 'GSS-SPNEGO',
+
+    if admin_service:
+        token = base64.b64encode(blob.getData()).decode('ascii')
+        return f'Negotiate {token}'
+    else:
+        request = ldap3.operation.bind.bind_operation(connection.version, ldap3.SASL, user, None, 'GSS-SPNEGO',
                                                   blob.getData())
 
-    # Done with the Kerberos saga, now let's get into LDAP
-    if connection.closed:  # try to open connection if closed
-        connection.open(read_server_info=False)
+        # Done with the Kerberos saga, now let's get into LDAP
+        if connection.closed:  # try to open connection if closed
+            connection.open(read_server_info=False)
 
-    connection.sasl_in_progress = True
-    response = connection.post_send_single_response(connection.send('bindRequest', request, None))
-    connection.sasl_in_progress = False
-    if response[0]['result'] != 0:
-        raise Exception(response)
+        connection.sasl_in_progress = True
+        response = connection.post_send_single_response(connection.send('bindRequest', request, None))
+        connection.sasl_in_progress = False
+        if response[0]['result'] != 0:
+            raise Exception(response)
 
-    connection.bound = True
+        connection.bound = True
 
     return True

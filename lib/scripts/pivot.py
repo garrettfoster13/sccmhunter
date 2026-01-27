@@ -20,6 +20,8 @@ from tabulate import tabulate
 from urllib3.exceptions import InsecureRequestWarning
 
 from lib.logger import logger
+from lib.ldap import ldap3_kerberos_login
+
 
 # Disable SSL warnings once at module level
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
@@ -28,39 +30,50 @@ requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 class AdminServiceClient:
     """Base class for making HTTP requests to SCCM AdminService"""
 
-    def __init__(self, username, password, target, logs_dir=None):
+    def __init__(self, username, password, target, kerberos, domain, kdcHost, logs_dir=None):
         self.username = username
         self.password = password
         self.target = target
+        self.kerberos = kerberos
+        self.domain = domain
+        self.dc = kdcHost
         self.logs_dir = logs_dir
         #the user-agent was stolen from the AdminService log file and showed up repeatedly, seems like the best one to show up in the logs for evasion
         self.headers = {'Content-Type': 'application/json; odata=verbose', 'User-Agent': 'Device action simulation'}
 
     def _make_request(self, method, url, json_data=None, headers=None):
-        """
-        Generic request method that handles all HTTP methods
-
-        Args:
-            method: HTTP method (GET, POST, DELETE, PATCH, etc.)
-            url: Full URL to request
-            json_data: JSON body for POST/PATCH requests
-            headers: Optional custom headers (defaults to self.headers)
-
-        Returns:
-            requests.Response object
-        """
-        if headers is None:
-            headers = self.headers
-
         try:
-            r = requests.request(
-                method=method,
-                url=url,
-                auth=HttpNtlmAuth(self.username, self.password),
-                verify=False,
-                headers=headers,
-                json=json_data
-            )
+            # if headers is None:
+            #     headers = self.headers
+            if self.kerberos:
+                token = ldap3_kerberos_login(
+                    connection=None,
+                    target=self.target,  # Extract hostname
+                    user=self.username,
+                    password=self.password,
+                    domain=self.domain,
+                    kdcHost=self.dc,
+                    admin_service=True
+                )
+                headers = {'Content-Type': 'application/json; odata=verbose', 
+                        'User-Agent': 'Device action simulation',
+                        'Authorization': token}
+                
+                r = requests.request(method=method,
+                                    url=url,
+                                    verify=False,
+                                    headers=headers,
+                                    json=json_data)  
+                
+            else:
+                r = requests.request(
+                    method=method,
+                    url=url,
+                    auth=HttpNtlmAuth(self.username, self.password),
+                    verify=False,
+                    headers=headers,
+                    json=json_data
+                )
             return r
         except Exception as e:
             logger.error(f"Request failed: {e}")
@@ -90,8 +103,8 @@ class AdminServiceClient:
 
 class CMPIVOT(AdminServiceClient):
 
-    def __init__(self, username, password, target, logs_dir):
-        super().__init__(username, password, target, logs_dir)
+    def __init__(self, username, password, target,  kerberos, domain, kdcHost, logs_dir):
+        super().__init__(username, password, target,  kerberos, domain, kdcHost, logs_dir)
         self.opid = ""
         self.body = ""
         self.device = ""
@@ -292,8 +305,8 @@ class CMPIVOT(AdminServiceClient):
 
 
 class ADD_ADMIN(AdminServiceClient):
-    def __init__(self, username, password, target_ip, logs_dir):
-        super().__init__(username, password, target_ip, logs_dir)
+    def __init__(self, username, password, target_ip,  kerberos, domain, kdcHost, logs_dir):
+        super().__init__(username, password, target_ip,  kerberos, domain, kdcHost, logs_dir)
         self.target_ip = target_ip
         #logger.debug(text)
 
@@ -577,14 +590,11 @@ class ADD_ADMIN(AdminServiceClient):
                 f.write(binary_data)
             print(f"[+] Saved {len(binary_data)} bytes to adminconsole.msi")
             
-
-
-
 #everything here was converted from SharpSCCM...ily @_Mayyhem
 class SMSAPPLICATION(AdminServiceClient):
 
-    def __init__(self, username, password, target, logs_dir):
-        super().__init__(username, password, target, logs_dir)
+    def __init__(self, username, password, target,  kerberos, domain, kdcHost, logs_dir):
+        super().__init__(username, password, target,  kerberos, domain, kdcHost, logs_dir)
         # Use base class headers (inherits from AdminServiceClient)
 
         #created during execution
@@ -1091,9 +1101,9 @@ class SMSAPPLICATION(AdminServiceClient):
     
 class SPEAKTOTHEMANAGER(AdminServiceClient):
 
-    def __init__(self, target, username, password):
+    def __init__(self, target, username, password,  kerberos, domain, kdcHost):
         # Note: parameter order is different (target first) but we adapt to base class
-        super().__init__(username, password, target, logs_dir=None)
+        super().__init__(username, password, target,  kerberos, domain, kdcHost, logs_dir=None)
         
     #thx @blurbdust https://github.com/blurbdust/PXEThief/blob/6d21293465959796c629e0a3517f1bb1655289b0/media_variable_file_cryptography.py#L80
     def credential_string_algo(self,credential_string):
@@ -1298,8 +1308,8 @@ class SPEAKTOTHEMANAGER(AdminServiceClient):
 
 
 class DATABASE(AdminServiceClient):
-    def __init__(self, username=None, password=None, url=None, logs_dir=None):
-        super().__init__(username, password, url, logs_dir)
+    def __init__(self, username=None, password=None, url=None,  kerberos=False, domain=None,  kdcHost=None, logs_dir=None):
+        super().__init__(username, password, url,  kerberos, domain, kdcHost, logs_dir)
         self.url = f"https://{url}/AdminService/wmi"
         self._dbname = f"{self.logs_dir}/db/sccmhunter.db"
         self.conn = sqlite3.connect(self._dbname, check_same_thread=False)
@@ -1645,8 +1655,8 @@ UserPrincipalName: {tb['UserPrincipalName'].to_string(index=False, header=False)
 
 class SMSSCRIPTS(AdminServiceClient):
 
-    def __init__(self, username, password, target, logs_dir, auser, apassword):
-        super().__init__(username, password, target, logs_dir)
+    def __init__(self, username, password, target,  kerberos, domain, kdcHost, logs_dir, auser, apassword):
+        super().__init__(username, password, target,  kerberos, domain, kdcHost, logs_dir)
         self.approve_user = auser
         self.approve_password = apassword
         self.cwd = os.getcwd()
