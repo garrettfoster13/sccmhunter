@@ -39,12 +39,10 @@ class AdminServiceClient:
         self.dc = kdcHost
         self.logs_dir = logs_dir
         #the user-agent was stolen from the AdminService log file and showed up repeatedly, seems like the best one to show up in the logs for evasion
-        self.headers = {'Content-Type': 'application/json;', 'User-Agent': 'Device action simulation'}
+        self.headers = {'Content-Type': 'application/json; odata=verbose', 'User-Agent': 'Device action simulation'}
 
     def _make_request(self, method, url, json_data=None, headers=None):
         try:
-            if headers is None:
-                headers = self.headers
             if self.kerberos:
                 token = ldap3_kerberos_login(
                     connection=None,
@@ -55,7 +53,7 @@ class AdminServiceClient:
                     kdcHost=self.dc,
                     admin_service=True
                 )
-                headers = {'Content-Type': 'application/json;', 
+                headers = {'Content-Type': 'application/json; odata=verbose',
                         'User-Agent': 'Device action simulation',
                         'Authorization': token}
                 
@@ -71,7 +69,7 @@ class AdminServiceClient:
                     url=url,
                     auth=HttpNtlmAuth(self.username, self.password),
                     verify=False,
-                    headers=headers,
+                    headers=self.headers,
                     json=json_data
                 )
             return r
@@ -237,6 +235,7 @@ class CMPIVOT(AdminServiceClient):
         if self.device[0].isalpha():
             self.endpoint = "Collections"
             self.device = f"'{self.device}'"
+
         endpoint = f"https://{self.target}/AdminService/v1.0/{self.endpoint}({self.device})/AdminService.RunCMPivot"
         try:
             r = self.http_post(endpoint, json_data=body)
