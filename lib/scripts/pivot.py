@@ -39,7 +39,7 @@ class AdminServiceClient:
         self.dc = kdcHost
         self.logs_dir = logs_dir
         #the user-agent was stolen from the AdminService log file and showed up repeatedly, seems like the best one to show up in the logs for evasion
-        self.headers = {'Content-Type': 'application/json; odata=verbose', 'User-Agent': 'Device action simulation'}
+        self.headers = {'Content-Type': 'application/json;', 'User-Agent': 'Device action simulation'}
 
     def _make_request(self, method, url, json_data=None, headers=None):
         try:
@@ -55,7 +55,7 @@ class AdminServiceClient:
                     kdcHost=self.dc,
                     admin_service=True
                 )
-                headers = {'Content-Type': 'application/json; odata=verbose', 
+                headers = {'Content-Type': 'application/json;', 
                         'User-Agent': 'Device action simulation',
                         'Authorization': token}
                 
