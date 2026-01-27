@@ -1,5 +1,5 @@
 
-__version__ = '1.0.11'
+__version__ = '2.0.0'
 
 
 def show_banner():
