@@ -826,6 +826,10 @@ class SMSAPPLICATION(AdminServiceClient):
         else:
             return False
         
+    def check_if_application_exists(self):
+        logger.info("[*] Checking if application already exists")
+        url = f"https://{self.target}/AdminService/wmi/SMS_Application?$filter=LocalizedDisplayName eq '{self.app_name}'"
+        r = self.adminservice_get(url)
     
     def new_application(self):
         is_name_used = self.check_if_application_exists()   
