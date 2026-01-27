@@ -93,11 +93,11 @@ class SHELL(cmd2.Cmd):
         self.db.devices(args.device)
     
     
-    @cmd2.with_argparser(PARSERS.get_device_parser)
+    @cmd2.with_argparser(PARSERS.get_user_parser)
     @cmd2.with_category(DB)
-    def do_get_user(self, arg):
+    def do_get_user(self, args):
         """Query specific user information"""
-        self.db.users(arg)
+        self.db.users(args.user)
 
     @cmd2.with_argparser(PARSERS.get_collection_parser)
     @cmd2.with_category(DB)
@@ -442,14 +442,14 @@ class CONSOLE:
                             verify=False, headers=headers)
 
 
-            # if self.approve_user:
-            #     r = requests.request("GET",
-            #                     endpoint,
-            #                     auth=HttpNtlmAuth(self.approve_user, self.approve_password),
-            #                     verify=False, headers=headers)
-            #     if r.status_code == 401:
-            #         logger.info("Got error code 401: Access Denied. Check your approver credentials.")
-            #         logger.info("Script execution will fail if approval is required.")
+            if self.approve_user:
+                r = requests.request("GET",
+                                endpoint,
+                                auth=HttpNtlmAuth(self.approve_user, self.approve_password),
+                                verify=False, headers=headers)
+                if r.status_code == 401:
+                    logger.info("Got error code 401: Access Denied. Check your approver credentials.")
+                    logger.info("Script execution will fail if approval is required.")
 
             
             if r.status_code == 200:
