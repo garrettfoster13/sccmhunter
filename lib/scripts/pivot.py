@@ -43,8 +43,8 @@ class AdminServiceClient:
 
     def _make_request(self, method, url, json_data=None, headers=None):
         try:
-            # if headers is None:
-            #     headers = self.headers
+            if headers is None:
+                headers = self.headers
             if self.kerberos:
                 token = ldap3_kerberos_login(
                     connection=None,
