@@ -133,7 +133,7 @@ class SHELL(cmd2.Cmd):
     @cmd2.with_argparser(PARSERS.application_parser)
     def do_application(self, args):
         """Run application on target                    """
-        self.application.run(path=args.path, runas_user=args.system, name=args.name, collection_type=args.collection_type, target_resource=args.target)
+        self.application.run(path=args.path, runas_user=args.system, name=args.name, collection_type=args.collection_type, target_resource=args.target, collection_id=args.collection_id)
 
 # ############
 # PowerShell Script Section

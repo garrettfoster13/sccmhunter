@@ -1037,6 +1037,20 @@ class SMSAPPLICATION(AdminServiceClient):
         else:
             return False
         
+    def existing_collection(self):
+        logger.info(f"[*] Checking for existing collection with ID {self.collection_id}")
+        url = f"https://{self.target}/AdminService/wmi/SMS_Collection/{self.collection_id}"
+        r = self.adminservice_get(url)
+        if r.status_code == 200:
+            response = r.json()
+            self.collection_name = response["value"][0]["Name"]
+            logger.info(f"[+] Found collection {self.collection_name} with {self.collection_id}")
+            return True
+        else:
+            logger.info("[-] Could not find a collection name for the provided collection ID.")
+            return False
+
+        return
 
     
     def cleanup(self):
@@ -1078,7 +1092,7 @@ class SMSAPPLICATION(AdminServiceClient):
         return
         
         
-    def run(self, path, runas_user, name, collection_type, target_resource, working_dir=""):
+    def run(self, path, runas_user, name, collection_type, target_resource, collection_id, working_dir=""):
         if runas_user == False:
             self.runas_user = "User"
         else:
@@ -1089,9 +1103,14 @@ class SMSAPPLICATION(AdminServiceClient):
         self.working_dir = working_dir
         self.app_name = name
         self.target_resource = target_resource
+        self.collection_id = collection_id
 
-        if not self.new_collection():
-            return
+        if not collection_id:
+            if not self.new_collection():
+                return
+        else:
+            if not self.existing_collection():
+                return
         
         if not self.new_application():
             return

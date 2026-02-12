@@ -56,6 +56,7 @@ class PARSERS:
         parser.add_argument('-p', '--path', action="store", help='Command or UNC path of the binary/script to execute. Ex: \\\\10.10.10.10\\payload.exe')
         parser.add_argument('-s', '--system', action="store_true", help='Run the application as NT AUTHORITY\\SYSTEM', default=False)
         parser.add_argument('-n', '--name', action="store", help="Name of the application")
+        parser.add_argument("--collection-id", action="store", help="Id of existing collection to target")
         return parser
     
     #Powershell Script Parsers
