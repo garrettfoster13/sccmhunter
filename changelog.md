@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-02-13
+
+## Added 
+
+- Admin Module
+    - Added Kerberos authentication support for the AdminService API. NTLM auth was [disabled](https://learn.microsoft.com/en-us/intune/configmgr/core/plan-design/changes/whats-new-in-version-2509#adminservice-now-rejects-ntlm-authentication) in 2509. 
+    - Added richer argument parsing for modules that required user input
+    - Added the `application` command to deploy applications and therefore command/code execution in SYSTEM or target user context
+    - Added the `get_sccm_version` command to identify the current version of SCCM
+    - Added the `get_consoleinstaller` command to download the current intaller for the target environment. Useful when 
+    proxying in the console and you need the versions to match.
+    - Added the `speak_to_the_manager` command to recover NAA credentials and dump Task Sequency policies
+
+## Changed
+
+- Admin Module
+    - Consolidated the various classes used to run commands in the `admin` module into one library. 
+
+## Fixed
+
+- Admin Module
+    - Fixed spacing in the help output
+    - Cleaned up the code and added HTTP helpers. Should make extending and adding features easier.
+
+## Removed 
+- Admin Module
+    - Removed the CMPivot backdoor scripts. They were imperfect and did more harm than good. 
+  
+
+
 ## [1.1.11] - 2025-10-30
 
 ## Added 

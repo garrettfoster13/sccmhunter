@@ -424,6 +424,18 @@ class SMB:
                                 verify=False)
             if r.status_code == 401:
                 return True
+            endpoint = f"https://{server}/ccm_system_altauth/"
+            r = requests.request("GET",
+                                endpoint,
+                                verify=False)
+            if r.status_code == 403:
+                return True
+            endpoint = f"https://{server}/ccm_system_altauth/request"
+            r = requests.request("CCM_POST",
+                                endpoint,
+                                verify=False)
+            if r.status_code == 200:
+                return True
             else:
                 return False
         except RequestException as e:
