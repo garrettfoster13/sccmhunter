@@ -274,7 +274,7 @@ class SHELL(cmd2.Cmd):
 # Add Admin Section
 # ############
 
-    
+    @cmd2.with_argparser(PARSERS.do_add_admin_parser)
     @cmd2.with_category(PE)
     def do_add_admin(self, args):
         """Add SCCM Admin                               add_admin (user) (sid)"""
