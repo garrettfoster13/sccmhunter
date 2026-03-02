@@ -167,8 +167,8 @@ class SMB:
                 self.conn.commit()
             logger.info("[+] Finished profiling Site Servers.")
             cursor.close()
-            tb_ss = dp.read_sql("SELECT * FROM SiteServers WHERE Hostname IS NOT 'Unknown' ", self.conn)
-            tb_db = dp.read_sql("SELECT * FROM SiteDatabases WHERE Hostname IS NOT 'Unknown' ", self.conn)
+            tb_ss = dp.read_sql("SELECT * FROM SiteServers WHERE Hostname IS NOT 'Unknown' ", self.conn).fillna('')
+            tb_db = dp.read_sql("SELECT * FROM SiteDatabases WHERE Hostname IS NOT 'Unknown' ", self.conn).fillna('')
             logger.info(tabulate(tb_ss, showindex=False, headers=tb_ss.columns, tablefmt='grid'))
             logger.info("[+] Finished profiling potential Site Databases.")
             logger.info(tabulate(tb_db, showindex=False, headers=tb_db.columns, tablefmt='grid'))
@@ -195,7 +195,7 @@ class SMB:
 
             logger.info("[+] Finished profiling Management Points.")
             cursor.close()
-            tb_mp = dp.read_sql("SELECT * FROM ManagementPoints WHERE Hostname IS NOT 'Unknown' ", self.conn)
+            tb_mp = dp.read_sql("SELECT * FROM ManagementPoints WHERE Hostname IS NOT 'Unknown' ", self.conn).fillna('')
             logger.info(tabulate(tb_mp, showindex=False, headers=tb_mp.columns, tablefmt='grid'))
             return
         else:
@@ -219,7 +219,7 @@ class SMB:
 
             logger.info("[+] Finished profiling Distribution Points.")
             cursor.close()
-            tb_dp = dp.read_sql("SELECT * FROM PXEDistributionPoints WHERE Hostname IS NOT 'Unknown' ", self.conn)
+            tb_dp = dp.read_sql("SELECT * FROM PXEDistributionPoints WHERE Hostname IS NOT 'Unknown' ", self.conn).fillna('')
             logger.info(tabulate(tb_dp, showindex=False, headers=tb_dp.columns, tablefmt='grid'))
             return
         else:
@@ -255,7 +255,7 @@ class SMB:
                 self.conn.commit()
             logger.info("[+] Finished profiling all discovered computers.")
             cursor.close()
-            tb_ss = dp.read_sql("SELECT * FROM Computers WHERE Hostname IS NOT 'Unknown' ", self.conn)
+            tb_ss = dp.read_sql("SELECT * FROM Computers WHERE Hostname IS NOT 'Unknown' ", self.conn).fillna('')
             logger.info(tabulate(tb_ss, showindex=False, headers=tb_ss.columns, tablefmt='grid'))
             return
         else:
