@@ -266,6 +266,12 @@ class SMB:
             if not (self.password or self.hashes or self.aes or self.no_pass):
                 self.password = getpass("Password:")
             timeout = 2
+            if self.kerberos:
+                logger.debug(f'[SMB] Connecting to {server}:445 | auth=Kerberos user={self.username} domain={self.domain} kdc={self.dc_ip}')
+            elif self.hashes:
+                logger.debug(f'[SMB] Connecting to {server}:445 | auth=NTLM(hash) user={self.domain}\\{self.username} lmhash={self.lmhash or "aad3..."} nthash={self.nthash[:8]}...')
+            else:
+                logger.debug(f'[SMB] Connecting to {server}:445 | auth=NTLM(password) user={self.domain}\\{self.username}')
             conn = SMBConnection(server, server, None, timeout=timeout)
             if self.kerberos:
                 conn.kerberosLogin(user=self.username, password=self.password, domain=self.domain, kdcHost=self.dc_ip)
@@ -273,11 +279,12 @@ class SMB:
                 conn.login(user=self.username, password=self.password, domain=self.domain, lmhash=self.lmhash, nthash=self.nthash)
             logger.debug(f"[+] Connected to smb://{server}:445")
             return conn
-        except socket.error:
-            logger.debug(f"[-] Error connecting to smb://{server}:445")
+        except socket.error as e:
+            logger.debug(f"[-] SMB socket error connecting to {server}:445 | {e}")
             return
         except Exception as e:
-            logger.info(f"[-] {e}")
+            logger.info(f"[-] SMB SessionError: {e}")
+            logger.debug(f"[-] Failed: smb://{server}:445 user={self.domain}\\{self.username}")
             return
 
     #profile remote hosts based on default file shares configured on particular roles
@@ -357,7 +364,10 @@ class SMB:
         timeout = 2
         for target in targets:
             try:
-                logger.debug(f"Connecting to {target} distribution point")
+                if self.kerberos:
+                    logger.debug(f'[SMB] spider: connecting to {target}:445 | auth=Kerberos user={self.username} domain={self.domain} kdc={self.dc_ip}')
+                else:
+                    logger.debug(f'[SMB] spider: connecting to {target}:445 | auth=NTLM user={self.domain}\\{self.username}')
                 conn = SMBConnection(target, target, None, timeout=timeout)
                 if self.kerberos:
                     conn.kerberosLogin(user=self.username, password=self.password, domain=self.domain, kdcHost=self.dc_ip)
