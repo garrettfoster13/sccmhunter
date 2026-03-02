@@ -113,8 +113,10 @@ class SCCMHUNTER:
             self.ldapsession()        #set search base to query
         if self.target_dom:
             self.search_base = get_dn(self.target_dom)
+            logger.debug(f'[LDAP] Target domain override: {self.target_dom} -> search_base={self.search_base}')
         else:
             self.search_base = get_dn(self.domain)
+            logger.debug(f'[LDAP] Using auth domain for search: {self.domain} -> search_base={self.search_base}')
         self.check_schema()           #check for AD extension info
         self.check_dps()              #check for potential DPs
         self.check_strings()          #if they're using DNS only: thoughts and prayers

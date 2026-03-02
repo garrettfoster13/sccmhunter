@@ -56,17 +56,33 @@ def init_ldap_connection(target, tls_version, domain, username, password, lmhash
         if channel_binding is True:
             logger.info("Kerberos auth + channel binding isn't supported yet.")
             sys.exit(1)
+        logger.debug(f'[LDAP] Attempting Kerberos bind | target={target} port={port} ssl={use_ssl}')
         ldap_session = ldap3.Connection(ldap_server)
         ldap_session.bind()
         ldap3_kerberos_login(ldap_session, target, username, password, domain, lmhash, nthash, aesKey, kdcHost=domain_controller)
     elif hashes is not None:
         if lmhash == "":
             lmhash = "aad3b435b51404eeaad3b435b51404ee"
-        ldap_session = ldap3.Connection(ldap_server, user=user, password=lmhash + ":" + nthash, authentication=ldap3.NTLM, auto_bind=True, **channel_binding)
+        logger.debug(f'[LDAP] Attempting NTLM bind (hash) | target={target} port={port} ssl={use_ssl} user={user}')
+        try:
+            ldap_session = ldap3.Connection(ldap_server, user=user, password=lmhash + ":" + nthash, authentication=ldap3.NTLM, auto_bind=True, **channel_binding)
+        except Exception as e:
+            logger.debug(f'[LDAP] Bind failed | {e}')
+            raise
     elif username == '' and password == '':
-        ldap_session = ldap3.Connection(ldap_server, authentication=ANONYMOUS, auto_bind=True, **channel_binding)
+        logger.debug(f'[LDAP] Attempting anonymous bind | target={target} port={port} ssl={use_ssl}')
+        try:
+            ldap_session = ldap3.Connection(ldap_server, authentication=ANONYMOUS, auto_bind=True, **channel_binding)
+        except Exception as e:
+            logger.debug(f'[LDAP] Bind failed | {e}')
+            raise
     else:
-        ldap_session = ldap3.Connection(ldap_server, user=user, password=password, authentication=ldap3.NTLM, auto_bind=True, **channel_binding)
+        logger.debug(f'[LDAP] Attempting NTLM bind (password) | target={target} port={port} ssl={use_ssl} user={user}')
+        try:
+            ldap_session = ldap3.Connection(ldap_server, user=user, password=password, authentication=ldap3.NTLM, auto_bind=True, **channel_binding)
+        except Exception as e:
+            logger.debug(f'[LDAP] Bind failed | {e}')
+            raise
 
     return ldap_server, ldap_session
 
@@ -179,13 +195,23 @@ def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='
 
     # First of all, we need to get a TGT for the user
     userName = Principal(user, type=constants.PrincipalNameType.NT_PRINCIPAL.value)
+    kdc_str = kdcHost if kdcHost else domain
+    logger.debug(f'[KRB5] principal={user}@{domain.upper()} target={target} kdc={kdc_str}')
     if TGT is None:
         if TGS is None:
-            tgt, cipher, oldSessionKey, sessionKey = getKerberosTGT(userName, password, domain, lmhash, nthash, aesKey, kdcHost)
+            auth_method = 'aes' if aesKey else ('nthash' if nthash else 'password')
+            logger.debug(f'[KRB5] Requesting TGT (AS-REQ) | kdc={kdc_str} auth={auth_method}')
+            try:
+                tgt, cipher, oldSessionKey, sessionKey = getKerberosTGT(userName, password, domain, lmhash, nthash, aesKey, kdcHost)
+            except Exception as e:
+                logger.debug(f'[KRB5] TGT request failed | {e}')
+                raise
+            logger.debug(f'[KRB5] TGT obtained | enctype={cipher.enctype}')
     else:
         tgt = TGT['KDC_REP']
         cipher = TGT['cipher']
         sessionKey = TGT['sessionKey']
+        logger.debug(f'[KRB5] Using provided TGT | enctype={cipher.enctype}')
 
     if TGS is None:
         # No TGS in cache, need to request one from KDC
@@ -193,14 +219,20 @@ def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='
             serverName = Principal('HTTP/%s' % target, type=constants.PrincipalNameType.NT_SRV_INST.value)
         else:
             serverName = Principal('ldap/%s' % target, type=constants.PrincipalNameType.NT_SRV_INST.value)
-        logger.debug('Requesting TGS from KDC for service: %s' % serverName)
-        tgs, cipher, oldSessionKey, sessionKey = getKerberosTGS(serverName, domain, kdcHost, tgt, cipher, sessionKey)
+        logger.debug(f'[KRB5] Requesting TGS (TGS-REQ) | service={serverName} kdc={kdc_str}')
+        try:
+            tgs, cipher, oldSessionKey, sessionKey = getKerberosTGS(serverName, domain, kdcHost, tgt, cipher, sessionKey)
+        except Exception as e:
+            logger.debug(f'[KRB5] TGS request failed | {e}')
+            raise
+        logger.debug(f'[KRB5] TGS obtained | enctype={cipher.enctype}')
     else:
         # Reuse cached TGS - no KDC call needed!
         logger.debug('Reusing cached TGS - skipping KDC request')
         tgs = TGS['KDC_REP']
         cipher = TGS['cipher']
         sessionKey = TGS['sessionKey']
+        logger.debug(f'[KRB5] Using cached TGS | enctype={cipher.enctype}')
 
         # Let's build a NegTokenInit with a Kerberos REQ_AP
 
@@ -255,6 +287,7 @@ def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='
                                                   blob.getData())
 
         # Done with the Kerberos saga, now let's get into LDAP
+        logger.debug(f'[KRB5] Sending SASL GSS-SPNEGO bindRequest | user={user} server={connection.server}')
         if connection.closed:  # try to open connection if closed
             connection.open(read_server_info=False)
 
@@ -262,6 +295,10 @@ def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='
         response = connection.post_send_single_response(connection.send('bindRequest', request, None))
         connection.sasl_in_progress = False
         if response[0]['result'] != 0:
+            result_code = response[0].get('result', 'unknown')
+            description = response[0].get('description', '')
+            message = response[0].get('message', '')
+            logger.debug(f'[LDAP] Kerberos bind failed | result={result_code} description={description!r} message={message!r}')
             raise Exception(response)
 
         connection.bound = True
