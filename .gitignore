@@ -8,6 +8,11 @@ __pycache__/
 
 # Virtual Environement
 venv
+pyvenv.cfg
+CACHEDIR.TAG
+bin/
+lib/python*
+share/
 
 # Distribution / packaging
 .Python

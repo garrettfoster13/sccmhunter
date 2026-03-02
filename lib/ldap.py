@@ -56,17 +56,33 @@ def init_ldap_connection(target, tls_version, domain, username, password, lmhash
         if channel_binding is True:
             logger.info("Kerberos auth + channel binding isn't supported yet.")
             sys.exit(1)
+        logger.debug(f'[LDAP] Attempting Kerberos bind | target={target} port={port} ssl={use_ssl}')
         ldap_session = ldap3.Connection(ldap_server)
         ldap_session.bind()
         ldap3_kerberos_login(ldap_session, target, username, password, domain, lmhash, nthash, aesKey, kdcHost=domain_controller)
     elif hashes is not None:
         if lmhash == "":
             lmhash = "aad3b435b51404eeaad3b435b51404ee"
-        ldap_session = ldap3.Connection(ldap_server, user=user, password=lmhash + ":" + nthash, authentication=ldap3.NTLM, auto_bind=True, **channel_binding)
+        logger.debug(f'[LDAP] Attempting NTLM bind (hash) | target={target} port={port} ssl={use_ssl} user={user}')
+        try:
+            ldap_session = ldap3.Connection(ldap_server, user=user, password=lmhash + ":" + nthash, authentication=ldap3.NTLM, auto_bind=True, **channel_binding)
+        except Exception as e:
+            logger.debug(f'[LDAP] Bind failed | {e}')
+            raise
     elif username == '' and password == '':
-        ldap_session = ldap3.Connection(ldap_server, authentication=ANONYMOUS, auto_bind=True, **channel_binding)
+        logger.debug(f'[LDAP] Attempting anonymous bind | target={target} port={port} ssl={use_ssl}')
+        try:
+            ldap_session = ldap3.Connection(ldap_server, authentication=ANONYMOUS, auto_bind=True, **channel_binding)
+        except Exception as e:
+            logger.debug(f'[LDAP] Bind failed | {e}')
+            raise
     else:
-        ldap_session = ldap3.Connection(ldap_server, user=user, password=password, authentication=ldap3.NTLM, auto_bind=True, **channel_binding)
+        logger.debug(f'[LDAP] Attempting NTLM bind (password) | target={target} port={port} ssl={use_ssl} user={user}')
+        try:
+            ldap_session = ldap3.Connection(ldap_server, user=user, password=password, authentication=ldap3.NTLM, auto_bind=True, **channel_binding)
+        except Exception as e:
+            logger.debug(f'[LDAP] Bind failed | {e}')
+            raise
 
     return ldap_server, ldap_session
 
@@ -262,6 +278,10 @@ def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='
         response = connection.post_send_single_response(connection.send('bindRequest', request, None))
         connection.sasl_in_progress = False
         if response[0]['result'] != 0:
+            result_code = response[0].get('result', 'unknown')
+            description = response[0].get('description', '')
+            message = response[0].get('message', '')
+            logger.debug(f'[LDAP] Kerberos bind failed | result={result_code} description={description!r} message={message!r}')
             raise Exception(response)
 
         connection.bound = True
