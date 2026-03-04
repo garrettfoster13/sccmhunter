@@ -104,7 +104,8 @@ class MSSQL:
             return False
         
         try:
-            search_base = f"CN=Configuration,{self.search_base}"
+            forest_search_base = ",".join(self.search_base.split(",")[-2:]) # we keep only the last part because we want to query ldap at the forest level
+            search_base = f"CN=Configuration,{forest_search_base}"
             search_filter = f"(&(objectclass=crossRef)(ncname={self.search_base}))"
             self.ldap_session.extend.standard.paged_search(search_base=search_base, 
                                                            search_filter=search_filter, 
