@@ -417,7 +417,7 @@ class ADD_ADMIN(AdminServiceClient):
         
 
     def show_rbac(self):
-        url = f"https://{self.target_ip}/AdminService/wmi/SMS_Admin?$select=LogonName,RoleNames"
+        url = f"https://{self.target_ip}/AdminService/wmi/SMS_Admin?$select=LogonName,RoleNames,CategoryNames"
         try:
             r = self.http_get(url)
             if r.status_code == 200:
