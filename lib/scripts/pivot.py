@@ -320,7 +320,7 @@ class ADD_ADMIN(AdminServiceClient):
 
         body = {"LogonName": f"{self.targetuser}", 
             "AdminSid":f"{self.targetsid}",
-            "Permissions":[{"CategoryID": "SMS00ALL", 
+            "Permissions":[{"CategoryID": "SMS00UNA", 
                             "CategoryTypeID": 29, 
                             "RoleID":"SMS0001R",
                             },
