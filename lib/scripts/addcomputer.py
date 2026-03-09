@@ -186,7 +186,8 @@ class AddComputerSAMR:
                         sccmlogger.error("[-] User %s machine quota exceeded!" % self.__username)
                         sys.exit(1)
                     else:
-                        print("An unexpected error occurred:", str(e))
+                        sccmlogger.error("[-] Failed to create machine account: %s" % str(e))
+                        sys.exit(1)
 
                 userHandle = createUser['UserHandle']
 
