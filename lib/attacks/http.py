@@ -193,7 +193,10 @@ class HTTP:
                 logger.info(f'[+] {self.computer_name} created with password: {self.computer_pass}')
             else:
                 logger.info(f'[-] Could not validate successful creation.')
-        
+
+        if self.computer_name and self.computer_hash and not self.computer_pass:
+            self.computer_pass = '0'*32 + ':' + self.computer_hash
+
         if not (self.computer_name or self.computer_pass):
             logger.info("[-] Missing machine account credentials, check your arguments and try again.")
             sys.exit()
