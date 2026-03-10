@@ -1950,7 +1950,9 @@ Do-Delete
 
     def decrypt(self, blob, device):
         script = '''
-    Add-Type -Path "C:\\Program Files\\Microsoft Configuration Manager\\bin\\X64\\Microsoft.ConfigurationManager.ManagedBase.dll"
+    $cmPath = (Get-ItemProperty -Path "HKLM:\\SOFTWARE\\Microsoft\\SMS\\Setup")."Installation Directory"
+    $dllPath = Join-Path $cmPath "bin\\X64\\Microsoft.ConfigurationManager.ManagedBase.dll"
+    [void][System.Reflection.Assembly]::LoadFrom($dllPath)
 
     function Invoke-Decrypt {
         [CmdletBinding()]
