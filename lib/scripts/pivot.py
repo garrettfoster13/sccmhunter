@@ -1184,6 +1184,7 @@ class SPEAKTOTHEMANAGER(AdminServiceClient):
             return formatted
         except Exception as e:
             logger.info("[-] Could not format XML body. Policy body may be corrupted.")
+            return xml_string
 
     def deobfuscate_credential_string(self, credential_string):
         
