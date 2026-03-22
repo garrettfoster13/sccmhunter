@@ -443,11 +443,13 @@ class CONSOLE:
 
 
             if self.approve_user:
-                r = requests.request("GET",
+                approve_headers = {'Content-Type': 'application/json; odata=verbose',
+                                   'User-Agent': 'Device action simulation'}
+                approve_r = requests.request("GET",
                                 endpoint,
                                 auth=HttpNtlmAuth(self.approve_user, self.approve_password),
-                                verify=False, headers=headers)
-                if r.status_code == 401:
+                                verify=False, headers=approve_headers)
+                if approve_r.status_code == 401:
                     logger.info("Got error code 401: Access Denied. Check your approver credentials.")
                     logger.info("Script execution will fail if approval is required.")
 
