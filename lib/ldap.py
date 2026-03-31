@@ -124,6 +124,14 @@ def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='
     :return: True, raises an Exception if error.
     """
 
+    # Normalize optional inputs that may arrive as None from CLI options.
+    user = '' if user is None else user
+    password = '' if password is None else password
+    domain = '' if domain is None else domain
+    lmhash = '' if lmhash is None else lmhash
+    nthash = '' if nthash is None else nthash
+    aesKey = '' if aesKey is None else aesKey
+
     if lmhash != '' or nthash != '':
         if len(lmhash) % 2:
             lmhash = '0' + lmhash
@@ -199,6 +207,11 @@ def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='
     logger.debug(f'[KRB5] principal={user}@{domain.upper()} target={target} kdc={kdc_str}')
     if TGT is None:
         if TGS is None:
+            if password == '' and lmhash == '' and nthash == '' and aesKey == '':
+                raise ValueError(
+                    'Kerberos authentication requires one of: a valid Kerberos ccache, '
+                    'password, NTLM hash, or AES key.'
+                )
             auth_method = 'aes' if aesKey else ('nthash' if nthash else 'password')
             logger.debug(f'[KRB5] Requesting TGT (AS-REQ) | kdc={kdc_str} auth={auth_method}')
             try:

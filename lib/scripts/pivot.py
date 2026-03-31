@@ -1788,7 +1788,7 @@ Do-Delete
                 "ApprovalState": "3",
                 "Comment": ""
                 }
-        
+
         url = f"https://{self.target}/AdminService/wmi/SMS_Scripts/{self.guid}/AdminService.UpdateApprovalState"
 
         try:
@@ -1797,18 +1797,18 @@ Do-Delete
                  username = self.approve_user
                  password = self.approve_password
             else:
-                 username= self.username
+                 username = self.username
                  password = self.password
-            # Temporarily switch credentials for approval
-            original_user = self.username
-            original_pass = self.password
-            self.username = username
-            self.password = password
-            r = self.http_post(url, json_data=body)
-            # Restore original credentials
-            self.username = original_user
-            self.password = original_pass
-            #print(r.status_code, r.text)
+            # Always use NTLM for approval so that alternate credentials
+            # are actually used even when the primary session is Kerberos.
+            r = requests.request(
+                method="POST",
+                url=url,
+                auth=HttpNtlmAuth(username, password),
+                verify=False,
+                headers=self.headers,
+                json=body
+            )
             if r.status_code == 201:
                 logger.info(f"[+] Script with guid {self.guid} approved.")
                 self.run_script()
@@ -1817,7 +1817,6 @@ Do-Delete
                  logger.info("[*] Try using alternate approval credentials.")
                  self.delete_script()
 
-            #jlogger.info(results)
         except Exception as e:
                 logger.info(e)
 
