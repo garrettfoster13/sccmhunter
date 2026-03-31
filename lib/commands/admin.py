@@ -17,11 +17,12 @@ def main(
     kdc             : str   = typer.Option(None, '-dc', help="Target domain controller for Kerberos auth"),
     debug           : bool  = typer.Option(False, '-debug',help='Enable Verbose Logging'),
     auser           : str   = typer.Option(None, '-au', help="Optional script approval username"),
-    apassword       : str   = typer.Option(None, '-ap', help="Optional script approval password")
+    apassword       : str   = typer.Option(None, '-ap', help="Optional script approval password"),
+    accache         : str   = typer.Option(None, '-ac', help="Optional ccache file for script approval (Kerberos)")
 ):
 
 
 
     logs_dir = init_logger(debug)
-    cmpivot = CONSOLE(username=username, password=password, kerberos=kerberos, domain=domain, kdc=kdc, ip=ip, debug=debug, logs_dir=logs_dir, auser=auser, apassword=apassword)
+    cmpivot = CONSOLE(username=username, password=password, kerberos=kerberos, domain=domain, kdc=kdc, ip=ip, debug=debug, logs_dir=logs_dir, auser=auser, apassword=apassword, accache=accache)
     cmpivot.run()
