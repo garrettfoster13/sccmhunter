@@ -167,7 +167,7 @@ def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='
             # retrieve domain information from CCache file if needed
             if domain == '':
                 domain = ccache.principal.realm['data'].decode('utf-8')
-                print ('Domain retrieved from CCache: %s' % domain)
+
 
             logger.debug('Using Kerberos Cache: %s' % os.getenv('KRB5CCNAME'))
 

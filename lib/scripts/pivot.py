@@ -1821,6 +1821,28 @@ Do-Delete
                     headers=approve_headers,
                     json=body
                 )
+
+            elif self.kerberos:
+                logger.debug("[*] Using Kerberos auth for script approval.")
+                token = ldap3_kerberos_login(
+                    connection=None,
+                    target=self.target,
+                    user=self.username,
+                    password=self.password,
+                    domain=self.domain,
+                    kdcHost=self.dc,
+                    admin_service=True
+                )
+                approve_headers = dict(self.headers)
+                approve_headers['Authorization'] = token
+                r = requests.request(
+                    method="POST",
+                    url=url,
+                    verify=False,
+                    headers=approve_headers,
+                    json=body
+                )
+
             else:
                 if self.approve_user:
                     logger.debug("[*] Using alternate credentials to approve script.")
