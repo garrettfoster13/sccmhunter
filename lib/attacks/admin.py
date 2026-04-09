@@ -171,7 +171,7 @@ class SHELL(cmd2.Cmd):
         self.script.delete_script(args.script_guid)
     
 
-
+    @cmd2.with_argparser(PARSERS.get_script_parser)
     @cmd2.with_category(PE)
     def do_get_script(self, args):
         """Get a script from the SCCM server.           get_script (GUID)"""
