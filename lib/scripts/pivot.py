@@ -1742,10 +1742,10 @@ Do-Delete
                 result = output['ScriptOutput']
                 result = result.replace('["', '')\
                     .replace('"]','')\
-                    .replace(r"\u003e", ">")\
                     .replace(r"\r\n", "\n")\
                     .replace('","', "\n")\
                     .replace(',"', "\n")
+                result = result.encode('utf-8').decode('unicode_escape')
                 formatted_text = "\n".join(line.strip() for line in result.split(r"\n"))
                 logger.info(formatted_text)
                 self.printlog(formatted_text)
