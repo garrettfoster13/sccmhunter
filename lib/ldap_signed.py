@@ -18,9 +18,12 @@ from binascii import unhexlify
 
 from impacket.ldap import ldap as impacket_ldap
 from impacket.ldap.ldap import LDAPSearchError
-from impacket.ldap.ldapasn1 import SearchResultEntry
+from impacket.ldap.ldapasn1 import SearchResultEntry, SDFlagsControl
 
 from lib.logger import logger
+
+
+_SD_FLAGS_OID = '1.2.840.113556.1.4.801'
 
 
 # Attributes whose values AD returns as textual digits but callers compare as int.
@@ -162,6 +165,29 @@ def _jsonable(v):
     return v
 
 
+def _translate_controls(controls):
+    """Translate ldap3-style controls to impacket controls.
+
+    Callers in this codebase only use security_descriptor_control(sdflags=0x07),
+    so we detect that OID and swap in impacket's SDFlagsControl. Anything else
+    is passed through as-is (impacket may or may not accept it).
+    """
+    if not controls:
+        return None
+    translated = []
+    for ctrl in controls:
+        oid = None
+        try:
+            oid = str(ctrl['controlType'])
+        except Exception:
+            pass
+        if oid == _SD_FLAGS_OID:
+            translated.append(SDFlagsControl(criticality=True, flags=0x07))
+        else:
+            translated.append(ctrl)
+    return translated
+
+
 class _StandardExtend:
     def __init__(self, session):
         self._session = session
@@ -177,11 +203,14 @@ class _StandardExtend:
         else:
             attrs = list(attributes)
 
+        search_controls = _translate_controls(controls)
+
         try:
             answers = self._session._conn.search(
                 searchBase=search_base,
                 searchFilter=search_filter,
                 attributes=attrs,
+                searchControls=search_controls,
             )
         except LDAPSearchError as e:
             logger.debug(f'[LDAP-signed] search failed | {e}')
