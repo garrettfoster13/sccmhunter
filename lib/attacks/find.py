@@ -77,9 +77,9 @@ class DATABASE:
 
 class SCCMHUNTER:
     
-    def __init__(self, username=None, password=None, domain=None, target_dom=None, 
-                dc_ip=None, resolve=False, ldaps=False, kerberos=False, no_pass=False, hashes=None, 
-                aes=None, channel_binding=False, debug=False, logs_dir = None, all_computers=False):
+    def __init__(self, username=None, password=None, domain=None, target_dom=None,
+                dc_ip=None, resolve=False, ldaps=False, kerberos=False, no_pass=False, hashes=None,
+                aes=None, channel_binding=False, signing=False, debug=False, logs_dir = None, all_computers=False):
         self.username = username
         self.password= password
         self.domain = domain
@@ -93,6 +93,7 @@ class SCCMHUNTER:
         self.aes = aes
         self.debug = debug
         self.channel_binding = channel_binding
+        self.signing = signing
         self.ldap_session = None
         self.search_base = None
         self.logs_dir = logs_dir
@@ -466,9 +467,9 @@ class SCCMHUNTER:
         if not (self.password or self.hashes or self.aes or self.no_pass):
                 self.password = getpass("Password:")
         try:
-            ldap_server, self.ldap_session = init_ldap_session(domain=self.domain, username=self.username, password=self.password, lmhash=lmhash, 
-                                                            nthash=nthash, kerberos=self.kerberos, domain_controller=self.dc_ip, 
-                                                            aesKey=self.aes, hashes=self.hashes, ldaps=self.ldaps, channel_binding=self.channel_binding)
+            ldap_server, self.ldap_session = init_ldap_session(domain=self.domain, username=self.username, password=self.password, lmhash=lmhash,
+                                                            nthash=nthash, kerberos=self.kerberos, domain_controller=self.dc_ip,
+                                                            aesKey=self.aes, hashes=self.hashes, ldaps=self.ldaps, channel_binding=self.channel_binding, signing=self.signing)
             logger.debug(f'[+] Bind successful {ldap_server}')
         except ldap3.core.exceptions.LDAPSocketOpenError as e: 
             if 'invalid server address' in str(e):
