@@ -1,20 +1,5 @@
-"""Adapter exposing ldap3-style Connection/Entry API over impacket.ldap.
-
-Used when --signing is set, because ldap3 does not implement NTLMSSP message
-signing. impacket's LDAPConnection does, and supports Kerberos binds too.
-
-Only the surface actually consumed by lib/attacks/*.py is implemented:
-  session.extend.standard.paged_search(search_base, search_filter, attributes, ...)
-  session.entries                 -> list[SignedEntry]
-  entry[attr_name]                -> SignedAttribute (case-insensitive lookup)
-  entry[attr_name].value          -> Python value (str/int/bytes/list)
-  str(entry[attr_name])           -> ldap3-style string repr
-  'name' in entry                 -> bool (case-insensitive)
-  entry.entry_to_json()           -> JSON str {"dn": ..., "attributes": {...}}
-"""
 import base64
 import json
-from binascii import unhexlify
 
 from impacket.ldap import ldap as impacket_ldap
 from impacket.ldap.ldap import LDAPSearchError
@@ -25,48 +10,15 @@ from lib.logger import logger
 
 _SD_FLAGS_OID = '1.2.840.113556.1.4.801'
 
+# AD returns these as raw bytes; UTF-8 decoding would silently corrupt them.
+_BINARY_ATTRS = {'objectsid', 'objectguid', 'ntsecuritydescriptor'}
 
-# Attributes whose values AD returns as textual digits but callers compare as int.
-_INT_ATTRS = {
-    'samaccounttype',
-    'useraccountcontrol',
-    'admincount',
-    'primarygroupid',
-    'instancetype',
-    'grouptype',
-}
-
-# Attributes that are always raw binary on the wire and must NOT be utf-8
-# decoded. Their bytes can coincidentally be valid UTF-8 (e.g. an all-low-byte
-# SID prefix), so we can't detect them via decode failure.
-_BINARY_ATTRS = {
-    'objectsid',
-    'objectguid',
-    'ntsecuritydescriptor',
-    'msds-managedpasswordblob',
-    'msds-generationid',
-    'unicodepwd',
-    'userpassword',
-    'usercertificate',
-    'cacertificate',
-    'thumbnailphoto',
-    'jpegphoto',
-    'sidhistory',
-    'logonhours',
-}
+# AD returns these as digit strings; callers compare them as ints.
+_INT_ATTRS = {'samaccounttype'}
 
 
 def _decode_value(attr_name_lower, raw):
-    """Decode an impacket attribute value (bytes) to a Python value.
-
-    ldap3 formatter parity is best-effort: known binary attrs stay as bytes,
-    text attrs decode to str, integer-like attrs become int, undecodable
-    bytes stay as bytes.
-    """
-    if isinstance(raw, (bytes, bytearray)):
-        b = bytes(raw)
-    else:
-        b = bytes(str(raw), 'utf-8', errors='strict')
+    b = bytes(raw) if isinstance(raw, (bytes, bytearray)) else bytes(str(raw), 'utf-8')
 
     if attr_name_lower in _BINARY_ATTRS:
         return b
@@ -85,11 +37,9 @@ def _decode_value(attr_name_lower, raw):
 
 
 class SignedAttribute:
-    """Stand-in for ldap3's Attribute. Holds decoded values for one attribute."""
-
     def __init__(self, name, values):
         self.name = name
-        self.values = values  # list of decoded values
+        self.values = values
 
     @property
     def value(self):
@@ -99,34 +49,19 @@ class SignedAttribute:
             return self.values[0]
         return list(self.values)
 
-    @property
-    def raw_values(self):
-        return list(self.values)
-
     def __str__(self):
         v = self.value
         if v is None:
             return ''
-        if isinstance(v, bytes):
-            return str(v)
         return str(v)
-
-    def __repr__(self):
-        return f'SignedAttribute({self.name!r}, {self.values!r})'
 
     def __eq__(self, other):
         return self.value == other
 
-    def __iter__(self):
-        return iter(self.values)
-
 
 class SignedEntry:
-    """Stand-in for ldap3's Entry. Case-insensitive attribute access."""
-
     def __init__(self, dn, attributes):
         self._dn = dn
-        # attributes: dict[str_original_name] -> list[decoded values]
         self._attrs = attributes
         self._lower_index = {k.lower(): k for k in attributes.keys()}
 
@@ -145,11 +80,6 @@ class SignedEntry:
         return SignedAttribute(real, self._attrs[real])
 
     def entry_to_json(self, **_ignored):
-        """Match ldap3 output shape: {"dn": "...", "attributes": {name: value_or_list}}.
-
-        Bytes that aren't utf-8 decodable are emitted as {"encoding": "base64",
-        "encoded": "<b64>"} to mirror ldap3.utils.conv.json_encode_b64.
-        """
         payload = {'dn': self._dn, 'attributes': {}}
         for name, values in self._attrs.items():
             rendered = [_jsonable(v) for v in values]
@@ -158,34 +88,24 @@ class SignedEntry:
 
 
 def _jsonable(v):
-    # Bytes reach here only for attrs that _decode_value classified as binary,
-    # so emit them as base64 to match ldap3.utils.conv.json_encode_b64 shape.
     if isinstance(v, bytes):
         return {'encoding': 'base64', 'encoded': base64.b64encode(v).decode('ascii')}
     return v
 
 
 def _translate_controls(controls):
-    """Translate ldap3-style controls to impacket controls.
-
-    Callers in this codebase only use security_descriptor_control(sdflags=0x07),
-    so we detect that OID and swap in impacket's SDFlagsControl. Anything else
-    is passed through as-is (impacket may or may not accept it).
-    """
     if not controls:
         return None
-    translated = []
+    out = []
     for ctrl in controls:
-        oid = None
         try:
-            oid = str(ctrl['controlType'])
+            if str(ctrl['controlType']) == _SD_FLAGS_OID:
+                out.append(SDFlagsControl(criticality=True, flags=0x07))
+                continue
         except Exception:
             pass
-        if oid == _SD_FLAGS_OID:
-            translated.append(SDFlagsControl(criticality=True, flags=0x07))
-        else:
-            translated.append(ctrl)
-    return translated
+        out.append(ctrl)
+    return out
 
 
 class _StandardExtend:
@@ -195,7 +115,6 @@ class _StandardExtend:
     def paged_search(self, search_base=None, search_filter='(objectClass=*)',
                      attributes=None, controls=None, paged_size=500,
                      generator=False, **_ignored):
-        # impacket expects a list for attributes; accept string or list from callers.
         if attributes is None:
             attrs = []
         elif isinstance(attributes, str):
@@ -225,8 +144,7 @@ class _StandardExtend:
             attrs_map = {}
             for part in msg['attributes']:
                 attr_name = str(part['type'])
-                attr_name_lower = attr_name.lower()
-                decoded = [_decode_value(attr_name_lower, v.asOctets()) for v in part['vals']]
+                decoded = [_decode_value(attr_name.lower(), v.asOctets()) for v in part['vals']]
                 attrs_map[attr_name] = decoded
             entries.append(SignedEntry(dn, attrs_map))
 
@@ -240,8 +158,6 @@ class _Extend:
 
 
 class SignedLDAPSession:
-    """ldap3-compatible wrapper over impacket.ldap.LDAPConnection with signing."""
-
     def __init__(self, impacket_conn):
         self._conn = impacket_conn
         self.entries = []
@@ -264,14 +180,6 @@ def _normalize_hashes(lmhash, nthash):
 
 def build_signed_session(target, domain, username, password, lmhash, nthash,
                          domain_controller, kerberos, hashes, aes_key):
-    """Build and bind an impacket LDAPConnection (with signing), return a SignedLDAPSession.
-
-    target              - LDAP server hostname/IP used for the connection URL
-    domain_controller   - IP used as dstIp (optional); impacket resolves target otherwise
-    kerberos            - bool; use GSSAPI bind
-    hashes              - truthy when --hashes was passed (LM:NT)
-    aes_key             - Kerberos AES key (optional)
-    """
     base_dn = _domain_to_base_dn(domain)
     url = f'ldap://{target}'
     logger.debug(f'[LDAP-signed] connecting | url={url} base={base_dn} dstIp={domain_controller}')
@@ -280,12 +188,8 @@ def build_signed_session(target, domain, username, password, lmhash, nthash,
     if kerberos:
         logger.debug(f'[LDAP-signed] kerberosLogin | user={username} domain={domain}')
         conn.kerberosLogin(
-            username or '',
-            password or '',
-            domain or '',
-            lmhash or '',
-            nthash or '',
-            aes_key or '',
+            username or '', password or '', domain or '',
+            lmhash or '', nthash or '', aes_key or '',
             kdcHost=domain_controller,
         )
     else:
@@ -295,11 +199,8 @@ def build_signed_session(target, domain, username, password, lmhash, nthash,
         else:
             logger.debug(f'[LDAP-signed] NTLM login (password) | user={username} domain={domain}')
         conn.login(
-            username or '',
-            password or '',
-            domain or '',
-            lmhash or '',
-            nthash or '',
+            username or '', password or '', domain or '',
+            lmhash or '', nthash or '',
         )
 
     return SignedLDAPSession(conn)
