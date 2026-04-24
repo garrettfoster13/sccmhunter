@@ -1698,10 +1698,11 @@ UserPrincipalName: {tb['UserPrincipalName'].to_string(index=False, header=False)
 
 class SMSSCRIPTS(AdminServiceClient):
 
-    def __init__(self, username, password, target,  kerberos, domain, kdcHost, logs_dir, auser, apassword, ps_transform=None):
+    def __init__(self, username, password, target,  kerberos, domain, kdcHost, logs_dir, auser, apassword,  accache=None, ps_transform=None):
         super().__init__(username, password, target,  kerberos, domain, kdcHost, logs_dir)
         self.approve_user = auser
         self.approve_password = apassword
+        self.approve_ccache = accache
         self.cwd = os.getcwd()
         self.appended = ""
         self.opid = ""
@@ -1832,10 +1833,10 @@ Do-Delete
                 result = output['ScriptOutput']
                 result = result.replace('["', '')\
                     .replace('"]','')\
-                    .replace(r"\u003e", ">")\
                     .replace(r"\r\n", "\n")\
                     .replace('","', "\n")\
                     .replace(',"', "\n")
+                result = result.encode('utf-8').decode('unicode_escape')
                 formatted_text = "\n".join(line.strip() for line in result.split(r"\n"))
                 logger.info(formatted_text)
                 self.printlog(formatted_text)
@@ -1879,27 +1880,76 @@ Do-Delete
                 "ApprovalState": "3",
                 "Comment": ""
                 }
-        
+
         url = f"https://{self.target}/AdminService/wmi/SMS_Scripts/{self.guid}/AdminService.UpdateApprovalState"
 
         try:
-            if self.approve_user:
-                 logger.debug("[*] Using alternate credentials to approve script.")
-                 username = self.approve_user
-                 password = self.approve_password
+            if self.kerberos and self.approve_ccache:
+                logger.debug("[*] Using approver ccache for script approval.")
+                original_ccache = os.environ.get('KRB5CCNAME')
+                os.environ['KRB5CCNAME'] = self.approve_ccache
+                try:
+                    token = ldap3_kerberos_login(
+                        connection=None,
+                        target=self.target,
+                        user='',
+                        password='',
+                        domain=self.domain,
+                        kdcHost=self.dc,
+                        admin_service=True
+                    )
+                finally:
+                    if original_ccache:
+                        os.environ['KRB5CCNAME'] = original_ccache
+                    else:
+                        del os.environ['KRB5CCNAME']
+                approve_headers = dict(self.headers)
+                approve_headers['Authorization'] = token
+                r = requests.request(
+                    method="POST",
+                    url=url,
+                    verify=False,
+                    headers=approve_headers,
+                    json=body
+                )
+
+            elif self.kerberos:
+                logger.debug("[*] Using Kerberos auth for script approval.")
+                token = ldap3_kerberos_login(
+                    connection=None,
+                    target=self.target,
+                    user=self.username,
+                    password=self.password,
+                    domain=self.domain,
+                    kdcHost=self.dc,
+                    admin_service=True
+                )
+                approve_headers = dict(self.headers)
+                approve_headers['Authorization'] = token
+                r = requests.request(
+                    method="POST",
+                    url=url,
+                    verify=False,
+                    headers=approve_headers,
+                    json=body
+                )
+
             else:
-                 username= self.username
-                 password = self.password
-            # Temporarily switch credentials for approval
-            original_user = self.username
-            original_pass = self.password
-            self.username = username
-            self.password = password
-            r = self.http_post(url, json_data=body)
-            # Restore original credentials
-            self.username = original_user
-            self.password = original_pass
-            #print(r.status_code, r.text)
+                if self.approve_user:
+                    logger.debug("[*] Using alternate credentials to approve script.")
+                    username = self.approve_user
+                    password = self.approve_password
+                else:
+                    username = self.username
+                    password = self.password
+                r = requests.request(
+                    method="POST",
+                    url=url,
+                    auth=HttpNtlmAuth(username, password),
+                    verify=False,
+                    headers=self.headers,
+                    json=body
+                )
             if r.status_code == 201:
                 logger.info(f"[+] Script with guid {self.guid} approved.")
                 self.run_script()
@@ -1908,7 +1958,6 @@ Do-Delete
                  logger.info("[*] Try using alternate approval credentials.")
                  self.delete_script()
 
-            #jlogger.info(results)
         except Exception as e:
                 logger.info(e)
 

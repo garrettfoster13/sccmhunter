@@ -33,7 +33,30 @@ def get_machine_name(domain_controller, domain):
         s.logoff()
     return s.getServerName()
 
-def init_ldap_connection(target, tls_version, domain, username, password, lmhash, nthash, domain_controller, kerberos, hashes, aesKey, use_channel_binding):
+def init_ldap_connection(target, tls_version, domain, username, password, lmhash, nthash, domain_controller, kerberos, hashes, aesKey, use_channel_binding, signing=False):
+    if signing:
+        if use_channel_binding:
+            logger.info("LDAP signing and channel binding are mutually exclusive.")
+            sys.exit(1)
+        if tls_version is not None:
+            logger.info("LDAP signing is used over plain LDAP; LDAPS already provides integrity.")
+            sys.exit(1)
+        from lib.ldap_signed import build_signed_session
+        logger.debug(f'[LDAP] Attempting signed bind | target={target} kerberos={bool(kerberos)} hashes={bool(hashes)}')
+        ldap_session = build_signed_session(
+            target=target,
+            domain=domain,
+            username=username,
+            password=password,
+            lmhash=lmhash,
+            nthash=nthash,
+            domain_controller=domain_controller,
+            kerberos=kerberos,
+            hashes=hashes,
+            aes_key=aesKey,
+        )
+        return None, ldap_session
+
     user = '%s\\%s' % (domain, username)
     if tls_version is not None:
         use_ssl = True
@@ -47,10 +70,6 @@ def init_ldap_connection(target, tls_version, domain, username, password, lmhash
 
     channel_binding = dict()
     if use_channel_binding:
-        if not hasattr(ldap3, 'TLS_CHANNEL_BINDING'):
-            logger.info("To use LDAP channel binding you'll need to install a different version of the ldap3 library.")
-            logger.info("pip3 install git+https://github.com/ly4k/ldap3 or pip3 install ldap3-bleeding-edge")
-            sys.exit(1)
         channel_binding = dict(channel_binding=ldap3.TLS_CHANNEL_BINDING)
     if kerberos:
         if channel_binding is True:
@@ -86,7 +105,14 @@ def init_ldap_connection(target, tls_version, domain, username, password, lmhash
 
     return ldap_server, ldap_session
 
-def init_ldap_session(domain, username, password, lmhash, nthash, kerberos, domain_controller, ldaps, hashes, aesKey, channel_binding):
+def init_ldap_session(domain, username, password, lmhash, nthash, kerberos, domain_controller, ldaps, hashes, aesKey, channel_binding, signing=False):
+    if signing and channel_binding:
+        logger.info("LDAP signing and channel binding are mutually exclusive.")
+        sys.exit(1)
+    if signing and ldaps:
+        logger.info("LDAP signing is used over plain LDAP; LDAPS already provides integrity.")
+        sys.exit(1)
+
     if kerberos:
         #target = domain_controller
         netbiosname = get_machine_name(domain_controller, domain)
@@ -100,11 +126,11 @@ def init_ldap_session(domain, username, password, lmhash, nthash, kerberos, doma
 
     if ldaps:
         try:
-            return init_ldap_connection(target, ssl.PROTOCOL_TLSv1_2, domain, username, password, lmhash, nthash, domain_controller, kerberos, hashes, aesKey, channel_binding)
+            return init_ldap_connection(target, ssl.PROTOCOL_TLSv1_2, domain, username, password, lmhash, nthash, domain_controller, kerberos, hashes, aesKey, channel_binding, signing=signing)
         except ldap3.core.exceptions.LDAPSocketOpenError:
-            return init_ldap_connection(target, ssl.PROTOCOL_TLSv1, domain, username, password, lmhash, nthash, domain_controller, kerberos, hashes, aesKey, channel_binding)
+            return init_ldap_connection(target, ssl.PROTOCOL_TLSv1, domain, username, password, lmhash, nthash, domain_controller, kerberos, hashes, aesKey, channel_binding, signing=signing)
     else:
-        return init_ldap_connection(target, None, domain, username, password, lmhash, nthash, domain_controller, kerberos, hashes, aesKey, channel_binding)
+        return init_ldap_connection(target, None, domain, username, password, lmhash, nthash, domain_controller, kerberos, hashes, aesKey, channel_binding, signing=signing)
 
 def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='', nthash='', aesKey='', kdcHost=None, TGT=None, TGS=None, useCache=True, admin_service=False):
     from pyasn1.codec.ber import encoder, decoder
@@ -123,6 +149,14 @@ def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='
     :param bool useCache: whether or not we should use the ccache for credentials lookup. If TGT or TGS are specified this is False
     :return: True, raises an Exception if error.
     """
+
+    # Normalize optional inputs that may arrive as None from CLI options.
+    user = '' if user is None else user
+    password = '' if password is None else password
+    domain = '' if domain is None else domain
+    lmhash = '' if lmhash is None else lmhash
+    nthash = '' if nthash is None else nthash
+    aesKey = '' if aesKey is None else aesKey
 
     if lmhash != '' or nthash != '':
         if len(lmhash) % 2:
@@ -159,7 +193,7 @@ def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='
             # retrieve domain information from CCache file if needed
             if domain == '':
                 domain = ccache.principal.realm['data'].decode('utf-8')
-                print ('Domain retrieved from CCache: %s' % domain)
+
 
             logger.debug('Using Kerberos Cache: %s' % os.getenv('KRB5CCNAME'))
 
@@ -199,6 +233,11 @@ def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='
     logger.debug(f'[KRB5] principal={user}@{domain.upper()} target={target} kdc={kdc_str}')
     if TGT is None:
         if TGS is None:
+            if password == '' and lmhash == '' and nthash == '' and aesKey == '':
+                raise ValueError(
+                    'Kerberos authentication requires one of: a valid Kerberos ccache, '
+                    'password, NTLM hash, or AES key.'
+                )
             auth_method = 'aes' if aesKey else ('nthash' if nthash else 'password')
             logger.debug(f'[KRB5] Requesting TGT (AS-REQ) | kdc={kdc_str} auth={auth_method}')
             try:

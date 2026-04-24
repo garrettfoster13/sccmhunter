@@ -1,4 +1,5 @@
 import cmd2
+import os
 import requests
 from requests_ntlm import HttpNtlmAuth
 from urllib3.exceptions import InsecureRequestWarning
@@ -23,7 +24,7 @@ class SHELL(cmd2.Cmd):
     def __init__(self, username, password, kerberos, domain, kdc, target, logs_dir, auser, apassword, ps_transform=None):
         #initialize plugins
         self.pivot = CMPIVOT(username=username, password=password, target = target,  kerberos=kerberos, domain=domain, kdcHost=kdc, logs_dir = logs_dir)
-        self.script = SMSSCRIPTS(username=username, password=password, target = target, kerberos=kerberos, domain=domain, kdcHost=kdc, logs_dir = logs_dir, auser=auser, apassword=apassword, ps_transform=ps_transform)
+        self.script = SMSSCRIPTS(username=username, password=password, target = target, kerberos=kerberos, domain=domain, kdcHost=kdc, logs_dir = logs_dir, auser=auser, apassword=apassword, accache=accache, ps_transform=ps_transform)
         self.admin = ADD_ADMIN(username=username, password=password,target_ip=target, kerberos=kerberos, domain=domain, kdcHost=kdc, logs_dir=logs_dir)
         self.db = DATABASE(username=username, password=password,url=target, kerberos=kerberos, domain=domain, kdcHost=kdc, logs_dir=logs_dir)
         self.application = SMSAPPLICATION(username=username, password=password,target=target, kerberos=kerberos, domain=domain, kdcHost=kdc, logs_dir=logs_dir)
@@ -187,7 +188,7 @@ class SHELL(cmd2.Cmd):
         self.script.delete_script(args.script_guid)
     
 
-
+    @cmd2.with_argparser(PARSERS.get_script_parser)
     @cmd2.with_category(PE)
     def do_get_script(self, args):
         """Get a script from the SCCM server.           get_script (GUID)"""
@@ -415,7 +416,7 @@ class SHELL(cmd2.Cmd):
 
 
 class CONSOLE:
-    def __init__(self, username=None, password=None, kerberos=False, domain=None, kdc=None, ip=None, debug=False, logs_dir=None, auser=None, apassword=None, ps_transform=None):
+    def __init__(self, username=None, password=None, kerberos=False, domain=None, kdc=None, ip=None, debug=False, logs_dir=None, auser=None, apassword=None, accache=None, ps_transform=None):
         self.username = username
         self.password = password
         self.url = ip
@@ -427,6 +428,7 @@ class CONSOLE:
         self.approve_user = auser
         self.approve_password = apassword
         self.ps_transform = ps_transform
+        self.approve_ccache = os.path.abspath(accache) if accache else None
         
 
     def run(self):
@@ -460,12 +462,37 @@ class CONSOLE:
                             verify=False, headers=headers)
 
 
-            if self.approve_user:
-                r = requests.request("GET",
-                                endpoint,
-                                auth=HttpNtlmAuth(self.approve_user, self.approve_password),
-                                verify=False, headers=headers)
-                if r.status_code == 401:
+            if self.approve_user or self.approve_ccache:
+                approve_headers = {'Content-Type': 'application/json; odata=verbose',
+                                   'User-Agent': 'Device action simulation'}
+                if self.kerberos and self.approve_ccache:
+                    original_ccache = os.environ.get('KRB5CCNAME')
+                    os.environ['KRB5CCNAME'] = self.approve_ccache
+                    try:
+                        approve_token = ldap3_kerberos_login(
+                            connection=None,
+                            target=self.url,
+                            user='',
+                            password='',
+                            domain=self.domain,
+                            kdcHost=self.kdc_host,
+                            admin_service=True
+                        )
+                    finally:
+                        if original_ccache:
+                            os.environ['KRB5CCNAME'] = original_ccache
+                        else:
+                            del os.environ['KRB5CCNAME']
+                    approve_headers['Authorization'] = approve_token
+                    approve_r = requests.request("GET",
+                                    endpoint,
+                                    verify=False, headers=approve_headers)
+                else:
+                    approve_r = requests.request("GET",
+                                    endpoint,
+                                    auth=HttpNtlmAuth(self.approve_user, self.approve_password),
+                                    verify=False, headers=approve_headers)
+                if approve_r.status_code == 401:
                     logger.info("Got error code 401: Access Denied. Check your approver credentials.")
                     logger.info("Script execution will fail if approval is required.")
 
@@ -485,7 +512,7 @@ class CONSOLE:
 
     def cli(self):
         #username, password, kerberos, domain, kdc, target, logs_dir, auser, apassword
-        cli = SHELL(self.username, self.password, self.kerberos, self.domain, self.kdc_host, self.url, self.logs_dir, self.approve_user, self.approve_password, ps_transform=self.ps_transform)
+        cli = SHELL(self.username, self.password, self.kerberos, self.domain, self.kdc_host, self.url, self.logs_dir, self.approve_user, self.approve_password, self.approve_ccache, ps_transform=self.ps_transform)
         cli.cmdloop()
 
 if __name__ == '__main__':
