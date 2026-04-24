@@ -17,13 +17,14 @@ class SHELL(cmd2.Cmd):
     DB = "Database Commands"
     IN = "Interface Commands"
     CE = "Credential Extraction Commands"
+    OPSEC = "Opsec Configuration Commands"
     hidden = ["alias", "help", "macro", "run_pyscript", "set", "shortcuts", "edit", "history", "quit", "run_script", "shell", "_relative_run_script", "eof"]
     
 
-    def __init__(self, username, password, kerberos, domain, kdc, target, logs_dir, auser, apassword, accache=None):
+    def __init__(self, username, password, kerberos, domain, kdc, target, logs_dir, auser, apassword, ps_transform=None):
         #initialize plugins
         self.pivot = CMPIVOT(username=username, password=password, target = target,  kerberos=kerberos, domain=domain, kdcHost=kdc, logs_dir = logs_dir)
-        self.script = SMSSCRIPTS(username=username, password=password, target = target, kerberos=kerberos, domain=domain, kdcHost=kdc, logs_dir = logs_dir, auser=auser, apassword=apassword, accache=accache)
+        self.script = SMSSCRIPTS(username=username, password=password, target = target, kerberos=kerberos, domain=domain, kdcHost=kdc, logs_dir = logs_dir, auser=auser, apassword=apassword, accache=accache, ps_transform=ps_transform)
         self.admin = ADD_ADMIN(username=username, password=password,target_ip=target, kerberos=kerberos, domain=domain, kdcHost=kdc, logs_dir=logs_dir)
         self.db = DATABASE(username=username, password=password,url=target, kerberos=kerberos, domain=domain, kdcHost=kdc, logs_dir=logs_dir)
         self.application = SMSAPPLICATION(username=username, password=password,target=target, kerberos=kerberos, domain=domain, kdcHost=kdc, logs_dir=logs_dir)
@@ -82,6 +83,22 @@ class SHELL(cmd2.Cmd):
             self.cwd = args.path + "\\"
         else:
             self.cwd = args.path
+
+# ############
+# Optional OPSEC Toggles
+# ############
+
+    @cmd2.with_category(OPSEC)
+    def do_set_scriptauthor(self, arg):
+        """Set the author name for scripts created in this session.    set_scriptauthor (author name)"""
+        self.script.script_author = arg
+        logger.info(f"Script author set to {arg}")
+        
+    @cmd2.with_category(OPSEC)
+    def do_set_scriptname(self, arg):
+        """Set the name for scripts created in this session.           set_scriptname (script name)"""
+        self.script.script_name = arg
+        logger.info(f"Script name set to {arg}")
 
 # ############
 # Database Section
@@ -375,7 +392,7 @@ class SHELL(cmd2.Cmd):
             logger.info("Device ID not found. Decryptiong requires site server device ID")
         else:
             self.script.decrypt(blob=blob, device=self.device)
-    
+
     @cmd2.with_category(CE)
     def do_speak_to_the_manager(self, arg):
         """Dump policy credentials                          speak_to_the_manager"""
@@ -399,7 +416,7 @@ class SHELL(cmd2.Cmd):
 
 
 class CONSOLE:
-    def __init__(self, username=None, password=None, kerberos=False, domain=None, kdc=None, ip=None, debug=False, logs_dir=None, auser=None, apassword=None, accache=None):
+    def __init__(self, username=None, password=None, kerberos=False, domain=None, kdc=None, ip=None, debug=False, logs_dir=None, auser=None, apassword=None, accache=None, ps_transform=None):
         self.username = username
         self.password = password
         self.url = ip
@@ -410,6 +427,7 @@ class CONSOLE:
         self.logs_dir = logs_dir
         self.approve_user = auser
         self.approve_password = apassword
+        self.ps_transform = ps_transform
         self.approve_ccache = os.path.abspath(accache) if accache else None
         
 
@@ -494,7 +512,7 @@ class CONSOLE:
 
     def cli(self):
         #username, password, kerberos, domain, kdc, target, logs_dir, auser, apassword
-        cli = SHELL(self.username, self.password, self.kerberos, self.domain, self.kdc_host, self.url, self.logs_dir, self.approve_user, self.approve_password, self.approve_ccache)
+        cli = SHELL(self.username, self.password, self.kerberos, self.domain, self.kdc_host, self.url, self.logs_dir, self.approve_user, self.approve_password, self.approve_ccache, ps_transform=self.ps_transform)
         cli.cmdloop()
 
 if __name__ == '__main__':
