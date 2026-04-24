@@ -8,7 +8,7 @@ from tabulate import tabulate
 from lib.logger import logger
 from lib.ldap import ldap3_kerberos_login
 from lib.parsers.parsers import PARSERS
-from lib.scripts.pivot import CMPIVOT, ADD_ADMIN, SMSAPPLICATION, SPEAKTOTHEMANAGER, DATABASE, SMSSCRIPTS
+from lib.scripts.pivot import CMPIVOT, ADD_ADMIN, SMSAPPLICATION, SMSBASELINE, SPEAKTOTHEMANAGER, DATABASE, SMSSCRIPTS
 
 # #add debugging
 class SHELL(cmd2.Cmd):
@@ -28,6 +28,7 @@ class SHELL(cmd2.Cmd):
         self.admin = ADD_ADMIN(username=username, password=password,target_ip=target, kerberos=kerberos, domain=domain, kdcHost=kdc, logs_dir=logs_dir)
         self.db = DATABASE(username=username, password=password,url=target, kerberos=kerberos, domain=domain, kdcHost=kdc, logs_dir=logs_dir)
         self.application = SMSAPPLICATION(username=username, password=password,target=target, kerberos=kerberos, domain=domain, kdcHost=kdc, logs_dir=logs_dir)
+        self.baseline = SMSBASELINE(username=username, password=password, target=target, kerberos=kerberos, domain=domain, kdcHost=kdc, logs_dir=logs_dir)
         self.karen = SPEAKTOTHEMANAGER(username=username, password=password, target=target, kerberos=kerberos, domain=domain, kdcHost=kdc )
         
         #initialize cmd
@@ -152,6 +153,56 @@ class SHELL(cmd2.Cmd):
     def do_application(self, args):
         """Run application on target                    """
         self.application.run(path=args.path, runas_user=args.system, name=args.name, collection_type=args.collection_type, target_resource=args.target, collection_id=args.collection_id)
+
+# ############
+# Baseline Section
+# ############
+
+    @cmd2.with_category(PE)
+    @cmd2.with_argparser(PARSERS.baseline_parser)
+    def do_baseline(self, args):
+        """EXEC-3: Deploy/manage compliance baselines     baseline exec|cleanup|list|force-policy"""
+        if args.baseline_action == "exec":
+            logger.info(f"[*] Tasked SCCM to deploy baseline")
+            self.baseline.run(
+                discovery_script=args.script,
+                collection_id=args.collection_id,
+                target_resource=args.target,
+                collection_type=args.collection_type,
+                remediation_script=args.remediation_script,
+                language=args.language,
+                context=args.context,
+                schedule_minutes=args.schedule,
+                base_name=args.name,
+                force=args.force,
+            )
+        elif args.baseline_action == "cleanup":
+            logger.info(f"[*] Tasked SCCM to cleanup baseline objects")
+            self.baseline.cleanup_by_ids(args.assignment_id, args.baseline_id, args.ci_id)
+        elif args.baseline_action == "list":
+            list_type = getattr(args, 'type', 'all')
+            if list_type == "assignments":
+                self.baseline.list_assignments()
+            elif list_type == "baselines":
+                self.baseline.list_configuration_baselines()
+            elif list_type == "cis":
+                self.baseline.list_configuration_items()
+            else:
+                self.baseline.list_all()
+        elif args.baseline_action == "force-policy":
+            self.baseline.collection_id = args.collection_id
+            self.baseline.force_policy_update()
+        elif args.baseline_action == "set-execpolicy":
+            if args.check:
+                self.baseline.get_execution_policy()
+            elif args.restore is not None:
+                self.baseline.restore_execution_policy(args.restore)
+            elif getattr(args, 'list', False):
+                self.baseline.list_client_settings()
+            else:
+                self.baseline.set_execution_policy_bypass()
+        else:
+            logger.info("[!] Usage: baseline exec|cleanup|list|force-policy|set-execpolicy")
 
 # ############
 # PowerShell Script Section

