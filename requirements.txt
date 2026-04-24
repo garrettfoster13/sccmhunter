@@ -1,7 +1,7 @@
 cmd2
 cryptography
 impacket
-ldap3
+ldap3 @ git+https://github.com/ly4k/ldap3
 pandas
 pyasn1
 pyasn1_modules

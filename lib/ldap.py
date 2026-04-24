@@ -47,10 +47,6 @@ def init_ldap_connection(target, tls_version, domain, username, password, lmhash
 
     channel_binding = dict()
     if use_channel_binding:
-        if not hasattr(ldap3, 'TLS_CHANNEL_BINDING'):
-            logger.info("To use LDAP channel binding you'll need to install a different version of the ldap3 library.")
-            logger.info("pip3 install git+https://github.com/ly4k/ldap3 or pip3 install ldap3-bleeding-edge")
-            sys.exit(1)
         channel_binding = dict(channel_binding=ldap3.TLS_CHANNEL_BINDING)
     if kerberos:
         if channel_binding is True:
