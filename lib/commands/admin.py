@@ -19,7 +19,7 @@ def main(
     auser           : str   = typer.Option(None, '-au', help="Optional script approval username"),
     apassword       : str   = typer.Option(None, '-ap', help="Optional script approval password"),
     ps_transform    : str   = typer.Option(None, '-pstransform', help="External command to obfuscate PowerShell scripts before execution. Use {input} and {output} placeholders for file-based tools (e.g. 'obfuscator -i {input} -o {output}'). Without placeholders, uses stdin/stdout piping."),
-    accache         : str   = typer.Option(None, '-ac', help="Optional ccache file for script approval (Kerberos)"
+    accache         : str   = typer.Option(None, '-ac', help="Optional ccache file for script approval (Kerberos)")
 ):
 
 
