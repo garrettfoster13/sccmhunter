@@ -21,7 +21,7 @@ class SHELL(cmd2.Cmd):
     hidden = ["alias", "help", "macro", "run_pyscript", "set", "shortcuts", "edit", "history", "quit", "run_script", "shell", "_relative_run_script", "eof"]
     
 
-    def __init__(self, username, password, kerberos, domain, kdc, target, logs_dir, auser, apassword, ps_transform=None):
+    def __init__(self, username, password, kerberos, domain, kdc, target, logs_dir, auser, apassword, accache=None, ps_transform=None):
         #initialize plugins
         self.pivot = CMPIVOT(username=username, password=password, target = target,  kerberos=kerberos, domain=domain, kdcHost=kdc, logs_dir = logs_dir)
         self.script = SMSSCRIPTS(username=username, password=password, target = target, kerberos=kerberos, domain=domain, kdcHost=kdc, logs_dir = logs_dir, auser=auser, apassword=apassword, accache=accache, ps_transform=ps_transform)
