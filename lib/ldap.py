@@ -27,8 +27,26 @@ def get_machine_name(domain_controller, domain):
     try:
         s.login('', '')
     except Exception:
-        if s.getServerName() == '':
+        srv_name = s.getServerName()
+        if srv_name == '':
+            # Anonymous/null SMB sessions are blocked on hardened DCs (STATUS_NOT_SUPPORTED).
+            # Fall back to resolving the NetBIOS name via reverse DNS,
+            # or derive it from the --dc-ip argument if DNS also fails.
+            if domain_controller:
+                try:
+                    import socket
+                    fqdn = socket.gethostbyaddr(domain_controller)[0]
+                    return fqdn.split('.')[0].upper()
+                except Exception:
+                    short = domain_controller.split('.')[0].upper()
+                    if short.isdigit():
+                        raise Exception(
+                            'Cannot resolve NetBIOS name for %s — null SMB sessions are blocked. '
+                            'Pass the DC FQDN (e.g. dc01.corp.local) via --dc-ip instead of a raw IP.' % domain_controller
+                        )
+                    return short
             raise Exception('Error while anonymous logging into %s' % domain)
+        return srv_name
     else:
         s.logoff()
     return s.getServerName()
