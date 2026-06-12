@@ -1,4 +1,4 @@
-cmd2
+cmd2<4.0.0
 cryptography
 impacket
 ldap3 @ git+https://github.com/ly4k/ldap3
