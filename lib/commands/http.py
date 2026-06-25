@@ -30,7 +30,8 @@ def main(
     sleep           : str   = typer.Option(10, '-sleep', help='Time to wait between registering and requesting policies'),
     sccmpush        : bool  = typer.Option(False, "--sccm-push", "-sp", help="[Optional] Try to trigger sccm push on specified client"),
     sccmpush_client : str   = typer.Option(None, "--sccm-push-cn", "-spcn", help="[Mandatory with --sccm-push] client name to be registerd when performing sccm push attack which should be a controlled & reachable IP/FQDN)"),
-    sccmpush_anon   : bool   = typer.Option(False, "--sccm-push-anonymous", "-spanon", help="try to perform sccm push without credentials"),
+    sccmpush_anon   : bool  = typer.Option(False, "--sccm-push-anonymous", "-spanon", help="try to perform sccm push without credentials"),
+    altauth         : bool  = typer.Option(False, "--altauth", help="Connect to Management Point using alt_auth URL (https://<MP>/ccm_system_altauth/request"),
     platform_id     : str   = typer.Option("Microsoft Windows NT Workstation 2010.0","--sccm-push-plid", "-sppid", help="[Optional] Specify the plateformID when performing sccm push attack (ex: Microsoft Windows NT Server 10.0)")
     ):
 
@@ -39,7 +40,7 @@ def main(
     httphunter = HTTP(username=username, password=password, domain=domain, dc_ip=dc_ip,ldaps=ldaps,
                             kerberos=kerberos, no_pass=no_pass, hashes=hashes, aes=aes, debug=debug, auto=auto, channel_binding=channel_binding, signing=signing,
                             computer_pass=computer_pass, computer_name=computer_name, computer_hash=computer_hash, uuid=uuid, mp=mp,
-                            sp=sccmpush, spcn=sccmpush_client,sppid=platform_id, spanon=sccmpush_anon,sleep=sleep, logs_dir=logs_dir)
+                            sp=sccmpush, spcn=sccmpush_client,sppid=platform_id, spanon=sccmpush_anon,altauth=altauth, sleep=sleep, logs_dir=logs_dir)
     httphunter.run()
 
 
