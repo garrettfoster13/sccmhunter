@@ -92,7 +92,7 @@ class HTTP:
             #TODO: Need some terminal output for actions taken
             #      Need better error handling
             target_mp_url = f"http://{self.mp}"
-            sccmwtf = SCCMTools(target_name="", target_fqdn="", target_sccm=target_mp_url, target_username="", target_password="", sleep=self.sleep, logs_dir=self.logs_dir,sp=self.sp,altauth=self.altauth, eplid=self.sppid)
+            sccmwtf = SCCMTools(target_name="", target_fqdn="", target_sccm=target_mp_url, target_username="", target_password="", sleep=self.sleep, logs_dir=self.logs_dir,sp=self.sp,altauth=self.altauth, plid=self.sppid)
             with open (f"{self.logs_dir}/{self.uuid}.data", "rb") as f:
                 data = f.read()
             with open (f"{self.logs_dir}/{self.uuid}.pem", "rb") as g:
