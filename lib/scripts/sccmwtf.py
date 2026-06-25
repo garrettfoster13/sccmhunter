@@ -151,7 +151,7 @@ class CryptoTools:
 
 class SCCMTools():
 
-    def __init__(self, target_name, target_fqdn, target_sccm, target_username, target_password,sleep, logs_dir,sp=False,plid=None):
+    def __init__(self, target_name, target_fqdn, target_sccm, target_username, target_password,sleep, logs_dir,sp=False,plid=None, altauth=False):
         self._server = target_sccm
         self._serverURI = f"http://{self._server}"
         self._target_name = target_name
@@ -162,7 +162,11 @@ class SCCMTools():
         self.logs_dir = logs_dir
         self.sp = sp
         self.plid = plid
+        self.altauth = altauth
         self.domain = target_fqdn.replace(self._target_name+".","")
+
+        if (altauth):
+            self._serverURI=f"https://{self._server}"
 
     def sendCCMPostRequest(self, data, auth=False, username="", password="", mp = "", policies=True):
         headers = {
@@ -250,7 +254,10 @@ class SCCMTools():
         self.sendCCMPostRequest(data)
             
     def sendCCMPostRequestWithOutAuth(self, data, headers,policies=True):
-        r = requests.request("CCM_POST", f"{self._serverURI}/ccm_system/request", headers=headers, data=data)
+        if(self.altauth):
+             r = requests.request("CCM_POST", f"{self._serverURI}/ccm_system_altauth/request", headers=headers, data=data,  verify=False)
+        else:
+            r = requests.request("CCM_POST", f"{self._serverURI}/ccm_system/request", headers=headers, data=data)
         #check if the response actually has a body, if not sleep and try again
         if r.headers.get('Content-Length') == "0":
             logger.info(f"[*] Policy isn't ready yet, sleeping {self.sleep} seconds.")
