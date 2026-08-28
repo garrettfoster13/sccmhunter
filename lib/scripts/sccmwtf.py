@@ -1,4 +1,5 @@
 import datetime
+import uuid as uuidlib
 import zlib
 import requests
 import re
@@ -38,15 +39,25 @@ dateFormat3 = "%m/%d/%Y %H:%M:%S"
 
 now = datetime.datetime.utcnow()
 
+CLIENT_REGISTRATION_STATUS_NAMES = {
+    "0": "Registered",
+    "1": "Pending",
+    "2": "Reset",
+    "3": "Error",
+    "4": "CertificateReset",
+}
+
 # Huge thanks to @_Mayyhem with SharpSCCM for making requesting these easy!
 registrationRequestWrapper = "<ClientRegistrationRequest>{data}<Signature><SignatureValue>{signature}</SignatureValue></Signature></ClientRegistrationRequest>\x00"
 registrationRequest = """<Data HashAlgorithm="1.2.840.113549.1.1.11" SMSID="" RequestType="Registration" TimeStamp="{date}"><AgentInformation AgentIdentity="CCMSetup.exe" AgentVersion="5.00.8325.0000" AgentType="0" /><Certificates><Encryption Encoding="HexBinary" KeyType="1">{encryption}</Encryption><Signing Encoding="HexBinary" KeyType="1">{signature}</Signing></Certificates><DiscoveryProperties><Property Name="Netbios Name" Value="{client}" /><Property Name="FQ Name" Value="{clientfqdn}" /><Property Name="Locale ID" Value="2058" /><Property Name="InternetFlag" Value="0" /></DiscoveryProperties></Data>"""
-msgHeader = """<Msg ReplyCompression="zlib" SchemaVersion="1.1"><Body Type="ByteRange" Length="{bodylength}" Offset="0" /><CorrelationID>{{00000000-0000-0000-0000-000000000000}}</CorrelationID><Hooks><Hook3 Name="zlib-compress" /></Hooks><ID>{{5DD100CD-DF1D-45F5-BA17-A327F43465F8}}</ID><Payload Type="inline" /><Priority>0</Priority><Protocol>http</Protocol><ReplyMode>Sync</ReplyMode><ReplyTo>direct:{client}:SccmMessaging</ReplyTo><SentTime>{date}</SentTime><SourceHost>{client}</SourceHost><TargetAddress>mp:MP_ClientRegistration</TargetAddress><TargetEndpoint>MP_ClientRegistration</TargetEndpoint><TargetHost>{sccmserver}</TargetHost><Timeout>60000</Timeout></Msg>"""
+msgHeader = """<Msg ReplyCompression="zlib" SchemaVersion="1.1"><Body Type="ByteRange" Length="{bodylength}" Offset="0" /><CorrelationID>{{00000000-0000-0000-0000-000000000000}}</CorrelationID><Hooks><Hook3 Name="zlib-compress" /></Hooks><ID>{{{msgid}}}</ID><Payload Type="inline" /><Priority>0</Priority><Protocol>http</Protocol><ReplyMode>Sync</ReplyMode><ReplyTo>direct:{client}:SccmMessaging</ReplyTo><SentTime>{date}</SentTime><SourceHost>{client}</SourceHost><TargetAddress>mp:MP_ClientRegistration</TargetAddress><TargetEndpoint>MP_ClientRegistration</TargetEndpoint><TargetHost>{sccmserver}</TargetHost><Timeout>60000</Timeout></Msg>"""
+confirmationData = """<Data HashAlgorithm="1.2.840.113549.1.1.11" SMSID="GUID:{smsid}" RequestType="Confirmation" TimeStamp="{date}"><AgentInformation AgentIdentity="CCMSetup.exe" AgentVersion="5.00.8325.0000" AgentType="0" /></Data>"""
+confirmationWrapper = "<ClientRegistrationRequest>{data}<Signature SMSID=\"GUID:{smsid}\"><SignatureValue>{signature}</SignatureValue></Signature></ClientRegistrationRequest>\x00"
 msgHeaderPolicy = """<Msg ReplyCompression="zlib" SchemaVersion="1.1"><Body Type="ByteRange" Length="{bodylength}" Offset="0" /><CorrelationID>{{00000000-0000-0000-0000-000000000000}}</CorrelationID><Hooks><Hook2 Name="clientauth"><Property Name="AuthSenderMachine">{client}</Property><Property Name="PublicKey">{publickey}</Property><Property Name="ClientIDSignature">{clientIDsignature}</Property><Property Name="PayloadSignature">{payloadsignature}</Property><Property Name="ClientCapabilities">NonSSL</Property><Property Name="HashAlgorithm">1.2.840.113549.1.1.11</Property></Hook2><Hook3 Name="zlib-compress" /></Hooks><ID>{{041A35B4-DCEE-4F64-A978-D4D489F47D28}}</ID><Payload Type="inline" /><Priority>0</Priority><Protocol>http</Protocol><ReplyMode>Sync</ReplyMode><ReplyTo>direct:{client}:SccmMessaging</ReplyTo><SentTime>{date}</SentTime><SourceID>GUID:{clientid}</SourceID><SourceHost>{client}</SourceHost><TargetAddress>mp:MP_PolicyManager</TargetAddress><TargetEndpoint>MP_PolicyManager</TargetEndpoint><TargetHost>{sccmserver}</TargetHost><Timeout>60000</Timeout></Msg>"""
 policyBody = """<RequestAssignments SchemaVersion="1.00" ACK="false" RequestType="Always"><Identification><Machine><ClientID>GUID:{clientid}</ClientID><FQDN>{clientfqdn}</FQDN><NetBIOSName>{client}</NetBIOSName><SID /></Machine><User /></Identification><PolicySource>SMS:PRI</PolicySource><Resource ResourceType="Machine" /><ServerCookie /></RequestAssignments>"""
 reportBody = """<Report><ReportHeader><Identification><Machine><ClientInstalled>0</ClientInstalled><ClientType>1</ClientType><ClientID>GUID:{clientid}</ClientID><ClientVersion>5.00.8325.0000</ClientVersion><NetBIOSName>{client}</NetBIOSName><CodePage>850</CodePage><SystemDefaultLCID>2057</SystemDefaultLCID><Priority /></Machine></Identification><ReportDetails><ReportContent>Inventory Data</ReportContent><ReportType>Full</ReportType><Date>{date}</Date><Version>1.0</Version><Format>1.1</Format></ReportDetails><InventoryAction ActionType="Predefined"><InventoryActionID>{{00000000-0000-0000-0000-000000000003}}</InventoryActionID><Description>Discovery</Description><InventoryActionLastUpdateTime>{date}</InventoryActionLastUpdateTime></InventoryAction></ReportHeader><ReportBody /></Report>"""
 #Inspired from SharpSCCM.exe requests
-ddrRequestHeader = """<Msg ReplyCompression="zlib" SchemaVersion="1.1"><Attachment Type="ByteRange" Length="{length1}" Name="403838f7-69bb-43d5-8362-28a5755b97b5" Offset="0" /><Attachment Length="{length2}" Offset="{offset}" /><Body Type="ByteRange" Length="{bodylength}" Offset="{bodyoffset}" /><CorrelationID>{{00000000-0000-0000-0000-000000000000}}</CorrelationID><Hooks><Hook2 Name="clientauth"><Property Name="AuthSenderMachine">{client}</Property><Property Name="PublicKey">{publickey}</Property><Property Name="ClientIDSignature">{clientIDsignature}</Property><Property Name="PayloadSignature">{payloadsignature}</Property><Property Name="ClientCapabilities">NonSSL</Property><Property Name="HashAlgorithm">1.2.840.113549.1.1.11</Property></Hook2><Hook3 Name="zlib-compress" /></Hooks><ID>{{CA6A20DC-2440-44B1-A78F-E2FE792973BA}}</ID><Payload Type="inline" /><Priority>0</Priority><Protocol>http</Protocol><ReplyMode>ASync</ReplyMode><ReplyTo>direct:{client}:SccmMessaging</ReplyTo><SentTime>{date}</SentTime><SourceID>GUID:{clientid}</SourceID><SourceHost>{client}</SourceHost><TargetAddress>mp:MP_DdrEndpoint</TargetAddress><TargetEndpoint>MP_DdrEndpoint</TargetEndpoint><TargetHost>{sccmserver}</TargetHost><Timeout>60000</Timeout></Msg>"""
+ddrRequestHeader = """<Msg ReplyCompression="zlib" SchemaVersion="1.1"><Attachment Type="ByteRange" Length="{totallength}" Name="{attachname}" Offset="0" /><Attachment Length="{totallength}" Name="{attachname}" Offset="{offset}" /><Body Type="ByteRange" Length="{bodylength}" Offset="0" /><CorrelationID>{{00000000-0000-0000-0000-000000000000}}</CorrelationID><Hooks><Hook2 Name="clientauth"><Property Name="AuthSenderMachine">{client}</Property><Property Name="PublicKey">{publickey}</Property><Property Name="ClientIDSignature">{clientIDsignature}</Property><Property Name="PayloadSignature">{payloadsignature}</Property><Property Name="ClientCapabilities">NonSSL</Property><Property Name="HashAlgorithm">1.2.840.113549.1.1.11</Property></Hook2><Hook3 Name="zlib-compress" /></Hooks><ID>{{{msgid}}}</ID><Payload Type="inline" /><Priority>0</Priority><Protocol>http</Protocol><ReplyMode>Async</ReplyMode><ReplyTo>direct:{client}:SccmMessaging</ReplyTo><SentTime>{senttime}</SentTime><SourceID>GUID:{clientid}</SourceID><SourceHost>{client}</SourceHost><TargetAddress>mp:MP_DdrEndpoint</TargetAddress><TargetEndpoint>MP_DdrEndpoint</TargetEndpoint><TargetHost>{sccmserver}</TargetHost><Timeout>60000</Timeout></Msg>"""
 ddrBody1="""<Report><ReportHeader><Identification><Machine><ClientInstalled>0</ClientInstalled><ClientType>1</ClientType><ClientID>GUID:{clientid}</ClientID><ClientVersion>5.00.8325.0000</ClientVersion><NetBIOSName>{client}</NetBIOSName><CodePage>437</CodePage><SystemDefaultLCID>1033</SystemDefaultLCID><Priority /></Machine></Identification><ReportDetails><ReportContent>Inventory Data</ReportContent><ReportType>Full</ReportType><Date>{date}</Date><Version>1.0</Version><Format>1.1</Format></ReportDetails><InventoryAction ActionType="Predefined"><InventoryActionID>{{00000000-0000-0000-0000-000000000003}}</InventoryActionID><Description>Discovery</Description><InventoryActionLastUpdateTime>{date}</InventoryActionLastUpdateTime></InventoryAction></ReportHeader><ReportBody /></Report>"""
 ddrBody2="""<Report><ReportHeader><Identification><Machine><ClientInstalled>0</ClientInstalled><ClientType>1</ClientType><ClientID>GUID:{clientid}</ClientID><ClientVersion>5.00.8325.0000</ClientVersion><NetBIOSName>{client}</NetBIOSName><CodePage>437</CodePage><SystemDefaultLCID>1033</SystemDefaultLCID><Priority /></Machine></Identification><ReportDetails><ReportContent>Inventory Data</ReportContent><ReportType>Full</ReportType><Date>{date}</Date><Version>1.0</Version><Format>1.1</Format></ReportDetails><InventoryAction ActionType="Predefined"><InventoryActionID>{{00000000-0000-0000-0000-000000000003}}</InventoryActionID><Description>Discovery</Description><InventoryActionLastUpdateTime>{date}</InventoryActionLastUpdateTime></InventoryAction></ReportHeader><ReportBody><Instance Content="New" Namespace="\\\\{client}\\root\\ccm" Class="CCM_ComputerSystem" ParentClass="CCM_ComputerSystem"><CCM_ComputerSystem><Domain>{domain}</Domain></CCM_ComputerSystem></Instance><Instance Content="New" Namespace="\\\\{client}\\root\\ccm" Class="CCM_Client" ParentClass="CCM_Client"><CCM_Client><ClientIdChangeDate>{date2}</ClientIdChangeDate><ClientVersion>5.00.8325.0000</ClientVersion><PreviousClientId>Unknown</PreviousClientId></CCM_Client></Instance><Instance Content="New" Namespace="\\\\{client}\\root\\ccm" Class="SMS_Authority" ParentClass="SMS_Authority"><SMS_Authority /></Instance><Instance Content="New" Namespace="\\\\{client}\\root\\ccm" Class="CCM_ADSiteInfo" ParentClass="CCM_ADSiteInfo"><CCM_ADSiteInfo><ADSiteName>Default-First-Site-Name</ADSiteName></CCM_ADSiteInfo></Instance><Instance Content="New" Namespace="\\\\{client}\\root\\ccm" Class="CCM_ExtNetworkAdapterConfiguration" ParentClass="CCM_ExtNetworkAdapterConfiguration"><CCM_ExtNetworkAdapterConfiguration><FQDN>{clientfqdn}</FQDN></CCM_ExtNetworkAdapterConfiguration></Instance><Instance Content="New" Namespace="\\\\{client}\\root\\ccm" Class="Win32_ComputerSystemProduct" ParentClass="Win32_ComputerSystemProduct"><Win32_ComputerSystemProduct><IdentifyingNumber /><Name>Standard PC (i440FX + PIIX, 1996)</Name><UUID>{clientid}</UUID><Version>pc-i440fx-9.2</Version></Win32_ComputerSystemProduct></Instance><Instance Content="New" Namespace="\\\\{client}\\root\\ccm" Class="CCM_DiscoveryData" ParentClass="CCM_DiscoveryData"><CCM_DiscoveryData><PlatformID>{platformID}</PlatformID></CCM_DiscoveryData></Instance><Instance Content="New" Namespace="\\\\{client}\\root\\ccm" Class="CCM_NetworkAdapterConfiguration" ParentClass="CCM_NetworkAdapterConfiguration"><CCM_NetworkAdapterConfiguration><IPSubnet>10.6.10.0</IPSubnet><IPSubnet>254.128.0.0</IPSubnet></CCM_NetworkAdapterConfiguration></Instance><Instance Content="New" Namespace="\\\\{client}\\root\\ccm" Class="Win32_NetworkAdapterConfiguration" ParentClass="Win32_NetworkAdapterConfiguration"><Win32_NetworkAdapterConfiguration><IPAddress>10.6.10.43</IPAddress><IPAddress>fe80::d89c:e797:5954:7db1</IPAddress><Index>1</Index><MACAddress>BC:25:11:8B:02:CF</MACAddress></Win32_NetworkAdapterConfiguration></Instance></ReportBody></Report>"""
 
@@ -191,15 +202,16 @@ class SCCMTools():
                     pass
 
     def sccmPush(self,uuid,name,domain,platformId,username,password,key=None):
-        logger.info("[*] ensure to be on same time zone as the SCCM server.")
-        #time = datetime.datetime.now() - datetime.timedelta(hours=CHANGEME_IF_NEEDED)
-        time = datetime.datetime.now()
+        time = datetime.datetime.utcnow()
         formatted_time = time.strftime(dateFormat2)
         formatted_time2 = time.strftime(dateFormat3)
 
        
 
-        #Inspired from SharpSCMM.exe http capture  
+        #Inspired from SharpSCMM.exe http capture
+        # Wire format confirmed via byte-level capture of a real client's DDR:
+        # chunk A (Body) = text, no BOM, + 2-byte NUL terminator
+        # chunk B (Attachment) = 2-byte BOM + text + trailing CRLF bytes
         DDRRequest1 = CryptoTools.encodeUTF16Strip(ddrBody1.format(
             clientid=uuid,
             clientfqdn=name,
@@ -207,8 +219,8 @@ class SCCMTools():
             platformID=platformId,
             date=formatted_time,
             domain=domain
-        )) + b"\x00\x00\r\n"
-        DDRRequest2 = CryptoTools.encodeUTF16Strip(ddrBody2.format(
+        )) + b"\x00\x00"
+        DDRRequest2 = b"\xff\xfe" + CryptoTools.encodeUTF16Strip(ddrBody2.format(
             clientid=uuid,
             clientfqdn=name,
             client=name,
@@ -216,10 +228,10 @@ class SCCMTools():
             date=formatted_time,
             date2=formatted_time2,
             domain=domain
-        )) + b"\x00\x00\r\n"
+        )) + b"\x0d\x0a"
 
         DDRRequestCompressed = zlib.compress(DDRRequest1+DDRRequest2)
-        
+
         if key:
             self.key = key
         MSPublicKey = CryptoTools.buildMSPublicKeyBlob(self.key)
@@ -228,22 +240,21 @@ class SCCMTools():
         DDRRequestSignature = CryptoTools.sign(self.key, DDRRequestCompressed).hex().upper()
 
 
-        #don't touch offsets, it works, I don't know why but it works
         l2=len(DDRRequest2)
         l1=len(DDRRequest1)
         DDRRequestHeader = ddrRequestHeader.format(
-          bodylength=l2-2,
-          bodyoffset=l1,
-          length1=l1-4,
+          bodylength=l1,
+          totallength=l2-2,
+          attachname=str(uuidlib.uuid4()),
+          msgid=str(uuidlib.uuid4()).upper(),
           offset=l1,
-          length2=l2-4,
-          sccmserver=self._server, 
+          sccmserver=self._server,
           client=name,
           publickey=MSPublicKey, 
           clientIDsignature=clientIDSignature, 
           payloadsignature=DDRRequestSignature, 
-          clientid=uuid, 
-          date=formatted_time,
+          clientid=uuid,
+          senttime=time.strftime(dateFormat1),
        )
         
         data = "--aAbBcCdDv1234567890VxXyYzZ\r\ncontent-type: text/plain; charset=UTF-16\r\n\r\n".encode('ascii')
@@ -319,14 +330,41 @@ class SCCMTools():
             with open(f"{os.getcwd()}/certificate.pem", "wb") as f:
                 f.write(self.cert.public_bytes(serialization.Encoding.PEM))
 
+    def sendConfirmationRequest(self, smsid, name, msgid, username, password, isauthenticated, policies):
+        data_elem = confirmationData.format(
+          smsid=smsid,
+          date=datetime.datetime.utcnow().strftime(dateFormat1),
+        )
+        # sign just the <Data>...</Data> element, matching the real client's confirmation request
+        signature = CryptoTools.sign(self.key, Tools.encode_unicode(data_elem)).hex().upper()
+        embedded = confirmationWrapper.format(data=data_elem, smsid=smsid, signature=signature)
+        request = Tools.encode_unicode(embedded) + "\r\n".encode('ascii')
+
+        header = msgHeader.format(
+          bodylength=len(request)-2,
+          client=name,
+          date=datetime.datetime.utcnow().strftime(dateFormat1),
+          sccmserver=self._server,
+          msgid=msgid,
+        )
+
+        data = "--aAbBcCdDv1234567890VxXyYzZ\r\ncontent-type: text/plain; charset=UTF-16\r\n\r\n".encode('ascii') + header.encode('utf-16') + "\r\n--aAbBcCdDv1234567890VxXyYzZ\r\ncontent-type: application/octet-stream\r\n\r\n".encode('ascii') + zlib.compress(request) + "\r\n--aAbBcCdDv1234567890VxXyYzZ--".encode('ascii')
+
+        if not isauthenticated:
+            deflatedData = self.sendCCMPostRequest(data, False, username, password, policies=policies)
+        else:
+            deflatedData = self.sendCCMPostRequest(data, True, username, password, policies=policies)
+        return deflatedData
+
     def sendRegistration(self, name, fqname, username, password, isauthenticated=True, policies=True):
         b = self.cert.public_bytes(serialization.Encoding.DER).hex().upper()
+        msgid = str(uuidlib.uuid4()).upper()
 
         embedded = registrationRequest.format(
-          date=now.strftime(dateFormat1), 
-          encryption=b, 
-          signature=b, 
-          client=name, 
+          date=now.strftime(dateFormat1),
+          encryption=b,
+          signature=b,
+          client=name,
           clientfqdn=fqname
         )
 
@@ -334,10 +372,11 @@ class SCCMTools():
         request = Tools.encode_unicode(registrationRequestWrapper.format(data=embedded, signature=signature)) + "\r\n".encode('ascii')
 
         header = msgHeader.format(
-          bodylength=len(request)-2, 
-          client=name, 
-          date=now.strftime(dateFormat1), 
-          sccmserver=self._server
+          bodylength=len(request)-2,
+          client=name,
+          date=now.strftime(dateFormat1),
+          sccmserver=self._server,
+          msgid=msgid,
         )
 
         data = "--aAbBcCdDv1234567890VxXyYzZ\r\ncontent-type: text/plain; charset=UTF-16\r\n\r\n".encode('ascii') + header.encode('utf-16') + "\r\n--aAbBcCdDv1234567890VxXyYzZ\r\ncontent-type: application/octet-stream\r\n\r\n".encode('ascii') + zlib.compress(request) + "\r\n--aAbBcCdDv1234567890VxXyYzZ--".encode('ascii')
@@ -354,10 +393,42 @@ class SCCMTools():
         else:
                 deflatedData = self.sendCCMPostRequest(data, True, username, password,policies=policies)
                 r = re.findall("SMSID=\"GUID:([^\"]+)\"", deflatedData)
-        if r != None:
-            return r[0]
+        if r is None or len(r) == 0:
+            return None
 
-        return None
+        smsid = r[0]
+        # A real client polls with lightweight Confirmation requests (same message
+        # ID, same SMSID) until Status="0" (Registered). The final response can
+        # carry a PreAuthToken, but a captured real client sends its DDR without
+        # another token exchange. Status="1" is Pending; other values are errors
+        # or reset requests and must not be mistaken for successful registration.
+        confirmationAttempts = 5
+        for attempt in range(confirmationAttempts + 1):
+            statusMatch = re.search(
+                r'<ClientRegistrationResponse\b[^>]*\bStatus="([^"]+)"',
+                deflatedData or "",
+            )
+            status = statusMatch.group(1) if statusMatch else None
+            if status == "0":
+                return smsid
+            if status not in (None, "1"):
+                statusName = CLIENT_REGISTRATION_STATUS_NAMES.get(status, "Unknown")
+                raise RuntimeError(
+                    f"Client registration failed with status {status} ({statusName})"
+                )
+            if attempt == confirmationAttempts:
+                break
+            time.sleep(5)
+            try:
+                deflatedData = self.sendConfirmationRequest(smsid, name, msgid, username, password, isauthenticated, policies)
+            except Exception as e:
+                logger.debug(f"[*] Confirmation request attempt failed: {e}")
+                deflatedData = None
+
+        raise TimeoutError(
+            f"Client registration for GUID:{smsid} is still pending after "
+            f"{confirmationAttempts} confirmation attempts"
+        )
 
     def sendPolicyRequest(self, name, fqname, uuid, targetName, targetFQDN, targetUUID):
         body = Tools.encode_unicode(policyBody.format(clientid=targetUUID, clientfqdn=targetFQDN, client=targetName)) + b"\x00\x00\r\n"
@@ -587,6 +658,3 @@ class SCCMTools():
                 except:
                     logger.info(f"[-] Something went wrong.")
         return False
-                
-        
- 
