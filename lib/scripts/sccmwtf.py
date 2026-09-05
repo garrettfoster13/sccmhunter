@@ -5,6 +5,7 @@ import re
 import time
 import os
 from lib.logger import logger
+from lib.ldap import ldap3_kerberos_login
 from pyasn1.codec.der.decoder import decode
 from pyasn1_modules import rfc5652
 from cryptography.hazmat.primitives import serialization
@@ -151,7 +152,8 @@ class CryptoTools:
 
 class SCCMTools():
 
-    def __init__(self, target_name, target_fqdn, target_sccm, target_username, target_password,sleep, logs_dir,sp=False,plid=None, altauth=False):
+    def __init__(self, target_name, target_fqdn, target_sccm, target_username, target_password,sleep, logs_dir,sp=False,plid=None, altauth=False,
+                 kerberos=False, dc_ip=None, computer_hash=None, computer_aes=None, domain=None):
         self._server = target_sccm
         self._serverURI = f"http://{self._server}"
         self._target_name = target_name
@@ -163,10 +165,35 @@ class SCCMTools():
         self.sp = sp
         self.plid = plid
         self.altauth = altauth
-        self.domain = target_fqdn.replace(self._target_name+".","")
+        self.kerberos = kerberos
+        self.dc = dc_ip
+        self.computer_hash = computer_hash
+        self.computer_aes = computer_aes
+        self.domain = domain if domain else target_fqdn.replace(self._target_name+".","")
 
         if (altauth):
             self._serverURI=f"https://{self._server}"
+
+    def _kerberos_negotiate_header(self, username, password):
+        # Build an "Authorization: Negotiate <SPNEGO>" header for the machine account.
+        # The ticket is taken from KRB5CCNAME when present, otherwise a TGT is
+        # requested with the machine account password/NT hash/AES key. NTLM auth on
+        # ccm_system_windowsauth is rejected as of SCCM 2509, so Kerberos is required
+        # for machine accounts that are denied network NTLM logon.
+        nthash = self.computer_hash or ''
+        if nthash and ':' in nthash:
+            nthash = nthash.split(':')[1]
+        return ldap3_kerberos_login(
+            connection=None,
+            target=self._server,
+            user=username,
+            password=password or '',
+            domain=self.domain,
+            nthash=nthash,
+            aesKey=self.computer_aes or '',
+            kdcHost=self.dc,
+            admin_service=True,
+        )
 
     def sendCCMPostRequest(self, data, auth=False, username="", password="", mp = "", policies=True):
         headers = {
@@ -179,7 +206,11 @@ class SCCMTools():
         if mp:
             self._serverURI = mp
         if auth:
-            r = requests.request("CCM_POST", f"{self._serverURI}/ccm_system_windowsauth/request", headers=headers, data=data, auth=HttpNtlmAuth(username, password))
+            if self.kerberos:
+                headers["Authorization"] = self._kerberos_negotiate_header(username, password)
+                r = requests.request("CCM_POST", f"{self._serverURI}/ccm_system_windowsauth/request", headers=headers, data=data)
+            else:
+                r = requests.request("CCM_POST", f"{self._serverURI}/ccm_system_windowsauth/request", headers=headers, data=data, auth=HttpNtlmAuth(username, password))
         else:
             r = self.sendCCMPostRequestWithOutAuth(data, headers, policies=policies)
         if r:
