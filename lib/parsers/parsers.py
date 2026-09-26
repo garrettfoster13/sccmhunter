@@ -107,4 +107,5 @@ class PARSERS:
     def do_decrypt_parsers():
         parser = argparse.ArgumentParser()
         parser.add_argument('blob', action='store', help="Encrypted blob to decrypt")
+        return parser
     
