@@ -15,7 +15,7 @@ def main(
     target_sid      : str   = typer.Option(..., "-ts",  help="Target user's SID to add as SCCM admin. Ex: S-1-5-21-123456789...."),
     interface       : str   = typer.Option("0.0.0.0", "-i",  help="Interface to listen on."),
     port            : int   = typer.Option(445, "-p",  help="Port to listen on."),
-    timeout         : int   = typer.Option(5, "-to", help="Timeout value."),
+    timeout         : int   = typer.Option(300, "-to", help="Timeout value."),
     verbose         : bool  = typer.Option(False, "-v", help="Enable verbose logging.")
 ):
 
