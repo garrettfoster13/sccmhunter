@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## Added
+
+- HTTP Module
+    - Added Kerberos authentication for the machine account when registering a client / grabbing NAA policies (`-ck`). NTLM on the `ccm_system_windowsauth` endpoint is [rejected](https://learn.microsoft.com/en-us/intune/configmgr/core/plan-design/changes/whats-new-in-version-2509#adminservice-now-rejects-ntlm-authentication) in SCCM 2509, and machine accounts denied network NTLM logon could not authenticate before. The ticket is read from `KRB5CCNAME`, or requested in-line with the machine account password (`-cp`), NT hash (`-ch`) or AES key (`-caes`). Reuses the existing `ldap3_kerberos_login` SPNEGO helper.
+
 ## [2.0.0] - 2026-02-13
 
 ## Added 
