@@ -335,7 +335,7 @@ class SCCMHUNTER:
                                     if (result['sAMAccountType']) == 805306369:
                                         hostname =  str(result['dNSHostname'])
                                         if hostname:
-                                            self.add_computer_to_db(result)
+                                            self.add_computer_to_db(hostname)
                                     if (result['sAMAccountType']) == 268435456:
                                         self.add_group_to_db(result)
                 except ldap3.core.exceptions.LDAPAttributeError as e:
