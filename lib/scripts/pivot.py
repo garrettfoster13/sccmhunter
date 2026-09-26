@@ -245,7 +245,6 @@ class CMPIVOT(AdminServiceClient):
         endpoint = f"https://{self.target}/AdminService/v1.0/{self.endpoint}({self.device})/AdminService.RunCMPivot"
         try:
             r = self.http_post(endpoint, json_data=body)
-            print(body)
             if r.status_code == 200:
                 js0n = r.json()
                 if self.endpoint == "Collections":
