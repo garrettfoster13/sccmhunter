@@ -10,9 +10,9 @@ HELP = 'SCCM TAKEOVER-5 Attack'
 @app.callback(no_args_is_help=True, invoke_without_command=True)
 
 def main(
-    target          : str   = typer.Option(None, "-t",  help="Target SCCM SMS Provider IP or hostname. "),
-    target_user     : str   = typer.Option(None, "-tu",  help="Target username to add as SCCM admin. Ex: domain\\username"),
-    target_sid      : str   = typer.Option(None, "-ts",  help="Target user's SID to add as SCCM admin. Ex: S-1-5-21-123456789...."),
+    target          : str   = typer.Option(..., "-t",  help="Target SCCM SMS Provider IP or hostname. "),
+    target_user     : str   = typer.Option(..., "-tu",  help="Target username to add as SCCM admin. Ex: domain\\username"),
+    target_sid      : str   = typer.Option(..., "-ts",  help="Target user's SID to add as SCCM admin. Ex: S-1-5-21-123456789...."),
     interface       : str   = typer.Option("0.0.0.0", "-i",  help="Interface to listen on."),
     port            : int   = typer.Option(445, "-p",  help="Port to listen on."),
     timeout         : int   = typer.Option(5, "-to", help="Timeout value."),
