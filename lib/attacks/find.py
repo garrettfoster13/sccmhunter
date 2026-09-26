@@ -1,6 +1,6 @@
 from getpass import getpass
 from ldap3.protocol.formatters.formatters import format_sid
-from impacket.ldap.ldaptypes import SR_SECURITY_DESCRIPTOR
+from impacket.ldap.ldaptypes import ACCESS_ALLOWED_OBJECT_ACE, SR_SECURITY_DESCRIPTOR
 from ldap3.utils.conv import escape_filter_chars
 from lib.ldap import init_ldap_session, get_dn
 from lib.logger import logger
@@ -10,6 +10,17 @@ import ldap3
 import os
 import pandas as dp
 import sqlite3
+
+
+# impacket's ACE.INHERIT_ONLY_ACE, redeclared so the flag check reads plainly.
+INHERIT_ONLY_ACE = 0x08
+
+# Built-in principals that always hold Full Control and say nothing about SCCM.
+IGNORED_ACE_SIDS = {
+    "S-1-5-18",         # LOCAL SYSTEM
+    "S-1-5-32-544",     # BUILTIN\Administrators
+    "S-1-3-0",          # CREATOR OWNER
+}
 
 
 class DACLPARSE:
@@ -539,12 +550,27 @@ class SCCMHUNTER:
 
     def ace_parser(self, descriptor):
         sids = []
+        fullcontrol = 0xf01ff
         for ace in descriptor.dacl.aces:
-            if ace["TypeName"] == "ACCESS_ALLOWED_ACE" or ace["TypeName"] == "ACCESS_ALLOWED_OBJECT_ACE":
-                ace = ace["Ace"]
-                sid = ace["Sid"].formatCanonical()
-                mask = ace["Mask"]
-                fullcontrol = 0xf01ff
-                if mask.hasPriv(fullcontrol):
-                    sids.append(sid)
+            if ace["TypeName"] not in ("ACCESS_ALLOWED_ACE", "ACCESS_ALLOWED_OBJECT_ACE"):
+                continue
+            # INHERIT_ONLY ACEs never apply to the container itself, they only exist
+            # to be propagated to child objects.
+            if ace["AceFlags"] & INHERIT_ONLY_ACE:
+                continue
+            ace_body = ace["Ace"]
+            # An object ACE carrying an ObjectType GUID grants its mask over that one
+            # property set / extended right, not over the whole object. One carrying an
+            # InheritedObjectType GUID only applies to child objects of that class.
+            # Exchange's PrepareAD drops both kinds at the domain root with a 0xf01ff
+            # mask, and they inherit down onto System Management.
+            if ace["TypeName"] == "ACCESS_ALLOWED_OBJECT_ACE" and ace_body["Flags"] & (
+                    ACCESS_ALLOWED_OBJECT_ACE.ACE_OBJECT_TYPE_PRESENT
+                    | ACCESS_ALLOWED_OBJECT_ACE.ACE_INHERITED_OBJECT_TYPE_PRESENT):
+                continue
+            sid = ace_body["Sid"].formatCanonical()
+            if sid in IGNORED_ACE_SIDS:
+                continue
+            if ace_body["Mask"].hasPriv(fullcontrol):
+                sids.append(sid)
         self.sid_resolver(sids)
