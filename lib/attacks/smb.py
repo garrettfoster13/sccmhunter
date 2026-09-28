@@ -389,8 +389,6 @@ class SMB:
                                     downloaded.append(file_name)
                                 except Exception as e:
                                     logger.info(f"[-] {e}")
-                    else:
-                        return
             except Exception as e:
                 logger.debug(e)
         conn.logoff()
