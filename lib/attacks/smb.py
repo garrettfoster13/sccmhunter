@@ -349,12 +349,9 @@ class SMB:
             if pxe_boot_servers:
                 self.smb_spider(conn, pxe_boot_servers)
             return signing, site_code, siteserv, distp, wsus, wdspxe, sccmpxe
-        except socket.error:
-            logger.info(socket.error)
-            return
         except Exception as e:
             logger.info(f"[-] {e}")
-            return
+            return None, 'None', None, None, None, None, None
 
     #if a distribution point is found with this directory
     #spider and search for pxeboot variables files
