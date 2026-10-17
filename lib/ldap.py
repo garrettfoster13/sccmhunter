@@ -48,8 +48,10 @@ def get_machine_name(domain_controller, domain):
             raise Exception('Error while anonymous logging into %s' % domain)
         return srv_name
     else:
-        s.logoff()
-    return s.getServerName()
+        return s.getServerName()
+    finally:
+        s.close()
+
 
 def init_ldap_connection(target, tls_version, domain, username, password, lmhash, nthash, domain_controller, kerberos, hashes, aesKey, use_channel_binding, signing=False):
     if signing:
@@ -90,7 +92,7 @@ def init_ldap_connection(target, tls_version, domain, username, password, lmhash
     if use_channel_binding:
         channel_binding = dict(channel_binding=ldap3.TLS_CHANNEL_BINDING)
     if kerberos:
-        if channel_binding is True:
+        if use_channel_binding:
             logger.info("Kerberos auth + channel binding isn't supported yet.")
             sys.exit(1)
         logger.debug(f'[LDAP] Attempting Kerberos bind | target={target} port={port} ssl={use_ssl}')

@@ -25,6 +25,8 @@ def main(
     computer_pass   : str   = typer.Option(None, '-cp', help='Machine account password'),
     computer_hash   : str   = typer.Option(None, '-ch', help='Machine account NTLM hash. (can be used *only* for sccm push attack)'),
     computer_name   : str   = typer.Option(None, '-cn', help='Machine account name.'),
+    computer_kerberos: bool = typer.Option(False, '-ck', help='Use Kerberos to authenticate the machine account on the Management Point (required since NTLM is rejected in SCCM 2509). Ticket is read from KRB5CCNAME, or requested with -cp/-ch/-caes.'),
+    computer_aes    : str   = typer.Option(None, '-caes', metavar="HEX KEY", help='Machine account AES key (128/256-bit) used to request a Kerberos ticket with -ck.'),
     uuid            : str   = typer.Option(None, '-uuid', help='UUID for manual request.'),
     mp              : str   = typer.Option(None, '-mp', help='Management Point to manually request from'),
     sleep           : str   = typer.Option(10, '-sleep', help='Time to wait between registering and requesting policies'),
@@ -39,7 +41,8 @@ def main(
     logs_dir = init_logger(debug)
     httphunter = HTTP(username=username, password=password, domain=domain, dc_ip=dc_ip,ldaps=ldaps,
                             kerberos=kerberos, no_pass=no_pass, hashes=hashes, aes=aes, debug=debug, auto=auto, channel_binding=channel_binding, signing=signing,
-                            computer_pass=computer_pass, computer_name=computer_name, computer_hash=computer_hash, uuid=uuid, mp=mp,
+                            computer_pass=computer_pass, computer_name=computer_name, computer_hash=computer_hash,
+                            computer_kerberos=computer_kerberos, computer_aes=computer_aes, uuid=uuid, mp=mp,
                             sp=sccmpush, spcn=sccmpush_client,sppid=platform_id, spanon=sccmpush_anon,altauth=altauth, sleep=sleep, logs_dir=logs_dir)
     httphunter.run()
 

