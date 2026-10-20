@@ -5,7 +5,8 @@ import re
 import time
 import os
 from lib.logger import logger
-from lib.ldap import ldap3_kerberos_login
+from lib.ldap import ldap3_kerberos_login, get_channel_binding
+from urllib.parse import urlparse
 from pyasn1.codec.der.decoder import decode
 from pyasn1_modules import rfc5652
 from cryptography.hazmat.primitives import serialization
@@ -181,6 +182,11 @@ class SCCMTools():
         nthash = self.computer_hash or ''
         if nthash and ':' in nthash:
             nthash = nthash.split(':')[1]
+        # Channel binding only applies over TLS, and the MP URI can be overridden
+        uri = urlparse(self._serverURI)
+        channel_binding = b''
+        if uri.scheme == 'https':
+            channel_binding = get_channel_binding(uri.hostname, uri.port or 443) or b''
         return ldap3_kerberos_login(
             connection=None,
             target=self._server,
@@ -191,6 +197,7 @@ class SCCMTools():
             aesKey=self.computer_aes or '',
             kdcHost=self.dc,
             admin_service=True,
+            channel_binding=channel_binding,
         )
 
     def sendCCMPostRequest(self, data, auth=False, username="", password="", mp = "", policies=True):

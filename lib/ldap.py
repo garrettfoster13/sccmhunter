@@ -152,7 +152,44 @@ def init_ldap_session(domain, username, password, lmhash, nthash, kerberos, doma
     else:
         return init_ldap_connection(target, None, domain, username, password, lmhash, nthash, domain_controller, kerberos, hashes, aesKey, channel_binding, signing=signing)
 
-def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='', nthash='', aesKey='', kdcHost=None, TGT=None, TGS=None, useCache=True, admin_service=False):
+def get_channel_binding(host, port=443):
+    # Build the MD5 of gss_channel_bindings_struct with tls-server-end-point
+    # application data (RFC 5929), as expected by IIS/HTTP.sys with Extended
+    # Protection enabled. Returns None if the certificate can't be fetched.
+    import hashlib
+    import socket
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes
+
+    try:
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        with socket.create_connection((host, port), timeout=10) as sock:
+            with ctx.wrap_socket(sock, server_hostname=host) as tls:
+                der = tls.getpeercert(binary_form=True)
+    except Exception as e:
+        logger.debug(f'[CBT] Could not get TLS certificate from {host}:{port} | {e}')
+        return None
+
+    # RFC 5929 4.1: hash with the certificate's signature hash, MD5/SHA-1 become SHA-256
+    cert = x509.load_der_x509_certificate(der)
+    try:
+        hash_name = cert.signature_hash_algorithm.name
+    except Exception:
+        hash_name = 'sha256'
+    if hash_name in ('md5', 'sha1'):
+        hash_name = 'sha256'
+    cert_hash = cert.fingerprint(getattr(hashes, hash_name.upper().replace('-', '_'))())
+
+    application_data = b'tls-server-end-point:' + cert_hash
+    # initiator and acceptor addrtype/length are zero, then length-prefixed application data
+    bindings = b'\x00' * 16 + len(application_data).to_bytes(4, 'little') + application_data
+    logger.debug(f'[CBT] Channel binding computed for {host}:{port} | cert hash={hash_name}')
+    return hashlib.md5(bindings).digest()
+
+
+def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='', nthash='', aesKey='', kdcHost=None, TGT=None, TGS=None, useCache=True, admin_service=False, channel_binding=None):
     from pyasn1.codec.ber import encoder, decoder
     from pyasn1.type.univ import noValue
     """
@@ -193,6 +230,7 @@ def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='
     from impacket.krb5.ccache import CCache
     from impacket.krb5.asn1 import AP_REQ, Authenticator, TGS_REP, seq_set
     from impacket.krb5.kerberosv5 import getKerberosTGT, getKerberosTGS
+    from impacket.krb5.gssapi import CheckSumField, GSS_C_SEQUENCE_FLAG, GSS_C_REPLAY_FLAG
     from impacket.krb5 import constants
     from impacket.krb5.types import Principal, KerberosTime, Ticket
     import datetime
@@ -322,6 +360,20 @@ def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='
 
     authenticator['cusec'] = now.microsecond
     authenticator['ctime'] = KerberosTime.to_asn1(now)
+
+    if admin_service:
+        # HTTP endpoints with Extended Protection reject an AP-REQ without
+        # channel binding data. Callers on plain HTTP pass b'' to skip it.
+        if channel_binding is None:
+            channel_binding = get_channel_binding(target)
+        authenticator['cksum'] = noValue
+        authenticator['cksum']['cksumtype'] = 0x8003
+        chkField = CheckSumField()
+        chkField['Lgth'] = 16
+        chkField['Flags'] = GSS_C_SEQUENCE_FLAG | GSS_C_REPLAY_FLAG
+        if channel_binding:
+            chkField['Bnd'] = channel_binding
+        authenticator['cksum']['checksum'] = chkField.getData()
 
     encodedAuthenticator = encoder.encode(authenticator)
 
