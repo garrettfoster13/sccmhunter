@@ -104,6 +104,41 @@ class PARSERS:
 # creds extraction
 
 
+    #Baseline Parsers
+    def baseline_parser():
+        parser = argparse.ArgumentParser()
+        subparsers = parser.add_subparsers(dest='baseline_action')
+
+        exec_p = subparsers.add_parser('exec', help='Deploy baseline with script payload')
+        exec_p.add_argument('-s', '--script', action='store', required=True, help='Discovery script payload')
+        exec_p.add_argument('-r', '--remediation-script', action='store', help='Remediation script payload')
+        exec_p.add_argument('-c', '--collection-id', action='store', help='Target collection ID (use existing collection)')
+        exec_p.add_argument('-t', '--target', action='store', help='ResourceID to create a new collection for')
+        exec_p.add_argument('--collection-type', action='store', choices=['user', 'device'], default='device', help='Collection type when creating new collection (default: device)')
+        exec_p.add_argument('--language', action='store', choices=['PowerShell', 'VBScript', 'JScript'], default='PowerShell', help='Script language (default: PowerShell)')
+        exec_p.add_argument('--context', action='store', choices=['System', 'User'], default='System', help='Execution context (default: System)')
+        exec_p.add_argument('--schedule', action='store', type=int, default=15, help='Evaluation interval in minutes (default: 15)')
+        exec_p.add_argument('-n', '--name', action='store', help='Base name for objects (default: random)')
+        exec_p.add_argument('-f', '--force', action='store_true', default=False, help='Force policy download after deployment')
+
+        cleanup_p = subparsers.add_parser('cleanup', help='Remove deployed baseline objects')
+        cleanup_p.add_argument('--assignment-id', action='store', type=int, help='Assignment ID to delete')
+        cleanup_p.add_argument('--baseline-id', action='store', type=int, help='Baseline CI_ID to delete')
+        cleanup_p.add_argument('--ci-id', action='store', type=int, help='CI CI_ID to delete')
+
+        list_p = subparsers.add_parser('list', help='List baseline deployments')
+        list_p.add_argument('type', nargs='?', default='all', choices=['assignments', 'baselines', 'cis', 'all'], help='Object type to list (default: all)')
+
+        force_p = subparsers.add_parser('force-policy', help='Force policy download on collection')
+        force_p.add_argument('-c', '--collection-id', action='store', required=True, help='Target collection ID')
+
+        execpol_p = subparsers.add_parser('set-execpolicy', help='Set PowerShell execution policy to Bypass in default client settings')
+        execpol_p.add_argument('--check', action='store_true', default=False, help='Check current execution policy without changing it')
+        execpol_p.add_argument('--restore', action='store', type=int, metavar='VALUE', choices=[0, 1, 2], help='Restore execution policy (0=AllSigned, 1=Bypass, 2=Restricted)')
+        execpol_p.add_argument('--list', action='store_true', default=False, help='List all custom client settings')
+
+        return parser
+
     def do_decrypt_parsers():
         parser = argparse.ArgumentParser()
         parser.add_argument('blob', action='store', help="Encrypted blob to decrypt")
