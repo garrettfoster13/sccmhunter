@@ -11,15 +11,16 @@ HELP = 'MSSQL relay abuse.'
 def main(
     username        : str   = typer.Option(None, "-u",  help="Username"),
     password        : str   = typer.Option(None, '-p',  help="Password"),
-    domain          : str   = typer.Option(..., '-d',  help="Target domain"),
-    dc_ip           : str   = typer.Option(..., '-dc-ip',  help = "IP address or FQDN of domain controller"),
+    domain          : str   = typer.Option(None, '-d',  help="Target domain (required for LDAP SID resolution)"),
+    dc_ip           : str   = typer.Option(None, '-dc-ip',  help = "IP address or FQDN of domain controller (required for LDAP SID resolution)"),
     ldaps           : bool  = typer.Option(False, '-ldaps', help='Use LDAPS instead of LDAP'),
     kerberos        : bool  = typer.Option(False, "-k", help='Use Kerberos authentication'),
     no_pass         : bool  = typer.Option(False, "-no-pass", help="don't ask for password (useful for -k)"),
     hashes          : str   = typer.Option(None, "-hashes",metavar="LMHASH:NTHASH", help="LM and NT hashes, format is LMHASH:NTHASH"),
     aes             : str   = typer.Option(None, '-aes', metavar="HEX KEY", help='AES key to use for Kerberos Authentication (128 or 256 bits)'), 
     debug           : bool  = typer.Option(False, '-debug',help='Enable Verbose Logging'),
-    target_user     : str   = typer.Option(..., '-tu', help="Controlled user to grant permissions to."),
+    target_user     : str   = typer.Option(..., '-tu', help="Controlled user to grant permissions to (NETBIOS\\account with -sql-sid)."),
+    sql_sid         : bool  = typer.Option(False, '-sql-sid', help="Resolve -tu with SQL Server SUSER_SID instead of LDAP. Prints SQL; does not execute it."),
     stacked         : bool  = typer.Option(False, '-stacked', help="Provide a single stacked query for relaying."),
     channel_binding : bool   = typer.Option(None, '-binding', help='Use LDAP channel binding'),
     signing         : bool   = typer.Option(False, '-signing', help='Use LDAP signing (NTLM/Kerberos over plain LDAP)'),
@@ -28,7 +29,7 @@ def main(
 
     mssqlhunter = MSSQL(username=username, password=password, domain=domain, dc_ip=dc_ip,ldaps=ldaps,
                             kerberos=kerberos, no_pass=no_pass, hashes=hashes, aes=aes, debug=debug,
-                            target_user=target_user, stacked=stacked, site_code=site_code, channel_binding=channel_binding, signing=signing)
+                            target_user=target_user, sql_sid=sql_sid, stacked=stacked, site_code=site_code, channel_binding=channel_binding, signing=signing)
     init_logger(debug)
     mssqlhunter.run()
 
