@@ -189,7 +189,7 @@ def get_channel_binding(host, port=443):
     return hashlib.md5(bindings).digest()
 
 
-def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='', nthash='', aesKey='', kdcHost=None, TGT=None, TGS=None, useCache=True, admin_service=False, channel_binding=None):
+def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='', nthash='', aesKey='', kdcHost=None, TGT=None, TGS=None, useCache=True, admin_service=False, channel_binding=None, tgs_out=None):
     from pyasn1.codec.ber import encoder, decoder
     from pyasn1.type.univ import noValue
     """
@@ -204,6 +204,7 @@ def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='
     :param struct TGT: If there's a TGT available, send the structure here and it will be used
     :param struct TGS: same for TGS. See smb3.py for the format
     :param bool useCache: whether or not we should use the ccache for credentials lookup. If TGT or TGS are specified this is False
+    :param dict tgs_out: if provided, filled in with the TGS used (KDC_REP/cipher/sessionKey) so the caller can pass it back in as TGS= on a later call and skip the KDC round trip, while still getting a freshly-timestamped authenticator each time.
     :return: True, raises an Exception if error.
     """
 
@@ -330,6 +331,11 @@ def ldap3_kerberos_login(connection, target, user, password, domain='', lmhash='
         cipher = TGS['cipher']
         sessionKey = TGS['sessionKey']
         logger.debug(f'[KRB5] Using cached TGS | enctype={cipher.enctype}')
+
+    if tgs_out is not None:
+        tgs_out['KDC_REP'] = tgs
+        tgs_out['cipher'] = cipher
+        tgs_out['sessionKey'] = sessionKey
 
         # Let's build a NegTokenInit with a Kerberos REQ_AP
 
