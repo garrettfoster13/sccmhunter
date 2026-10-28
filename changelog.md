@@ -5,12 +5,72 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.1.0] - 2026-10-28
 
 ## Added
 
 - HTTP Module
     - Added Kerberos authentication for the machine account when registering a client / grabbing NAA policies (`-ck`). NTLM on the `ccm_system_windowsauth` endpoint is [rejected](https://learn.microsoft.com/en-us/intune/configmgr/core/plan-design/changes/whats-new-in-version-2509#adminservice-now-rejects-ntlm-authentication) in SCCM 2509, and machine accounts denied network NTLM logon could not authenticate before. The ticket is read from `KRB5CCNAME`, or requested in-line with the machine account password (`-cp`), NT hash (`-ch`) or AES key (`-caes`). Reuses the existing `ldap3_kerberos_login` SPNEGO helper.
+    - Added an `--altauth` option for the client push attack, allowing the Management Point to be reached via the `ccm_system_altauth/request` endpoint (#126)
+- Find Module
+    - Added LDAP signing support via the `-signing` flag, translating the signing flag control into impacket's `SDFlagsControl` (#119)
+- Admin Module
+    - Added Kerberos ccache support for approver credentials (`-ac`) (#116)
+    - Added Powershell hook and opsec commands, contributed by [@xpn](https://twitter.com/xpn) (#117)
+- MSSQL Module
+    - Added SID resolution via `SUSER_SID()` (#145)
+
+## Changed
+
+- Find Module
+    - Refactored the LDAP signing shim to remove unused surface (#120)
+    - Switched to the ly4k/ldap3 fork for `TLS_CHANNEL_BINDING` support (#119)
+- Dependencies
+    - Pinned the `cmd2` package in requirements.txt (#125)
+- Logging
+    - Enhanced LDAP, Kerberos (TGT/TGS request), and SMB connection logging to make debug output more useful (#104)
+
+## Fixed
+
+- Find Module
+    - Fixed ACE parsing so scoped ACEs on the System Management container are no longer treated as Full Control, which inflated site server detection (#139)
+    - Fixed resolved computer members being passed as a raw LDAP `Entry` instead of a hostname string (#131, closes #97)
+    - Fixed NetBIOS machine name resolution by adding a fallback when a null SMB session is blocked (#123)
+    - Fixed the LDAP channel binding guard to use a truthy check instead of an identity comparison
+    - Fixed the LDAP search base used for NETBIOS name resolving (#107)
+- SMB Module
+    - Fixed the SMB signing-required check breaking scans by returning `None` (#137)
+    - Fixed the DP spider aborting SMSTemp enumeration on the first non-`.var` file found (#140)
+    - Fixed a crash where tabulate failed on tables containing NULL columns (also affected the `show` module) (#105)
+    - Fixed an SMB socket leak in `get_machine_name` with a `finally` block (#133)
+- HTTP Module
+    - Fixed `autopwn` to convert computer hashes to the NTLM password format (#109)
+    - Fixed a missing closing parenthesis in the HTTP command (#121)
+- Relay Module
+    - Fixed the relay attack terminating prematurely and crashing on every attempt (#136)
+    - Fixed relay target arguments: `-t`, `-tu`, and `-ts` are now required (#135)
+- Admin Module
+    - Fixed Kerberos authentication when a password is omitted (#116)
+    - Fixed the approver credential check failing with Kerberos authentication (#115)
+    - Fixed script approval ignoring approver credentials under Kerberos (#115)
+    - Fixed a bug where Kerberos authentication did not use approver credentials
+    - Fixed the admin `CategoryID` to use `SMS00UNA` instead of `SMS00ALL`, with a fallback when the current user's scope is `Default` rather than `All` (#108)
+    - Fixed `show_rbac` to print `CategoryNames` (scopes) (#108)
+    - Fixed the `add_admin` argument parser (#102)
+    - Fixed an argument parsing bug in the admin module
+    - Fixed `addcomputer` exiting on failed machine account creation (#110)
+    - Fixed the `get_script` bug reported in #112
+    - Fixed the MECM DLL path to resolve dynamically from the registry and use `LoadFrom` instead of `Add-Type` (#111)
+- Policy Decryption
+    - Fixed policy decryption on modern SCCM versions using RSA-OAEP/AES-CBC, and stopped guessing on unknown algorithms (#127)
+    - Fixed a missing return statement in the decrypt parsers (#134)
+- Misc
+    - Removed a stray debug `print(body)` in sessionhunter's `do_request` (#128)
+    - Added a return for failed XML formatting in the pivot script
+
+## Removed
+
+- Removed the tracked LDAP signing design spec and ignored the `docs/` directory (#119)
 
 ## [2.0.0] - 2026-02-13
 
