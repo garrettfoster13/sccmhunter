@@ -9,15 +9,19 @@ from tabulate import tabulate
 from getpass import getpass
 import ntpath
 import os
+import sys
 import pandas as dp
 import requests
 import socket
 import sqlite3
 
+#http probe timeout in seconds, kept consistent with the SMB layer's timeout
+HTTP_TIMEOUT = 2
+
 class SMB:
     
     def __init__(self, username=None, password=None, domain=None, target_dom=None, 
-                    dc_ip=None,ldaps=False, kerberos=False, no_pass=False, hashes=None, 
+                    dc_ip=None, kerberos=False, no_pass=False, hashes=None,
                     aes=None, debug=False, save=False,
                     logs_dir=None):
         self.username = username
@@ -25,7 +29,6 @@ class SMB:
         self.domain = domain
         self.target_dom = target_dom
         self.dc_ip = dc_ip
-        self.ldaps = ldaps
         self.kerberos = kerberos
         self.no_pass = no_pass
         self.aes = aes
@@ -39,12 +42,42 @@ class SMB:
         self.lmhash = ""
         self.nthash = ""
         if self.hashes:
-            self.lmhash, self.nthash = self.hashes.split(':')
+            parts = self.hashes.split(':')
+            if len(parts) != 2:
+                logger.info("[-] Invalid -hashes format. Expected LMHASH:NTHASH (e.g. LMHASH:NTHASH or :NTHASH for NT-only).")
+                sys.exit(1)
+            self.lmhash, self.nthash = parts
         self.database = f"{logs_dir}/db/find.db"
-        self.conn = sqlite3.connect(self.database, check_same_thread=False)
+        #only connect if the find module already created the database, otherwise
+        #sqlite3.connect would silently create an empty find.db
+        if os.path.exists(self.database):
+            self.conn = sqlite3.connect(self.database, check_same_thread=False)
+        else:
+            self.conn = None
+
+    #make sure the find module was run and created the tables used for profiling
+    def validate_database(self):
+        required_tables = ['SiteServers', 'ManagementPoints', 'PXEDistributionPoints', 'Computers', 'CAS']
+        if not os.path.exists(self.database):
+            logger.info(f"[-] No find.db found at {self.database}. Run the find module first.")
+            return False
+        cursor = self.conn.cursor()
+        missing = []
+        for table in required_tables:
+            cursor.execute('''select name from sqlite_master where type='table' and name=?''', (table,))
+            if not cursor.fetchone():
+                missing.append(table)
+        cursor.close()
+        if missing:
+            logger.info(f"[-] find.db at {self.database} is missing required tables: {', '.join(missing)}. Run the find module first.")
+            return False
+        return True
 
     def run(self):
-        #TODO add check to be sure FIND module was run
+        if not self.validate_database():
+            if self.conn:
+                self.conn.close()
+            return
         self.check_siteservers()
         self.check_managementpoints()
         self.check_distributionpoints()
@@ -54,10 +87,9 @@ class SMB:
     def printlog(self, servers):
         filename = (f'{self.logs_dir}/smbhunter.log')
         logger.info(f'[+] Results saved to {filename}')
-        for server in servers:
-            with open(filename, 'a') as f:
+        with open(filename, 'a') as f:
+            for server in servers:
                 f.write("{}\n".format(server))
-                f.close
         return
 
 
@@ -135,8 +167,8 @@ class SMB:
         cas = cursor.fetchall()
         if hostnames:
             logger.info (f"Profiling {len(hostnames)} site servers.")
-            for i in hostnames:
-                hostname = (i[0])
+            for row in hostnames:
+                hostname = (row[0])
                 cas_sitecode = False
                 #only enumerate if the host is reachable
                 conn = self.smb_connection(hostname)
@@ -154,14 +186,14 @@ class SMB:
                     else:
                         status = "Passive"
 
-                    for i in cas:
-                        if site_code in i:
+                    for cas_row in cas:
+                        if site_code in cas_row:
                             cas_sitecode = True
 
-                    cursor.execute(f'''Update SiteServers SET SiteCode=?, CAS=?, SigningStatus=?, SiteServer=?, SMSProvider=?, Config=?, MSSQL=? WHERE Hostname=?''',
+                    cursor.execute('''Update SiteServers SET SiteCode=?, CAS=?, SigningStatus=?, SiteServer=?, SMSProvider=?, Config=?, MSSQL=? WHERE Hostname=?''',
                                 (str(site_code), str(cas_sitecode), str(signing), "True", str(provider), str(status), str(mssql), hostname))
                 else:
-                    cursor.execute(f'''Update SiteServers SET SiteCode=?, CAS=?, SigningStatus=?, SiteServer=?, Config=?, MSSQL=? WHERE Hostname=?''',
+                    cursor.execute('''Update SiteServers SET SiteCode=?, CAS=?, SigningStatus=?, SiteServer=?, Config=?, MSSQL=? WHERE Hostname=?''',
                                 ("Connection Failed", "", "", "True", "", "", hostname))
 
                 self.conn.commit()
@@ -189,7 +221,7 @@ class SMB:
                 conn = self.smb_connection(hostname)
                 if conn:
                     signing, site_code, siteserv, distp, wsus, wdspxe, sccmpxe = self.smb_hunter(hostname, conn)
-                    cursor.execute(f'''Update ManagementPoints SET SigningStatus=? WHERE Hostname=?''',
+                    cursor.execute('''Update ManagementPoints SET SigningStatus=? WHERE Hostname=?''',
                                 (str(signing), hostname))
                 self.conn.commit()
 
@@ -213,7 +245,7 @@ class SMB:
                 if conn:
                     signing, site_code, siteserv, distp, wsus, wdspxe, sccmpxe = self.smb_hunter(hostname, conn)
                     #Hostname, SigningStatus, SCCM, WDS
-                    cursor.execute(f'''Update PXEDistributionPoints SET SigningStatus=?, SCCM=?, WDS=? WHERE Hostname=?''',
+                    cursor.execute('''Update PXEDistributionPoints SET SigningStatus=?, SCCM=?, WDS=? WHERE Hostname=?''',
                                 (str(signing), str(sccmpxe), str(wdspxe), hostname))
                 self.conn.commit()
 
@@ -242,15 +274,15 @@ class SMB:
                     signing, site_code, siteserv, distp, wsus, wdspxe, sccmpxe = self.smb_hunter(hostname, conn)
                     if site_code == 'None':
                         try:
-                            cursor.execute(f"SELECT SiteCode FROM ManagementPoints WHERE Hostname IS '{hostname}'")
+                            cursor.execute("SELECT SiteCode FROM ManagementPoints WHERE Hostname = ?", (hostname,))
                             result = cursor.fetchall()
                             if not result:
                                 site_code = 'None'
                             else:
                                 site_code = result[0][0]
-                        except:
+                        except Exception:
                             pass
-                    cursor.execute(f'''Update Computers SET SiteCode=?, SigningStatus=?, SiteServer=?, ManagementPoint=?, DistributionPoint=?, SMSProvider=?, WSUS=?, MSSQL=? WHERE Hostname=?''',
+                    cursor.execute('''Update Computers SET SiteCode=?, SigningStatus=?, SiteServer=?, ManagementPoint=?, DistributionPoint=?, SMSProvider=?, WSUS=?, MSSQL=? WHERE Hostname=?''',
                                 (str(site_code), str(signing), str(siteserv), str(mp), str(distp), str(provider), str(wsus), str(mssql), hostname))
                 self.conn.commit()
             logger.info("[+] Finished profiling all discovered computers.")
@@ -274,7 +306,7 @@ class SMB:
                 logger.debug(f'[SMB] Connecting to {server}:445 | auth=NTLM(password) user={self.domain}\\{self.username}')
             conn = SMBConnection(server, server, None, timeout=timeout)
             if self.kerberos:
-                conn.kerberosLogin(user=self.username, password=self.password, domain=self.domain, kdcHost=self.dc_ip)
+                conn.kerberosLogin(user=self.username, password=self.password, domain=self.domain, kdcHost=self.dc_ip, aesKey=self.aes)
             else:
                 conn.login(user=self.username, password=self.password, domain=self.domain, lmhash=self.lmhash, nthash=self.nthash)
             logger.debug(f"[+] Connected to smb://{server}:445")
@@ -312,7 +344,7 @@ class SMB:
                     sc = shares_dict.get("SMS_SITE", '')
                     if 'SMS Site' in sc:
                         site_code = (sc.split(" ")[2])
-                except:
+                except Exception:
                     siteserv = False
             if "SMS_DP$" in shares_dict:
                 try:
@@ -320,7 +352,7 @@ class SMB:
                     if "SMS Site" in remark:
                         distp = True
                         site_code = (remark.split(" ")[2])
-                except:
+                except Exception:
                     distp = False
             if "REMINST" in shares_dict:
                 #list REMINST contents to check if the SMSTemp dir actually exists
@@ -339,7 +371,7 @@ class SMB:
                     if "STATUS_ACCESS_DENIED" in str(e):
                         logger.info("[!] Access Denied to the REMINST share.")
                     else:
-                        logger.info("[!] SMB session error: {e}")
+                        logger.info(f"[!] SMB session error: {e}")
 
             if "WsusContent" in shares_dict:
                 wsus = True
@@ -359,6 +391,7 @@ class SMB:
         vars_files = []
         downloaded = []
         timeout = 2
+        loot_dir = os.path.join(self.logs_dir, 'loot')
         for target in targets:
             try:
                 if self.kerberos:
@@ -367,7 +400,7 @@ class SMB:
                     logger.debug(f'[SMB] spider: connecting to {target}:445 | auth=NTLM user={self.domain}\\{self.username}')
                 conn = SMBConnection(target, target, None, timeout=timeout)
                 if self.kerberos:
-                    conn.kerberosLogin(user=self.username, password=self.password, domain=self.domain, kdcHost=self.dc_ip)
+                    conn.kerberosLogin(user=self.username, password=self.password, domain=self.domain, kdcHost=self.dc_ip, aesKey=self.aes)
                 else:
                     conn.login(user=self.username, password=self.password, domain=self.domain, lmhash=self.lmhash, nthash=self.nthash)
                 logger.info(f'[*] Searching {target} for PXEBoot variables files.')
@@ -379,22 +412,26 @@ class SMB:
                         logger.debug(f"[+] Found {full_path}")
                         if self.save:
                             file_name = shared_file.get_longname()
-                            with open(ntpath.basename(file_name), 'wb') as fh:
-                                path = f"SMSTemp//{file_name}"
-                                try:
+                            local_path = os.path.join(loot_dir, file_name)
+                            try:
+                                os.makedirs(loot_dir, exist_ok=True)
+                                with open(local_path, 'wb') as fh:
+                                    path = f"SMSTemp//{file_name}"
                                     conn.getFile(shareName="REMINST",pathName = path, callback=fh.write)
-                                    downloaded.append(file_name)
-                                except Exception as e:
-                                    logger.info(f"[-] {e}")
+                                downloaded.append(file_name)
+                            except Exception as e:
+                                logger.info(f"[-] Failed to download {file_name}: {e}")
+                                try:
+                                    os.remove(local_path)
+                                except OSError:
+                                    pass
             except Exception as e:
                 logger.debug(e)
         conn.logoff()
-        
+
         #these logs should stay
         if len(downloaded) > 0:
             logger.info("[+] Variables files downloaded!")
-            for i in (downloaded):
-                os.replace(f'{os.getcwd()}/{i}', f'{self.logs_dir}/loot/{i}')
         if vars_files:
             self.printlog(vars_files)
         
@@ -406,49 +443,34 @@ class SMB:
         sock.settimeout(2)
         try:
             sock.connect((f'{server}', 1433))
-            if sock:
-                return True
+            return True
         except Exception as e:
             logger.debug(f"[-] {e}")
-        return False
+            return False
+        finally:
+            sock.close()
     
 #check if the target host is hosting the SMS_MP directory
 #intention here is to return whether the host has the Management Point role
     def http_check(self, server):
-        try:
-            endpoint = f"http://{server}/ccm_system_windowsauth/"
-            r = requests.request("GET",
-                                endpoint,
-                                verify=False)
-            if r.status_code == 401:
-                return True
-            
-            endpoint = f"https://{server}/ccm_system_windowsauth/"
-            r = requests.request("GET",
-                                endpoint,
-                                verify=False)
-            if r.status_code == 401:
-                return True
-            endpoint = f"https://{server}/ccm_system_altauth/"
-            r = requests.request("GET",
-                                endpoint,
-                                verify=False)
-            if r.status_code == 403:
-                return True
-            endpoint = f"https://{server}/ccm_system_altauth/request"
-            r = requests.request("CCM_POST",
-                                endpoint,
-                                verify=False)
-            if r.status_code == 200:
-                return True
-            else:
-                return False
-        except RequestException as e:
-            logger.debug(e)
-            return False
-        except Exception as e:
-            logger.debug("An unknown error occurred")
-            logger.debug(e)
+        probes = [("GET", f"http://{server}/ccm_system_windowsauth/", 401),
+                  ("GET", f"https://{server}/ccm_system_windowsauth/", 401),
+                  ("GET", f"https://{server}/ccm_system_altauth/", 403),
+                  ("CCM_POST", f"https://{server}/ccm_system_altauth/request", 200)]
+        for method, endpoint, status_code in probes:
+            try:
+                r = requests.request(method,
+                                    endpoint,
+                                    verify=False,
+                                    timeout=HTTP_TIMEOUT)
+                if r.status_code == status_code:
+                    return True
+            except RequestException as e:
+                logger.debug(e)
+            except Exception as e:
+                logger.debug("An unknown error occurred")
+                logger.debug(e)
+        return False
 
 #check if the target host is hosting the adminservice api 
 #intention here is to return whether the host is hosting the SMS 
@@ -458,7 +480,8 @@ class SMB:
             endpoint = f"https://{server}/adminservice/wmi/"
             r = requests.request("GET",
                                 endpoint,
-                                verify=False)
+                                verify=False,
+                                timeout=HTTP_TIMEOUT)
             if r.status_code == 401:
                 return True
             else:
