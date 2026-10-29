@@ -23,7 +23,7 @@ from tabulate import tabulate
 from urllib3.exceptions import InsecureRequestWarning
 
 from lib.logger import logger
-from lib.ldap import ldap3_kerberos_login
+from lib.ldap import ldap3_kerberos_login, get_channel_binding
 
 
 # Disable SSL warnings once at module level
@@ -43,29 +43,60 @@ class AdminServiceClient:
         self.logs_dir = logs_dir
         #the user-agent was stolen from the AdminService log file and showed up repeatedly, seems like the best one to show up in the logs for evasion
         self.headers = {'Content-Type': 'application/json; odata=verbose', 'User-Agent': 'Device action simulation'}
+        self._cached_tgs = None
+        self._cached_channel_binding = None
+
+    def _get_kerberos_token(self, refresh=False):
+        # Cache the TGS (and the channel-binding cert hash, which is tied to the
+        # server's TLS cert and doesn't change mid-session) to skip the KDC round
+        # trips on reuse. The authenticator itself is rebuilt fresh - with a current
+        # timestamp - by ldap3_kerberos_login on every call, so this doesn't replay
+        # a stale AP-REQ the way caching the final Negotiate token did.
+        if refresh:
+            self._cached_tgs = None
+            self._cached_channel_binding = None
+        if self._cached_channel_binding is None:
+            self._cached_channel_binding = get_channel_binding(self.target) or b''
+        tgs_out = {}
+        token = ldap3_kerberos_login(
+            connection=None,
+            target=self.target,  # Extract hostname
+            user=self.username,
+            password=self.password,
+            domain=self.domain,
+            kdcHost=self.dc,
+            admin_service=True,
+            TGS=self._cached_tgs,
+            tgs_out=tgs_out,
+            channel_binding=self._cached_channel_binding,
+        )
+        if tgs_out:
+            self._cached_tgs = tgs_out
+        return token
 
     def _make_request(self, method, url, json_data=None, headers=None):
         try:
             if self.kerberos:
-                token = ldap3_kerberos_login(
-                    connection=None,
-                    target=self.target,  # Extract hostname
-                    user=self.username,
-                    password=self.password,
-                    domain=self.domain,
-                    kdcHost=self.dc,
-                    admin_service=True
-                )
                 headers = {'Content-Type': 'application/json; odata=verbose',
                         'User-Agent': 'Device action simulation',
-                        'Authorization': token}
-                
+                        'Authorization': self._get_kerberos_token()}
+
                 r = requests.request(method=method,
                                     url=url,
                                     verify=False,
                                     headers=headers,
-                                    json=json_data)  
-                
+                                    json=json_data)
+
+                if r.status_code == 401:
+                    # Cached TGS stopped working (revoked, KDC-side issue, etc).
+                    # Re-authenticate once and retry before giving up.
+                    headers['Authorization'] = self._get_kerberos_token(refresh=True)
+                    r = requests.request(method=method,
+                                        url=url,
+                                        verify=False,
+                                        headers=headers,
+                                        json=json_data)
+
             else:
                 r = requests.request(
                     method=method,
@@ -1914,17 +1945,8 @@ Do-Delete
 
             elif self.kerberos:
                 logger.debug("[*] Using Kerberos auth for script approval.")
-                token = ldap3_kerberos_login(
-                    connection=None,
-                    target=self.target,
-                    user=self.username,
-                    password=self.password,
-                    domain=self.domain,
-                    kdcHost=self.dc,
-                    admin_service=True
-                )
                 approve_headers = dict(self.headers)
-                approve_headers['Authorization'] = token
+                approve_headers['Authorization'] = self._get_kerberos_token()
                 r = requests.request(
                     method="POST",
                     url=url,
