@@ -24,12 +24,15 @@ def main(
     stacked         : bool  = typer.Option(False, '-stacked', help="Provide a single stacked query for relaying."),
     channel_binding : bool   = typer.Option(None, '-binding', help='Use LDAP channel binding'),
     signing         : bool   = typer.Option(False, '-signing', help='Use LDAP signing (NTLM/Kerberos over plain LDAP)'),
+    netbios         : str   = typer.Option(None, "-netbios", help="NETBIOS of the controlled user. Skips LDAP resolution."),
+    sid             : str   = typer.Option(None, "-sid", help="SID of the controlled user. Skips LDAP resolution."),
     site_code       : str   = typer.Option(..., '-sc', help="Target site code to add user to.")):
 
 
     mssqlhunter = MSSQL(username=username, password=password, domain=domain, dc_ip=dc_ip,ldaps=ldaps,
                             kerberos=kerberos, no_pass=no_pass, hashes=hashes, aes=aes, debug=debug,
-                            target_user=target_user, sql_sid=sql_sid, stacked=stacked, site_code=site_code, channel_binding=channel_binding, signing=signing)
+                            target_user=target_user, sql_sid=sql_sid, stacked=stacked, site_code=site_code, 
+                            channel_binding=channel_binding, signing=signing, netbiosname=netbios, sid=sid)
     init_logger(debug)
     mssqlhunter.run()
 

