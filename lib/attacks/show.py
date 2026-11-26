@@ -23,64 +23,34 @@ class SHOW:
         self.csv = csv
         self.json = js
 
+    def _show_table(self, title, table, query, basename):
+        cur = self.conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,))
+        if cur.fetchone() is None:
+            logger.info(f"[-] No {table} table in the database yet.")
+            return
+        logger.info(f"[+] Showing {title} Table")
+        tb = dp.read_sql(query, self.conn).fillna('')
+        logger.info(tabulate(tb, showindex=False, headers=tb.columns, tablefmt='grid'))
+        if self.csv:
+            tb.to_csv(f"{self.logs_dir}/csvs/{basename}.csv", encoding='utf-8')
+        if self.json:
+            tb.to_json(f"{self.logs_dir}/json/{basename}.json")
 
     def run(self):
         if self.site_servers or self.all:
-            logger.info("[+] Showing SiteServers Table")
-            tb_ss = dp.read_sql("SELECT * FROM SiteServers WHERE Hostname IS NOT 'Unknown'", self.conn).fillna('')
-            logger.info(tabulate(tb_ss, showindex=False, headers=tb_ss.columns, tablefmt='grid'))
-            if self.csv:
-                tb_ss.to_csv(f"{self.logs_dir}/csvs/siteservers.csv", encoding='utf-8')
-            if self.json:
-                tb_ss.to_json(f"{self.logs_dir}/json/siteservers.json")
+            self._show_table("SiteServers", "SiteServers", "SELECT * FROM SiteServers WHERE Hostname IS NOT 'Unknown'", "siteservers")
         if self.management_points or self.all:
-            logger.info("[+] Showing ManagementPoints Table")
-            tb_mp = dp.read_sql("SELECT * FROM ManagementPoints WHERE Hostname IS NOT 'Unknown'", self.conn).fillna('')
-            logger.info(tabulate(tb_mp, showindex=False, headers=tb_mp.columns, tablefmt='grid'))
-            if self.csv:
-                tb_mp.to_csv(f"{self.logs_dir}/csvs/mps.csv", encoding='utf-8')
-            if self.json:
-                tb_mp.to_json(f"{self.logs_dir}/json/mps.json")
+            self._show_table("ManagementPoints", "ManagementPoints", "SELECT * FROM ManagementPoints WHERE Hostname IS NOT 'Unknown'", "mps")
         if self.users or self.all:
-            logger.info("[+] Showing USERS Table")
-            tb_u = dp.read_sql("SELECT * FROM Users", self.conn).fillna('')
-            logger.info(tabulate(tb_u, showindex=False, headers=tb_u.columns, tablefmt='grid'))
-            if self.csv:
-                tb_u.to_csv(f"{self.logs_dir}/csvs/users.csv", encoding='utf-8')
-            if self.json:
-                tb_u.to_json(f"{self.logs_dir}/json/users.json")
+            self._show_table("USERS", "Users", "SELECT * FROM Users", "users")
         if self.groups or self.all:
-            logger.info("[+] Showing GROUPS Table")
-            tb_gp = dp.read_sql("SELECT * FROM Groups", self.conn).fillna('')
-            logger.info(tabulate(tb_gp, showindex=False, headers=tb_gp.columns, tablefmt='grid'))
-            if self.csv:
-                tb_gp.to_csv(f"{self.logs_dir}/csvs/groups.csv", encoding='utf-8')
-            if self.json:
-                tb_gp.to_json(f"{self.logs_dir}/json/groups.json")
+            self._show_table("GROUPS", "Groups", "SELECT * FROM Groups", "groups")
         if self.creds:
-            logger.info("[+] Showing Crdentials Table")
-            tb_gp = dp.read_sql("SELECT * FROM Creds", self.conn).fillna('')
-            logger.info(tabulate(tb_gp, showindex=False, headers=tb_gp.columns, tablefmt='grid'))
-            if self.csv:
-                tb_gp.to_csv(f"{self.logs_dir}/csvs/creds.csv", encoding='utf-8')
-            if self.json:
-                tb_gp.to_json(f"{self.logs_dir}/json/creds.json")
+            self._show_table("Credentials", "Creds", "SELECT * FROM Creds", "creds")
         if self.computers or self.all:
-            logger.info("[+] Showing COMPUTERS Table")
-            tb_c = dp.read_sql("SELECT * FROM Computers", self.conn).fillna('')
-            logger.info(tabulate(tb_c, showindex=False, headers=tb_c.columns, tablefmt='grid'))
-            if self.csv:
-                tb_c.to_csv(f"{self.logs_dir}/csvs/computers.csv", encoding='utf-8')
-            if self.json:
-                tb_c.to_json(f"{self.logs_dir}/json/computers.json")
+            self._show_table("COMPUTERS", "Computers", "SELECT * FROM Computers", "computers")
         if self.site_dbs or self.all:
-            logger.info("[+] Showing SiteDatabases Table")
-            tb_c = dp.read_sql("SELECT * FROM SiteDatabases", self.conn).fillna('')
-            logger.info(tabulate(tb_c, showindex=False, headers=tb_c.columns, tablefmt='grid'))
-            if self.csv:
-                tb_c.to_csv(f"{self.logs_dir}/csvs/dbs.csv", encoding='utf-8')
-            if self.json:
-                tb_c.to_json(f"{self.logs_dir}/json/dbs.json")
+            self._show_table("SiteDatabases", "SiteDatabases", "SELECT * FROM SiteDatabases", "dbs")
         if self.csv:
             logger.info(f"[*] CSV files saved to {self.logs_dir}/csvs/")
         if self.json:
